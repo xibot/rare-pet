@@ -10,7 +10,6 @@ button.arcade-logo:hover:not(:disabled){text-decoration:none}
 .arcade-logo>.brand-icon{width:42px;height:42px}
 .arcade-logo>.brand-name{font:400 20px/1 var(--rush-font-display);letter-spacing:0}
 .arcade-logo .brand-name>span{color:#ccff00}
-.arcade-logo small{display:block;margin-top:7px;font:400 8px/1 var(--rush-font-mono);letter-spacing:2.2px}
 .wordmark{display:flex;align-items:center;gap:7px;font-size:20px;font-weight:900;letter-spacing:-1px}.wordmark>span{color:#ccff00;margin-left:-7px}.wordmark small{border-left:1px solid #fff;margin-left:9px;padding-left:15px;letter-spacing:1px;font-size:10px;max-width:100px;font-weight:400}.pixel-logo{width:24px;height:30px;margin-right:5px;overflow:visible}
 .top-actions{display:flex;align-items:center;gap:8px}.top-actions button{height:34px;min-width:34px;background:#000;border:1px solid #fff;color:#fff;font-size:11px;font-weight:700;padding:5px 8px}.top-actions button[aria-pressed=true]{background:#fff;color:#000}.preview-tag{font-size:10px;letter-spacing:1px;color:#000;background:#ccff00;margin-right:10px;border:1px solid #ccff00;padding:4px 8px}
 .hud{position:absolute;inset:68px 0 auto;z-index:2;display:grid;grid-template-columns:1fr 1.2fr 1.35fr 1fr;height:82px;background:#fff;color:#000;border-bottom:1px solid #000;padding:14px 28px;gap:16px}.hud>div{border-right:1px solid #000}.hud>div:last-child{border:0;text-align:right}.hud span{display:block;font-size:10px;letter-spacing:1px}.hud strong{display:block;font-size:27px;letter-spacing:1px;line-height:1.3;font-weight:700}.hud strong small{font-size:14px;margin-left:8px}.hud em{font-style:normal}.hud .token-hud strong{display:inline-block;background:#ccff00;padding:0 6px}.life-hud strong{display:flex;justify-content:flex-end;gap:9px}.life-hud b{font-size:26px;color:#000}.life-hud .lost{color:#ccc}.hud .urgent{background:#000;color:#fff}
@@ -62,10 +61,23 @@ button.arcade-logo:hover:not(:disabled){text-decoration:none}
 @media(max-width:600px){.difficulty-picker{gap:5px;padding-top:8px}.difficulty-picker b{font-size:10px}.difficulty-picker span{font-size:9px}.mode-description{font-size:9px;margin:6px 0 9px}.mode-description>span{display:none}}
 @media(max-width:600px) and (max-height:680px){.difficulty-picker{padding-top:7px}.difficulty-picker button{min-height:44px;padding:4px 2px}.difficulty-picker b{font-size:9px}.difficulty-picker span{font-size:8px}.mode-description{font-size:8px;margin:5px 0 8px}}
 @media(max-width:600px){.rare-rush[data-screen=ready] .zone-label{visibility:hidden}}
-@media(max-width:600px){.arcade-logo{gap:7px}.arcade-logo>.brand-icon{width:32px;height:32px}.arcade-logo>.brand-name{font-size:14px}.arcade-logo small{font-size:7px;letter-spacing:1.6px;margin-top:5px}}
+@media(max-width:600px){.arcade-logo{gap:7px}.arcade-logo>.brand-icon{width:32px;height:32px}.arcade-logo>.brand-name{font-size:14px}}
 .result-card p{margin:6px 0 9px}.result-actions{display:grid;gap:8px}.result-actions+small{margin-top:6px}
 .change-difficulty{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:44px;border:2px solid #000;background:#fff;color:#000;padding:9px 12px;font:400 12px/1.4 var(--rush-font-display)}
 .change-difficulty:hover{background:#f0f0f0}.change-difficulty>span{font:20px/1 var(--rush-font-mono)}
 @media(max-width:600px) and (max-height:680px){.result-screen{padding:10px 20px}.result-actions{gap:6px}.result-actions .primary{min-height:44px;padding:8px 14px}.change-difficulty{font-size:11px;padding:8px 12px}}
 @media(max-width:600px) and (max-height:680px){.start-card{padding:6px 14px}.start-card-heading{justify-content:flex-end}.start-card h2{position:absolute;top:21px;left:14px;right:86px;margin:0;font-size:12px;line-height:1.3}.start-card .difficulty-picker{padding-top:4px}.start-card .mode-description{margin:3px 0 4px}.start-card .entry-note{margin-top:6px}}
 @media(min-width:601px){.start-card{padding:12px 20px}.start-card h2{font-size:20px;line-height:1.2;margin:6px 0 10px}}
+
+/* Keep the compact, correctly proportioned world usable when an overlay has
+ * more content than the visible field, including saved-run actions. */
+.rare-rush .start-screen{top:150px;bottom:116px;left:0;right:0;padding:22px 36px;overflow:auto;overscroll-behavior:contain;align-items:center}
+.rare-rush .start-screen>div{min-width:0;flex-shrink:0}
+.rare-rush .game-overlay{overflow:auto;overscroll-behavior:contain}
+.rare-rush .game-overlay>.result-card,.rare-rush .game-overlay>.pause-card{max-height:100%;overflow:auto;overscroll-behavior:contain}
+.rare-rush .run-save{margin:12px 0}
+@media(max-width:600px){.rare-rush .start-screen{top:151px;bottom:171px;padding:16px;justify-content:flex-start;align-items:stretch;gap:14px}.rare-rush .start-title{min-height:105px}}
+
+/* Direction controls occupy the existing gameplay footer during vertical tracks. */
+.vertical-touch{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:700;min-width:0}
+.vertical-touch small{font-size:10px}

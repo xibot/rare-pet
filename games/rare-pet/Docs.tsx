@@ -9,7 +9,7 @@ const sections = [
 const careActions = [
   { name: 'Pet', timing: 'Every 24 hours', gain: '+1 Kinship', detail: 'Give your Friend a little love. Each successful pet starts the next 24-hour cooldown and advances an unbroken care streak.' },
   { name: 'Feed', timing: 'Every 4 hours', gain: '+1 Strength · +5 Stamina', detail: 'Serve a meal when Feed is ready. Its own four-hour timer starts after each meal.' },
-  { name: 'Play', timing: '3 completions per rolling 24 hours', gain: '+10 Experience', detail: 'Open Rare Rush with your selected Friend and finish a run. Each rewarded completion uses one slot, which returns 24 hours after that completion.' },
+  { name: 'Play', timing: '3 completions per rolling 24 hours', gain: '+10 Experience', detail: 'Open Rare Rush with your selected Friend: run, ride suction shafts, free-fall and follow surprise direction changes. Finish a run to earn Experience. Each rewarded completion uses one slot, which returns 24 hours after that completion.' },
   { name: 'Launch', timing: 'Every 24 hours · coming soon', gain: 'Brain · coming soon', detail: 'Connect your Friend to Rare Launchpad launches when this feature arrives. Launch is currently unavailable.' },
   { name: 'Poop', timing: 'Every 4 hours', gain: '+1 Health', detail: 'A healthy little break. Its four-hour timer runs independently of Feed, Pet and Play.' },
 ];
