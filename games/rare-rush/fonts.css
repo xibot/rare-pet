@@ -1,0 +1,6 @@
+/*! Rare Friends site typography. SIL Open Font Licenses are included in assets/fonts/ and the site font-licenses.txt. */
+@font-face{font-family:Silkscreen;src:url('./assets/fonts/silkscreen-regular.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:Silkscreen;src:url('./assets/fonts/silkscreen-bold.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:'Archivo Variable';src:url('./assets/fonts/archivo-variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Sometype Mono Variable';src:url('./assets/fonts/sometype-mono-variable.woff2') format('woff2');font-weight:400 700;font-style:normal;font-display:swap}
+:root{--rush-font-display:'Silkscreen','Courier New',monospace;--rush-font-body:'Archivo Variable','Archivo',system-ui,sans-serif;--rush-font-mono:'Sometype Mono Variable','Sometype Mono',ui-monospace,monospace}

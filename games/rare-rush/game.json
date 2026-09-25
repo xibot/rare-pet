@@ -1,0 +1,6 @@
+{
+  "name": "Rare Rush",
+  "consumable": "Unused SDK compatibility item",
+  "price": "1000000000000000000",
+  "outcomes": [{"name": "Unused SDK compatibility reward", "chanceBps": 10000, "reward": "1000000000000000000"}]
+}

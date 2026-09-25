@@ -1,0 +1,39 @@
+{
+  "name": "rare-pet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RarePet by XIBOT \u2014 daily care for Genesis and Generations Rare Friends, with Rare Rush play.",
+  "scripts": {
+    "dev": "node scripts/pet-site.mjs dev",
+    "build": "node scripts/pet-site.mjs build",
+    "typecheck": "tsc --noEmit -p tsconfig.rare-pet.json",
+    "test": "node --test tests/*.test.ts",
+    "dev:pet": "npm run dev",
+    "build:pet": "npm run build",
+    "typecheck:pet": "npm run typecheck",
+    "test:pet": "node --test tests/pet-care.test.ts",
+    "test:rush": "node --test tests/engine.test.ts tests/economy.test.ts tests/genesis-identity.test.ts",
+    "test:browser": "node scripts/test-pet-browser.mjs",
+    "test:wallet": "node scripts/test-pet-wallet.mjs",
+    "test:pet:browser": "npm run test:browser",
+    "test:pet:wallet": "npm run test:wallet",
+    "test:contracts": "cd contracts/rare-pet && forge test -vv"
+  },
+  "dependencies": {
+    "@rarefriends/friendsdk": "file:rarefriends-friendsdk-0.1.2.tgz",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "viem": "2.56.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "typescript": "6.0.3",
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

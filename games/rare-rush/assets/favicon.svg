@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="130" height="130" viewBox="-65 -65 130 130">
+  <title>Rare Rush</title>
+  <!-- Canonical Rare Friends token artwork from https://rarefriends.com/art/token.svg.
+       These are the same paths and colors used by TokenCoin in CanonicalArt.tsx. -->
+  <g shape-rendering="crispEdges">
+    <path d="M-28-58H28V-52H40V-42H50V-28H56V28H50V42H40V52H28V58H-28V52H-40V42H-50V28H-56V-28H-50V-42H-40V-52H-28Z" transform="translate(5 4)" fill="#000" stroke="#fff" stroke-width="2"/>
+    <path d="M-28-58H28V-52H40V-42H50V-28H56V28H50V42H40V52H28V58H-28V52H-40V42H-50V28H-56V-28H-50V-42H-40V-52H-28Z" fill="#fff" stroke="#000" stroke-width="4"/>
+    <path d="M-28-58H28V-52H40V-42H50V-28H56V28H50V42H40V52H28V58H-28V52H-40V42H-50V28H-56V-28H-50V-42H-40V-52H-28Z" transform="scale(.85)" fill="#000"/>
+    <path d="M-24-43H24M-43-22V22M43-22V22M-24 43H24" fill="none" stroke="#fff" stroke-width="2"/>
+    <g transform="translate(-36 -36) scale(9)">
+      <rect width="8" height="8" fill="#000"/>
+      <path d="M1 1h1v1h-1zM2 1h1v1h-1zM5 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM3 2h1v1h-1zM4 2h1v1h-1zM5 2h1v1h-1zM6 2h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM2 4h1v1h-1zM5 4h1v1h-1zM6 4h1v1h-1zM1 5h1v1h-1zM2 5h1v1h-1zM3 5h1v1h-1zM4 5h1v1h-1zM5 5h1v1h-1zM6 5h1v1h-1zM3 6h1v1h-1zM4 6h1v1h-1z" fill="#fff"/>
+    </g>
+    <rect x="-36" y="-40" width="6" height="6" fill="#ccff00"/>
+  </g>
+</svg>

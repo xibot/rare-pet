@@ -1,0 +1,11 @@
+node_modules/
+dist-pet/
+artifacts/
+.vercel/
+.env*
+!.env.example
+.DS_Store
+games/*/.friendsdk/
+contracts/rare-pet/out/
+contracts/rare-pet/cache/
+contracts/rare-pet/broadcast/
