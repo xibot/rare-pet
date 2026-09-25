@@ -10,7 +10,7 @@ const stars = [
   [27, 82], [73, 84], [91, 90], [53, 37], [37, 72], [81, 56],
 ] as const;
 
-/** Match home and keep visitors inside their separate sky and side corridors. */
+/** Match home while visitors drift across separate rows behind the main island. */
 export function SpaceBackdrop({ mainIsland, stageWidth, flights }: { mainIsland: Island; stageWidth: number; flights: readonly IslandFlight[] }) {
   const option = getIsland(mainIsland);
   const [passengers, setPassengers] = useState(() => Array.from({ length: 5 }, () => pickSpacePassenger()));
@@ -32,7 +32,7 @@ export function SpaceBackdrop({ mainIsland, stageWidth, flights }: { mainIsland:
         if (event.target !== event.currentTarget) return;
         const island = event.currentTarget.getBoundingClientRect();
         const stage = event.currentTarget.parentElement!.getBoundingClientRect();
-        // Side paths turn around in view: change the visitor only after it exits.
+        // Both ends of the loop are offscreen; reroll only after the visitor exits.
         if (island.right > stage.left && island.left < stage.right) return;
         setPassengers(current => current.map((passenger, slot) => slot === flight.slot ? pickSpacePassenger(passenger) : passenger));
       }}
