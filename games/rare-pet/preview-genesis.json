@@ -1,0 +1,26 @@
+{
+  "provenance": {
+    "chainId": 4663,
+    "contract": "0x116EaA62241751E0c98dA43d458600c6C17cD361",
+    "blockNumber": "72489062",
+    "source": "Canonical tokenURI; static portrait validated by readGenesisPortrait",
+    "cachedAt": "2026-09-25T19:47:48.056Z"
+  },
+  "friends": [
+    {
+      "tokenId": "1",
+      "label": "Genesis #1",
+      "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgOCA4IiBzaGFwZS1yZW5kZXJpbmc9ImNyaXNwRWRnZXMiPjxyZWN0IHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNmZmYiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMCAwaDh2MWgtOHpNMCAxaDF2MWgtMXpNNyAxaDF2MWgtMXpNMCAyaDF2MWgtMXpNMiAyaDF2MWgtMXpNNSAyaDF2MWgtMXpNNyAyaDF2MWgtMXpNMCAzaDF2MWgtMXpNMiAzaDF2MWgtMXpNNSAzaDF2MWgtMXpNNyAzaDF2MWgtMXpNMCA0aDJ2MWgtMnpNNiA0aDJ2MWgtMnpNMCA1aDF2MWgtMXpNMyA1aDJ2MWgtMnpNNyA1aDF2MWgtMXpNMCA2aDF2MWgtMXpNNyA2aDF2MWgtMXpNMCA3aDh2MWgtOHoiLz48L3N2Zz4="
+    },
+    {
+      "tokenId": "2",
+      "label": "Genesis #2",
+      "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgOCA4IiBzaGFwZS1yZW5kZXJpbmc9ImNyaXNwRWRnZXMiPjxyZWN0IHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNmZmYiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMCAwaDh2MWgtOHpNMCAxaDN2MWgtM3pNNSAxaDN2MWgtM3pNMCAyaDF2MWgtMXpNNyAyaDF2MWgtMXpNMCAzaDF2MWgtMXpNMiAzaDF2MWgtMXpNNSAzaDF2MWgtMXpNNyAzaDF2MWgtMXpNMCA0aDF2MWgtMXpNMiA0aDF2MWgtMXpNNSA0aDF2MWgtMXpNNyA0aDF2MWgtMXpNMCA1aDF2MWgtMXpNNyA1aDF2MWgtMXpNMCA2aDh2MWgtOHpNMCA3aDh2MWgtOHoiLz48L3N2Zz4="
+    },
+    {
+      "tokenId": "3",
+      "label": "Genesis #3",
+      "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgOCA4IiBzaGFwZS1yZW5kZXJpbmc9ImNyaXNwRWRnZXMiPjxyZWN0IHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNmZmYiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMCAwaDh2MWgtOHpNMCAxaDJ2MWgtMnpNNiAxaDJ2MWgtMnpNMCAyaDN2MWgtM3pNNSAyaDN2MWgtM3pNMCAzaDF2MWgtMXpNNyAzaDF2MWgtMXpNMCA0aDF2MWgtMXpNMiA0aDF2MWgtMXpNNSA0aDF2MWgtMXpNNyA0aDF2MWgtMXpNMCA1aDF2MWgtMXpNMyA1aDJ2MWgtMnpNNyA1aDF2MWgtMXpNMCA2aDF2MWgtMXpNNyA2aDF2MWgtMXpNMCA3aDh2MWgtOHoiLz48L3N2Zz4="
+    }
+  ]
+}

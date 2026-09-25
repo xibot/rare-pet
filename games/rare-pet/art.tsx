@@ -1,18 +1,43 @@
 import { decodeGenerationSprites, spriteFrame, type GenerationSpriteManifest, type GenerationSprites } from '@rarefriends/friendsdk/sprites';
 import cachedArt from '../rare-rush/landing/preview-art.json';
+import cachedGenesis from './preview-genesis.json';
 import { TokenCoin } from '../rare-rush/CanonicalArt';
+import { GenesisRunnerSprite, type GenesisRunnerSpriteProps } from '../rare-rush/genesis/GenesisRunnerSprite';
 
-export const previewFriends = cachedArt.friends.map(friend => {
+export { GENESIS_BODIES, DEFAULT_BODY_ID, pickGenesisBody } from '../rare-rush/genesis/bodies';
+
+type PreviewIdentity = Readonly<{ tokenId: string; label: string; image: string }>;
+export type PreviewFriend = PreviewIdentity & (
+  | Readonly<{ collection: 'generations'; sprites: GenerationSprites }>
+  | Readonly<{ collection: 'genesis' }>
+);
+
+const generationPreviews: PreviewFriend[] = cachedArt.friends.map(friend => {
   const sprites = decodeGenerationSprites(BigInt(friend.tokenId), friend.familyId, friend.seed, friend.frames.map(BigInt), cachedArt.provenance.manifest as GenerationSpriteManifest);
   const rows = spriteFrame(sprites, 'down', false, 0).frame.rows;
   const paths = rows.flatMap((row, y) => [...row].flatMap((pixel, x) => pixel === '#' ? [`M${x} ${y}h1v1h-1z`] : [])).join('');
-  return { tokenId: friend.tokenId, label: `${friend.familyName} #${friend.tokenId}`, sprites,
+  return { collection: 'generations', tokenId: friend.tokenId, label: `${friend.familyName} #${friend.tokenId}`, sprites,
     image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges"><path d="${paths}" fill="black"/></svg>`)}` };
 });
-export function PetSprite({ sprites, frame }: { sprites: GenerationSprites; frame: number }) {
-  const rows = spriteFrame(sprites, 'down', false, frame % 8).frame.rows;
+
+/** Public artwork samples only; these entries never confer ownership or care permission. */
+export const previewFriends: readonly PreviewFriend[] = Object.freeze([
+  ...generationPreviews,
+  ...cachedGenesis.friends.map(friend => Object.freeze({ collection: 'genesis' as const,
+    tokenId: friend.tokenId, label: friend.label, image: friend.image })),
+]);
+
+export function PetSprite({ sprites, frame, walking = false, direction = 'down' }: {
+  sprites: GenerationSprites; frame: number; walking?: boolean; direction?: 'down' | 'up' | 'left' | 'right';
+}) {
+  const rows = spriteFrame(sprites, direction, walking, frame % 8).frame.rows;
   const paths = rows.flatMap((row, y) => [...row].flatMap((pixel, x) => pixel === '#' ? [`M${x} ${y}h1v1h-1z`] : [])).join('');
   return <svg className="pet-portrait" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-label="Your Rare Friend"><path d={paths}/></svg>;
+}
+export function GenesisPetSprite(props: GenesisRunnerSpriteProps) {
+  return <svg className="pet-portrait pet-portrait-genesis" viewBox="0 0 16 16" shapeRendering="crispEdges" role="img" aria-label="Your Genesis Rare Friend">
+    <GenesisRunnerSprite {...props}/>
+  </svg>;
 }
 export function PetBrand() { return <><svg className="brand-icon" viewBox="0 0 30 30" aria-hidden="true"><TokenCoin size={30}/></svg><span className="brand-name">RARE<span>PET</span></span></>; }
 export function Icon({ name }: { name: string }) {

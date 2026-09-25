@@ -16,7 +16,9 @@ This is the standalone RarePet repository. The app lives in `games/rare-pet`; th
 
 ## What works
 
-- Preview habitat with canonical public Rare Friends artwork; wallet-free Pet, Feed, Poop, actual Rare Rush play, per-Friend device storage, daily limits, deadline decay, seven-day rarity milestones, and mobile controls.
+- Explicit Preview and My Wallet modes. Preview offers three canonical Genesis and three Generations Friends, wallet-free Pet, Feed, Poop and actual Rare Rush play. Per-Friend device storage, daily limits, deadline decay and seven-day rarity milestones remain separate from wallet care. Reset Preview resets only the selected sample’s care.
+- Genesis portraits use the same 36 canonical Generations bodies as Rare Rush. Change Body selects a different body and carries it into the embedded game; the original portrait stays intact. Meadow, Moon, Arcade and Beach islands, the chosen body and the last preview Friend are remembered on this device. All showcase choices are cosmetic.
+- Three reactions each for Pet, Feed, Poop and completed Play, with hearts, different snacks, cleanup effects and XP celebrations. Reduced-motion preferences disable animation and decorative effects.
 - Connect an injected browser wallet through FriendSDK; switch to Robinhood Chain (4663); discover and select Genesis or Generations. Current ownership and original art are reverified before selection. Manual token verification remains available if transfer-history discovery is incomplete. Generation 0 can receive care; Rare Rush requires a Genesis or hardwired Generations Friend.
 - Left-side actions and a large Friend stage; trait panel, 24-hour bond clock, seven-day streak strip, guide, transaction status, collection selector, keyboard-accessible native dialogs, reduced-motion behavior.
 - Rare Rush embedded with the same selected NFT. Preview XP is granted only by an actual completed run, once per run, at most three per UTC day. Closing a game does not earn XP.
@@ -42,7 +44,7 @@ Stamina currently accumulates as a care trait; it does not charge for play or re
 
 ## Activation boundaries
 
-The wallet selector reads **real ownership**. The initial habitat is explicitly **device demo**. Its state is namespaced `rarepet:preview:v1` and never becomes onchain state. Owned Friends do not receive simulated care points. The app never signs a message merely to imitate a blockchain write.
+The wallet selector reads **real ownership**. The initial habitat is explicitly **Preview Mode**. Its state is namespaced `rarepet:preview:v1` and never becomes onchain state. Genesis samples have collection-prefixed keys to separate them from Generations with the same token number; existing Generations preview saves are preserved. Owned Friends do not receive simulated care points. The app never signs a message merely to imitate a blockchain write.
 
 To enable live Pet/Feed/Poop after deployment, build with the trusted deployment address:
 
@@ -67,12 +69,12 @@ npm run test:wallet
 cd contracts/rare-pet && forge test -vv
 ```
 
-The care-model tests cover UTC reset, duplicate pet rewards, exact/overdue 24-hour boundaries, projected decay, streaks, and quota caps. Browser checks exercise desktop and 390px/320px mobile layouts, care buttons, per-Friend persistence, real game completion, and no XP on incomplete games. Contract tests additionally cover transfers, identity separation, signatures, replay, and fuzzed decay. Live-chain deployment testing is still outstanding.
+The care-model tests cover UTC reset, duplicate pet rewards, exact/overdue 24-hour boundaries, projected decay, streaks, and quota caps. Canonical body tests verify 324 frames, connected geometry, portrait placement and body selection. Browser checks exercise desktop and 390px/320px mobile layouts, both preview collections, isolated care/reset, island and body persistence, varied action effects, reduced motion, real game completion and no XP on incomplete games. Wallet fixtures check fresh ownership, network/account changes and switching back to Preview without signing. Contract tests additionally cover transfers, identity separation, signatures, replay, and fuzzed decay. Live-chain deployment testing is still outstanding.
 
 ## Artwork and reuse
 
-Rare Friends artwork and FriendSDK are credited in the app and distributed `credits.txt`. The preview uses the previously cached public registry art in Rare Rush, with original provenance. Genesis portraits are the verified original tokenURI SVG; Generations use canonical registry frames. Fonts are the existing licensed Silkscreen, Archivo, and Sometype Mono assets. The new action icons are interface controls, not replacement Rare Friends characters.
+Rare Friends artwork and FriendSDK are credited in the app and distributed `credits.txt`. Generations preview art and body frames use the cached public registry art from Rare Rush, with original provenance. Genesis preview portraits are verified original tokenURI SVGs cached at mainnet block 72489062 in `games/rare-pet/preview-genesis.json`; owned Genesis portraits are freshly validated. The body catalog and provenance are documented in `games/rare-rush/genesis/BODIES.md`. Fonts are the existing licensed Silkscreen, Archivo, and Sometype Mono assets. Islands and action effects are decorative interface artwork, not replacement Rare Friends characters.
 
-Rare Rush integration uses optional `beforeRun`, `onRunComplete`, and `previewSprites` props, plus `onRunComplete` on GenesisRush. The reused game engine and original economy are included with their unit tests. This repository does not contain the separate Rare Rush website, testnet services, launchpad, analytics, or deployment infrastructure.
+Rare Rush integration uses optional `beforeRun`, `onRunComplete`, and `previewSprites` props, plus `bodyId` and `onRunComplete` on GenesisRush. The reused game engine and original economy are included with their unit tests. This repository does not contain the separate Rare Rush website, testnet services, launchpad, analytics, or deployment infrastructure.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [SDK notices](licenses/FRIENDSDK-NOTICE.md), [SDK license](licenses/friendsdk-APACHE-2.0.txt), and the retained [font provenance](games/rare-rush/assets/fonts/provenance.md). Source availability is not a grant of rights to Rare Friends branding; the SDK artwork permissions are stated in its notices.

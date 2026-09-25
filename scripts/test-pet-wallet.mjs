@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { decodeFunctionData, encodeFunctionResult, encodeEventTopics, parseAbi, zeroAddress } from 'viem';
 
 // Test-only provider and RPC fixtures. The production app still verifies canonical ownership.
-const origin = 'http://127.0.0.1:4175';
+const origin = process.env.RAREPET_TEST_URL || 'http://127.0.0.1:4175';
 const rpc = 'https://rpc.mainnet.chain.robinhood.com';
 const account = '0x1111111111111111111111111111111111111111';
 const other = '0x2222222222222222222222222222222222222222';
@@ -102,7 +102,7 @@ async function fixture(width = 1100, height = 900) {
   return { page, state };
 }
 
-function card(page) { return page.locator('.friend-picker:not(.preview-picker)').getByRole('button', { name: 'Genesis #1 GENESIS', exact: true }); }
+function card(page) { return page.locator('.friend-picker:not(.preview-picker)').getByRole('button').filter({ has: page.locator('b', { hasText: /^Genesis #1$/ }) }); }
 async function chooseGenesis(page, state) {
   if (!await page.getByRole('dialog').count()) await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
   await card(page).waitFor();
@@ -110,12 +110,15 @@ async function chooseGenesis(page, state) {
   await card(page).click();
   await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Genesis #1');
   assert(state.ownerReads > priorReads, 'Selection rechecks current Genesis ownership');
-  assert.equal(await page.locator('.pet-portrait').getAttribute('src'), portrait, 'Dashboard displays original canonical Genesis art');
+  assert.equal(await page.locator('.pet-portrait image[data-genesis-art]').getAttribute('href'), portrait, 'Dashboard body keeps the original canonical Genesis portrait');
+  assert.equal(await page.locator('.pet-portrait [data-genesis-body]').count(), 1, 'Verified Genesis has an approved runner body');
   assert.equal(await page.locator('.mode-tag').innerText(), 'CARE COMING ONCHAIN');
   for (const name of ['Pet,', 'Feed,', 'Poop,', 'Launch coming soon']) {
     assert.equal(await page.getByRole('button', { name: new RegExp(`^${name}`) }).isDisabled(), true, 'Undeployed care never enables a transaction');
   }
   assert.equal(await page.getByRole('button', { name: /^Play,/ }).isEnabled(), true, 'Verified Genesis can open Rare Rush');
+  assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('button', { name: /RESET PREVIEW/ }).count(), 0, 'Preview reset is unavailable for owned Friends');
 }
 async function assertInvalidated(page) {
   await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Choose your Friend');
@@ -140,16 +143,39 @@ try {
     await page.getByRole('button', { name: /^Poop,/ }).click();
     assert.equal(state.requests.length, 0, 'Device preview care needs no RPC');
     assert(!(await page.evaluate(() => window.testWallet.methods)).includes('eth_requestAccounts'), 'Preview never asks to connect');
-    await page.locator('.wallet-button').click();
-    await page.waitForFunction(() => document.querySelector('.wallet-button')?.textContent.includes('0x1111'));
+    await page.locator('.nav-arcade').click();
+    await page.waitForFunction(() => document.querySelector('.nav-arcade')?.textContent.includes('0x1111'));
     await chooseGenesis(page, state);
     assert.equal(await page.locator('body').evaluate(el => el.scrollWidth > innerWidth), false, 'Dashboard fits viewport');
+    const oldBody = await page.locator('.pet-portrait [data-genesis-body]').getAttribute('data-genesis-body');
+    await page.getByRole('button', { name: /CHANGE BODY/ }).click();
+    const bodyId = await page.locator('.pet-portrait [data-genesis-body]').getAttribute('data-genesis-body');
+    assert.notEqual(bodyId, oldBody, 'Owned Genesis can change its cosmetic body');
+    await page.getByRole('button', { name: /^Play,/ }).click();
+    const rush = page.getByRole('dialog');
+    await rush.getByRole('button', { name: /LET.S RUSH/ }).waitFor();
+    assert.equal(await rush.locator('image[data-genesis-art]').first().getAttribute('href'), portrait);
+    assert.equal(await rush.locator('[data-genesis-body]').first().getAttribute('data-genesis-body'), bodyId);
+    const beforeRunReads = state.ownerReads;
+    await rush.getByRole('button', { name: /LET.S RUSH/ }).click();
+    await rush.locator('.rare-rush[data-screen="running"]').waitFor();
+    assert(state.ownerReads > beforeRunReads, 'Starting owned Genesis Rush freshly verifies ownership');
+    assert.equal(await rush.locator('[data-genesis-body]').first().getAttribute('data-genesis-body'), bodyId, 'The selected body survives run start');
+    await rush.getByRole('button', { name: 'Close dialog' }).click();
+    await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).click();
+    assert.equal(await page.locator('.mode-tag').innerText(), 'PREVIEW MODE');
+    assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).getAttribute('aria-pressed'), 'true');
+    const previewRequests = state.requests.length;
+    await page.getByRole('button', { name: /^Pet,/ }).click();
+    assert.equal(state.requests.length, previewRequests, 'A connected wallet can still use preview without RPC or signing');
+    await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).click();
+    await chooseGenesis(page, state);
 
     if (width === 1100) {
       await page.evaluate(() => window.testWallet.network('0x1'));
       await assertInvalidated(page);
-      await page.locator('.wallet-button').filter({ hasText: 'SWITCH NETWORK' }).click();
-      await page.waitForFunction(() => document.querySelector('.wallet-button')?.textContent.includes('0x1111'));
+      await page.locator('.nav-arcade').filter({ hasText: 'SWITCH NETWORK' }).click();
+      await page.waitForFunction(() => document.querySelector('.nav-arcade')?.textContent.includes('0x1111'));
       await chooseGenesis(page, state);
 
       await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();

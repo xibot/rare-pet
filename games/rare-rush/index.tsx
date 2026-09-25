@@ -11,6 +11,7 @@ import { WorldArt } from './WorldArt';
 import { TokenCoin } from './CanonicalArt';
 import { BrandMark } from './BrandMark';
 import { FriendSprite as Sprite, EntityArt } from './RunnerArt';
+import { GenesisRunnerSprite } from './genesis/GenesisRunnerSprite';
 import { requestArcadeNavigation } from './navigation';
 import './style.css';
 
@@ -25,12 +26,12 @@ export default function RareRush(props: GameComponentProps & RunIntegration & { 
   return <Runner {...props}/>;
 }
 
-/** Only the separately verified Genesis sandbox host supplies this adapter. */
-export function GenesisRush({ portraitUrl, beforeRun, ...props }: { friendId: bigint; paused: boolean; portraitUrl: string; beforeRun: () => Promise<void>; onNavigate?: ArcadeNavigation; onRunComplete?: (result: RareRushRunResult) => void }) {
-  return <Runner {...props} genesis={{ portraitUrl, beforeRun }}/>;
+/** The host supplies a validated portrait and gates each live or preview run. */
+export function GenesisRush({ portraitUrl, bodyId, beforeRun, ...props }: { friendId: bigint; paused: boolean; portraitUrl: string; bodyId?: string; beforeRun: () => Promise<void>; onNavigate?: ArcadeNavigation; onRunComplete?: (result: RareRushRunResult) => void }) {
+  return <Runner {...props} genesis={{ portraitUrl, bodyId, beforeRun }}/>;
 }
 
-function Runner({ friendId, client, paused, genesis, beforeRun, onRunComplete, previewSprites, onNavigate = requestArcadeNavigation }: RunIntegration & { friendId: bigint; client?: GameClient; paused: boolean; genesis?: { portraitUrl: string; beforeRun: () => Promise<void> }; onNavigate?: ArcadeNavigation; previewSprites?: GenerationSprites }) {
+function Runner({ friendId, client, paused, genesis, beforeRun, onRunComplete, previewSprites, onNavigate = requestArcadeNavigation }: RunIntegration & { friendId: bigint; client?: GameClient; paused: boolean; genesis?: { portraitUrl: string; bodyId?: string; beforeRun: () => Promise<void> }; onNavigate?: ArcadeNavigation; previewSprites?: GenerationSprites }) {
   const collection = genesis ? 'genesis' : 'generations';
   const [sprites, setSprites] = useState<GenerationSprites | null>(null);
   const [starting, setStarting] = useState(false);
@@ -183,9 +184,8 @@ function Runner({ friendId, client, paused, genesis, beforeRun, onRunComplete, p
     void sounds.current?.unlock(); sounds.current?.play('action-ready');
     requestAnimationFrame(() => stage.current?.focus());
     } catch (cause) {
-      if (mounted.current && currentInitialization === initialization.current) setError(genesis
-        ? 'Could not verify your Genesis. Reconnect from the arcade entry and try again.'
-        : cause instanceof Error ? cause.message : 'Could not start this run. Please try again.');
+      if (mounted.current && currentInitialization === initialization.current) setError(cause instanceof Error
+        ? cause.message : 'Could not start this run. Please try again.');
     }
     finally { if (currentInitialization === initialization.current) { startingRef.current = false; if (mounted.current) setStarting(false); } }
   }
@@ -199,7 +199,7 @@ function Runner({ friendId, client, paused, genesis, beforeRun, onRunComplete, p
   const friendHeight = run.player.slide ? 30 : 60 * growth;
   const hasCharacter = Boolean(sprites || genesis);
   const renderCharacter = (frame: number, walking = false) => genesis
-    ? <image data-genesis-art="true" href={genesis.portraitUrl} width="16" height="16" style={{ imageRendering: 'pixelated' }} transform={walking && !reduced && !freeze ? `translate(0 ${frame % 4 < 2 ? -.4 : 0})` : undefined}/>
+    ? <GenesisRunnerSprite portraitUrl={genesis.portraitUrl} bodyId={genesis.bodyId} frame={frame} walking={walking && !reduced && !freeze}/>
     : sprites ? <Sprite sprites={sprites} frame={frame} walking={walking}/> : null;
 
   return <section ref={root} className={`rare-rush ${reduced ? 'reduce-motion' : ''}`} data-collection={collection} data-screen={screen} data-difficulty={run.difficulty} data-run-duration={run.duration} data-bonus-coins={run.bonusCoins} aria-label="Rare Rush arcade game">
