@@ -3,7 +3,7 @@
 .space-star{position:absolute;width:1px;height:1px;background:#a4abb7;opacity:.34}
 .space-star-bright{width:2px;height:2px;opacity:.52}
 /* Each reserved corridor is disjoint from every other corridor and the main pet. */
-.space-flight{position:absolute;animation:space-island-cross 38s linear infinite alternate;will-change:transform}
+.space-flight{position:absolute;animation:space-island-cross 25.333333s linear infinite alternate;will-change:transform}
 .space-island{position:relative;width:100%;aspect-ratio:2/1}
 .space-island .space-passenger{position:absolute;left:var(--pet-ground-x);top:var(--pet-ground-y);width:var(--pet-size);height:auto;transform:translate(-50%,-100%);image-rendering:pixelated}
 .space-island svg{display:block;width:100%;height:auto;overflow:visible}

@@ -1,5 +1,7 @@
 import { islandPetRatio, type IslandOption } from './islands';
 
+const ISLAND_SPEED = 1.5;
+
 export type IslandFlight = Readonly<{
   slot: number; width: number; top: number; start: number; travel: number;
   rest: number; duration: number; delay: number; depth: 'far' | 'middle' | 'near';
@@ -38,7 +40,7 @@ export function islandFlights(option: IslandOption, measuredWidth: number, measu
   const flights: IslandFlight[] = [{
     slot: 0, width: skyWidth, top: skyTop - sky.top,
     start: -skyWidth - 16, travel: width + skyWidth + 32,
-    rest: (width - skyWidth) * .35, duration: 38, delay: -13, depth: 'far', direction: 'right',
+    rest: (width - skyWidth) * .35, duration: 38 / ISLAND_SPEED, delay: -13 / ISLAND_SPEED, depth: 'far', direction: 'right',
   }];
   const mainLeft = (width - mainWidth) / 2;
   // Main artwork stays inside its frame; leave another 24px for action movement.
@@ -55,7 +57,7 @@ export function islandFlights(option: IslandOption, measuredWidth: number, measu
       boxes.forEach((box, row) => {
         const start = side === 'left' ? -box.width - 16 : width + 16;
         const end = side === 'left' ? mainLeft - 24 - box.width : width - mainLeft + 24;
-        const duration = row ? 34 : 26;
+        const duration = (row ? 34 : 26) / ISLAND_SPEED;
         flights.push({
           slot: (side === 'left' ? 1 : 2) + row * 2, width: box.width,
           top: rowTop - box.top, start, travel: end - start, rest: end,

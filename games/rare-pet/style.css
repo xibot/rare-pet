@@ -24,9 +24,9 @@
 .change-button:hover{background:#ccff00;color:#000;border-color:#ccff00}
 .change-button:hover>span{color:#000}
 .pet-shell{color:#10110e;color-scheme:light;border-color:#fff;box-shadow:7px 7px 0 #000,8px 8px 0 #fff}
-.shell-bar{background:#000;color:#fff;border-bottom-color:#000}
-.shell-bar .tiny-cross{color:#ccff00}
-.mode-tag{color:#ccff00;border-left-color:#ffffff50}
+.shell-bar{background:#ccff00;color:#000;border-bottom-color:#000;font-family:var(--rush-font-display);font-weight:400}
+.shell-bar .tiny-cross{color:#000}
+.mode-tag{color:#000;border-left-color:#000}
 .activity-line{color:#fff}
 .activity-label{color:#ccff00;border-color:#ffffff50}
 .activity-line p,.rarepet-app>main>.inline-note{color:#bbb}
