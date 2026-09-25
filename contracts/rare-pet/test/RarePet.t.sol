@@ -9,6 +9,7 @@ interface Vm {
     function etch(address, bytes calldata) external;
     function prank(address) external;
     function expectRevert(bytes4) external;
+    function expectRevert(bytes calldata) external;
     function addr(uint256) external returns (address);
     function sign(uint256, bytes32) external returns (uint8, bytes32, bytes32);
 }
@@ -31,6 +32,7 @@ contract MockCollection {
 contract RarePetTest {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint256 private constant DAY = 86400;
+    uint256 private constant FOUR_HOURS = 14400;
     uint256 private constant SIGNER_KEY = 0xA11CE;
     address private constant OWNER = address(0xB0B);
     address private constant BUYER = address(0xCAFE);
@@ -65,56 +67,65 @@ contract RarePetTest {
         game.pet(genesis, 99);
     }
 
-    function testFirstPetAndSameDayRefreshCannotFarmRewards() public {
+    function testPetCooldownDoesNotRefreshUntilExactly24Hours() public {
         _pet(genesis, 1);
         uint256 first = block.timestamp;
-        vm.warp(first + 3600);
-        _pet(genesis, 1);
-        RarePet.Pet memory care = game.getPet(genesis, 1);
-        _eq(care.kinship, 1);
-        _eq(care.streak, 1);
-        _eq(care.lastPetAt, first + 3600);
-    }
-
-    function testEpochZeroDoesNotResetInitializationOrRewardQuota() public {
-        vm.warp(0);
-        _pet(genesis, 1);
-        _pet(genesis, 1);
-        _eq(game.getPet(genesis, 1).kinship, 1);
-        vm.warp(1);
-        _pet(genesis, 1);
-        _eq(game.getPet(genesis, 1).streak, 1);
-        vm.warp(DAY);
-        _pet(genesis, 1);
-        _eq(game.getPet(genesis, 1).streak, 2);
-    }
-
-    function testExactly24HoursKeepsStreak() public {
-        _pet(genesis, 1);
-        vm.warp(block.timestamp + DAY);
+        vm.warp(first + DAY - 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, first + DAY));
+        game.pet(genesis, 1);
+        _eq(game.getPet(genesis, 1).lastPetAt, first);
+        vm.warp(first + DAY);
         _pet(genesis, 1);
         _eq(game.getPet(genesis, 1).kinship, 2);
         _eq(game.getPet(genesis, 1).streak, 2);
     }
 
-    function testUTCRewardCanBeEarnedBefore24HoursAndRefreshExtendsDeadline() public {
-        vm.warp(20 * DAY + DAY - 60);
+    function testEpochZeroActionTimestampsAreNotUninitialized() public {
+        vm.warp(0);
         _pet(genesis, 1);
-        vm.warp(21 * DAY + 60);
+        vm.prank(OWNER);
+        game.feed(genesis, 1);
+        vm.prank(OWNER);
+        game.poop(genesis, 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, DAY));
+        game.pet(genesis, 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, FOUR_HOURS));
+        game.feed(genesis, 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, FOUR_HOURS));
+        game.poop(genesis, 1);
+        require(game.getPet(genesis, 1).hasPet, "missing pet flag");
+        vm.warp(DAY);
         _pet(genesis, 1);
-        vm.warp(21 * DAY + 3600);
-        _pet(genesis, 1);
-        vm.warp(22 * DAY + 1800);
-        _pet(genesis, 1);
-        _eq(game.getPet(genesis, 1).streak, 3);
+        _eq(game.getPet(genesis, 1).streak, 2);
     }
 
-    function testOneSecondLateDecaysAndResetsBeforeNextPet() public {
+    function testMidnightDoesNotResetPetCooldown() public {
+        vm.warp(21 * DAY - 60);
         _pet(genesis, 1);
-        vm.warp(block.timestamp + DAY + 1);
-        RarePet.Pet memory overdue = game.getPet(genesis, 1);
-        _eq(overdue.kinship, 0);
-        _eq(overdue.streak, 0);
+        vm.warp(21 * DAY + 60);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, 22 * DAY - 60));
+        game.pet(genesis, 1);
+        _eq(game.getPet(genesis, 1).kinship, 1);
+    }
+
+    function testExactGraceDeadlinePreservesStreak() public {
+        _pet(genesis, 1);
+        vm.warp(block.timestamp + DAY + game.PET_GRACE());
+        _eq(game.getPet(genesis, 1).streak, 1);
+        _pet(genesis, 1);
+        _eq(game.getPet(genesis, 1).streak, 2);
+    }
+
+    function testOneSecondAfterGraceDecaysAndResetsBeforeNextPet() public {
+        _pet(genesis, 1);
+        vm.warp(block.timestamp + DAY + game.PET_GRACE() + 1);
+        _eq(game.getPet(genesis, 1).kinship, 0);
+        _eq(game.getPet(genesis, 1).streak, 0);
         _pet(genesis, 1);
         _eq(game.getPet(genesis, 1).kinship, 1);
         _eq(game.getPet(genesis, 1).streak, 1);
@@ -122,16 +133,17 @@ contract RarePetTest {
 
     function testDecayPersistsOnceAcrossOtherActionsAndKeepsAccruing() public {
         _buildStreak(5);
-        uint256 lastPet = block.timestamp;
-        vm.warp(lastPet + DAY + 1);
+        uint256 deadline = block.timestamp + DAY + game.PET_GRACE();
+        vm.warp(deadline + 1);
         vm.prank(OWNER);
         game.feed(genesis, 1);
         vm.prank(OWNER);
         game.poop(genesis, 1);
         _eq(game.getPet(genesis, 1).kinship, 4);
-        vm.warp(lastPet + 2 * DAY);
+        _eq(game.getPet(genesis, 1).decayApplied, 1);
+        vm.warp(deadline + DAY);
         _eq(game.getPet(genesis, 1).kinship, 4);
-        vm.warp(lastPet + 2 * DAY + 1);
+        vm.warp(deadline + DAY + 1);
         _eq(game.getPet(genesis, 1).kinship, 3);
         vm.prank(OWNER);
         game.feed(genesis, 1);
@@ -152,46 +164,38 @@ contract RarePetTest {
     function testRarityEverySevenStreakDaysAndFallsWhenBroken() public {
         _buildStreak(14);
         _eq(game.getPet(genesis, 1).rarity, 2);
-        vm.warp(block.timestamp + DAY + 1);
+        vm.warp(block.timestamp + DAY + game.PET_GRACE() + 1);
         _eq(game.getPet(genesis, 1).rarity, 0);
         _pet(genesis, 1);
         _eq(game.getPet(genesis, 1).rarity, 0);
         _eq(game.getPet(genesis, 1).streak, 1);
     }
 
-    function testFeedQuotaStrengthAndStaminaResetAtUTC() public {
-        for (uint256 i; i < 5; ++i) {
-            vm.prank(OWNER);
-            game.feed(genesis, 1);
-        }
+    function testFeedAndPoopHaveIndependentFourHourCooldowns() public {
+        vm.warp(21 * DAY - 60);
+        uint256 first = block.timestamp;
         vm.prank(OWNER);
-        vm.expectRevert(RarePet.DailyLimit.selector);
         game.feed(genesis, 1);
+        vm.prank(OWNER);
+        game.poop(genesis, 1);
+        vm.warp(first + FOUR_HOURS - 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, first + FOUR_HOURS));
+        game.feed(genesis, 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, first + FOUR_HOURS));
+        game.poop(genesis, 1);
+        vm.warp(first + FOUR_HOURS);
+        vm.prank(OWNER);
+        game.feed(genesis, 1);
+        vm.prank(OWNER);
+        game.poop(genesis, 1);
         RarePet.Pet memory care = game.getPet(genesis, 1);
-        _eq(care.feedsToday, 5);
-        _eq(care.strength, 5);
-        _eq(care.stamina, 25);
-        vm.warp(21 * DAY);
-        _eq(game.getPet(genesis, 1).feedsToday, 0);
-        vm.prank(OWNER);
-        game.feed(genesis, 1);
-        _eq(game.getPet(genesis, 1).strength, 6);
-    }
-
-    function testPoopQuotaHealthAndReset() public {
-        for (uint256 i; i < 3; ++i) {
-            vm.prank(OWNER);
-            game.poop(genesis, 1);
-        }
-        vm.prank(OWNER);
-        vm.expectRevert(RarePet.DailyLimit.selector);
-        game.poop(genesis, 1);
-        _eq(game.getPet(genesis, 1).health, 3);
-        vm.warp(21 * DAY);
-        _eq(game.getPet(genesis, 1).poopsToday, 0);
-        vm.prank(OWNER);
-        game.poop(genesis, 1);
-        _eq(game.getPet(genesis, 1).health, 4);
+        _eq(care.strength, 2);
+        _eq(care.stamina, 10);
+        _eq(care.health, 2);
+        _eq(care.lastFeedAt, first + FOUR_HOURS);
+        _eq(care.lastPoopAt, first + FOUR_HOURS);
     }
 
     function testCollectionAndTokenIdentityAreSeparate() public {
@@ -200,7 +204,7 @@ contract RarePetTest {
         game.feed(genesis, 1);
         _eq(game.getPet(genesis, 2).kinship, 0);
         _eq(game.getPet(generations, 1).kinship, 0);
-        _eq(game.getPet(generations, 1).feedsToday, 0);
+        require(!game.getPet(generations, 1).hasFed, "leaked collection cooldown");
         _pet(generations, 1);
         _eq(game.getPet(generations, 1).kinship, 1);
         _eq(game.getPet(genesis, 1).kinship, 1);
@@ -236,22 +240,45 @@ contract RarePetTest {
         _eq(game.getPet(genesis, 1).experience, 10);
     }
 
-    function testPlayQuotaAndResetWithoutLosingLifetimeXP() public {
+    function testPlaySlotsExpireIndividuallyAfterRolling24Hours() public {
+        uint256 first = block.timestamp;
+        _play(bytes32(uint256(1)));
+        vm.warp(first + 3600);
+        _play(bytes32(uint256(2)));
+        vm.warp(first + 7200);
+        _play(bytes32(uint256(3)));
+        uint256 deadline = first + 2 * DAY;
+        bytes memory sig = _signature(game, OWNER, genesis, 1, bytes32(uint256(4)), deadline);
+        vm.warp(first + DAY - 1);
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, first + DAY));
+        game.play(genesis, 1, bytes32(uint256(4)), deadline, sig);
+        require(!game.usedRuns(bytes32(uint256(4))), "cooldown revert consumed run");
+        _eq(game.getPet(genesis, 1).playCount, 3);
+        vm.warp(first + DAY);
+        _eq(game.getPet(genesis, 1).playCount, 2);
+        vm.prank(OWNER);
+        game.play(genesis, 1, bytes32(uint256(4)), deadline, sig);
+        RarePet.Pet memory care = game.getPet(genesis, 1);
+        _eq(care.experience, 40);
+        _eq(care.playCount, 3);
+        _eq(care.playTimes[0], first + 3600);
+        _eq(care.playTimes[2], first + DAY);
+        vm.warp(first + DAY + 3600);
+        _eq(game.getPet(genesis, 1).playCount, 2);
+    }
+
+    function testThreeSameSecondEpochZeroPlaysConsumeThreeSlots() public {
+        vm.warp(0);
         _play(bytes32(uint256(1)));
         _play(bytes32(uint256(2)));
         _play(bytes32(uint256(3)));
-        uint256 deadline = block.timestamp + 2 * DAY;
-        bytes memory sig = _signature(game, OWNER, genesis, 1, bytes32(uint256(4)), deadline);
-        vm.prank(OWNER);
-        vm.expectRevert(RarePet.DailyLimit.selector);
-        game.play(genesis, 1, bytes32(uint256(4)), deadline, sig);
+        _eq(game.getPet(genesis, 1).playCount, 3);
+        vm.warp(DAY - 1);
+        _eq(game.getPet(genesis, 1).playCount, 3);
+        vm.warp(DAY);
+        _eq(game.getPet(genesis, 1).playCount, 0);
         _eq(game.getPet(genesis, 1).experience, 30);
-        require(!game.usedRuns(bytes32(uint256(4))), "quota revert consumed run");
-        vm.warp(21 * DAY);
-        _eq(game.getPet(genesis, 1).playsToday, 0);
-        vm.prank(OWNER);
-        game.play(genesis, 1, bytes32(uint256(4)), deadline, sig);
-        _eq(game.getPet(genesis, 1).experience, 40);
     }
 
     function testRunCannotReplayOnAnotherDayOrTokenOrCollection() public {
@@ -346,7 +373,8 @@ contract RarePetTest {
         _buildStreak(7);
         uint256 lastPet = block.timestamp;
         vm.warp(lastPet + uint256(absence));
-        uint256 missed = absence > DAY ? (uint256(absence) - 1) / DAY : 0;
+        uint256 graceDeadline = DAY + game.PET_GRACE();
+        uint256 missed = absence > graceDeadline ? (uint256(absence) - graceDeadline - 1) / DAY + 1 : 0;
         uint256 expected = missed >= 7 ? 0 : 7 - missed;
         _eq(game.getPet(genesis, 1).kinship, expected);
         vm.prank(OWNER);

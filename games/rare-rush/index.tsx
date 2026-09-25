@@ -82,7 +82,7 @@ function Runner({ friendId, client, paused, genesis, beforeRun, onRunComplete, p
     return () => { sounds.current?.dispose(); };
   }, []);
   useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => setViewWidth(entry.contentRect.width < 600 ? 520 : 960));
+    const observer = new ResizeObserver(([entry]) => setViewWidth(entry.contentRect.width <= 600 ? 520 : 960));
     if (root.current) observer.observe(root.current);
     return () => observer.disconnect();
   }, []);
@@ -215,7 +215,7 @@ function Runner({ friendId, client, paused, genesis, beforeRun, onRunComplete, p
       <div className="life-hud"><span>KEEP IT RARE</span><strong aria-label={`${run.hearts} hearts remaining`}>{[0,1,2].map(i => <b key={i} className={i>=run.hearts?'lost':''}>♥</b>)}</strong></div>
     </div>
     <div className={`playfield ${running && !freeze ? 'playing' : ''}`}>
-      <svg ref={stage} className="world-svg" viewBox={`0 0 ${viewWidth} 500`} preserveAspectRatio="none" tabIndex={running ? 0 : -1} role="img" aria-label="Runner world. Space or up to jump, down to slide. Hold right to speed up, left to slow down." onPointerDown={event => { if (running) { event.preventDefault(); stage.current?.focus(); doJump(); } }}>
+      <svg ref={stage} className="world-svg" viewBox={`0 0 ${viewWidth} 500`} preserveAspectRatio="xMidYMid meet" tabIndex={running ? 0 : -1} role="img" aria-label="Runner world. Space or up to jump, down to slide. Hold right to speed up, left to slow down." onPointerDown={event => { if (running) { event.preventDefault(); stage.current?.focus(); doJump(); } }}>
         <WorldArt distance={run.distance} elapsed={run.elapsed * 1000} reducedMotion={reduced || !running} biome={biome}/>
         {!running && screen === 'ready' && <g>{[0,1,2,3,4].map(i => <TokenCoin key={i} x={370+i*52} y={295 - Math.sin(i/4*Math.PI)*65} size={30}/>)}<EntityArt entity={{id:999,kind:'crystal',x:730,y:339,w:44,h:61} as RunState['entities'][number]} elapsed={0} reduced={reduced}/></g>}
         {run.entities.map(entity => <EntityArt key={entity.id} entity={entity} elapsed={run.elapsed} reduced={reduced}/>)}

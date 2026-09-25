@@ -161,11 +161,12 @@ try {
     await rush.locator('.rare-rush[data-screen="running"]').waitFor();
     assert(state.ownerReads > beforeRunReads, 'Starting owned Genesis Rush freshly verifies ownership');
     assert.equal(await rush.locator('[data-genesis-body]').first().getAttribute('data-genesis-body'), bodyId, 'The selected body survives run start');
-    await rush.getByRole('button', { name: 'Close dialog' }).click();
+    await rush.getByRole('button', { name: 'Close Rare Rush' }).click();
     await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).click();
     assert.equal(await page.locator('.mode-tag').innerText(), 'PREVIEW MODE');
     assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).getAttribute('aria-pressed'), 'true');
     const previewRequests = state.requests.length;
+    await page.getByRole('button', { name: /RESET PREVIEW/ }).click();
     await page.getByRole('button', { name: /^Pet,/ }).click();
     assert.equal(state.requests.length, previewRequests, 'A connected wallet can still use preview without RPC or signing');
     await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).click();

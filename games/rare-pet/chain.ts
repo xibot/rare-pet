@@ -5,11 +5,12 @@ import { careContract } from './config';
 import { blankCare, type CareState } from './care';
 
 export const careAbi = parseAbi([
-  'function getPet(address collection,uint256 tokenId) view returns ((uint256 kinship,uint256 strength,uint256 stamina,uint256 health,uint256 experience,uint256 brain,uint256 streak,uint256 rarity,uint256 lastPetAt,uint256 careDay,uint256 feedsToday,uint256 playsToday,uint256 poopsToday))',
+  'error ActionNotReady(uint256 readyAt)',
+  'function getPet(address collection,uint256 tokenId) view returns ((uint256 kinship,uint256 strength,uint256 stamina,uint256 health,uint256 experience,uint256 brain,uint256 streak,uint256 rarity,uint256 lastPetAt,uint256 lastFeedAt,uint256 lastPoopAt,uint256 lastLaunchAt,uint256[3] playTimes,uint256 playCount,uint256 decayApplied,bool hasPet,bool hasFed,bool hasPooped,bool hasLaunched) care)',
   'function pet(address collection,uint256 tokenId)',
   'function feed(address collection,uint256 tokenId)',
   'function poop(address collection,uint256 tokenId)',
-  'event CaredFor(address indexed collection,uint256 indexed tokenId,address indexed owner,uint8 action,uint256 day)',
+  'event CaredFor(address indexed collection,uint256 indexed tokenId,address indexed owner,uint8 action,uint256 timestamp)',
 ]);
 const client = createPublicClient({ chain: RARE_PET_CHAIN, transport: http(undefined, { timeout: 12_000, retryCount: 1 }) });
 type OnchainCareAction = 'pet' | 'feed' | 'poop';
@@ -45,8 +46,20 @@ export async function readCare(pet: PetIdentity, blockNumber?: bigint): Promise<
   if (!careContract) throw new Error('Onchain care is not deployed yet. You can explore the preview.');
   if (!await client.getCode({ address: careContract, blockNumber })) throw new Error('The RarePet care contract is unavailable on Robinhood.');
   const value = await client.readContract({ address: careContract, abi: careAbi, functionName: 'getPet', args: [pet.contract, BigInt(pet.tokenId)], blockNumber });
-  const data = Object.fromEntries(Object.entries(value).map(([key, n]) => [key, Number(n)]));
-  return { ...blankCare(), ...data };
+  const { hasPet, hasFed, hasPooped, hasLaunched, playTimes, playCount, ...scalar } = value;
+  const number = (n: bigint): number => {
+    if (n < 0n || n > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Care data exceeds the supported display range.');
+    return Number(n);
+  };
+  if (playCount > 3n) throw new Error('The care contract returned an invalid play history.');
+  const data = Object.fromEntries(Object.entries(scalar).map(([key, n]) => [key, number(n)]));
+  return { ...blankCare(), ...data,
+    lastPetAt: hasPet ? number(value.lastPetAt) : -1,
+    lastFeedAt: hasFed ? number(value.lastFeedAt) : -1,
+    lastPoopAt: hasPooped ? number(value.lastPoopAt) : -1,
+    lastLaunchAt: hasLaunched ? number(value.lastLaunchAt) : -1,
+    playTimes: playTimes.slice(0, number(playCount)).map(number),
+  };
 }
 export async function writeCare(session: FriendWalletSession, pet: PetIdentity, action: OnchainCareAction, revision: number, onHash: (hash: string) => void, assertActive: () => void = () => {}) {
   if (!careContract) throw new Error('Onchain care is not deployed yet.');

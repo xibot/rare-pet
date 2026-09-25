@@ -12,9 +12,9 @@ contract RarePet {
     uint256 public constant DAY = 1 days;
     address public constant GENESIS = 0x116EaA62241751E0c98dA43d458600c6C17cD361;
     address public constant GENERATIONS = 0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D;
-    uint256 public constant MAX_FEEDS = 5;
+    uint256 public constant FOUR_HOURS = 4 hours;
+    uint256 public constant PET_GRACE = 1 days;
     uint256 public constant MAX_PLAYS = 3;
-    uint256 public constant MAX_POOPS = 3;
     bytes32 public constant PLAY_TYPEHASH =
         keccak256("Play(address owner,address collection,uint256 tokenId,bytes32 runId,uint256 deadline)");
     bytes32 private constant _DOMAIN_TYPEHASH =
@@ -35,16 +35,16 @@ contract RarePet {
         uint256 streak;
         uint256 rarity;
         uint256 lastPetAt;
-        uint256 careDay;
-        uint256 feedsToday;
-        uint256 playsToday;
-        uint256 poopsToday;
-    }
-
-    struct StoredPet {
-        Pet pet;
-        uint256 appliedDecay;
+        uint256 lastFeedAt;
+        uint256 lastPoopAt;
+        uint256 lastLaunchAt;
+        uint256[3] playTimes;
+        uint256 playCount;
+        uint256 decayApplied;
         bool hasPet;
+        bool hasFed;
+        bool hasPooped;
+        bool hasLaunched;
     }
 
     enum Action {
@@ -54,20 +54,24 @@ contract RarePet {
         Pooping
     }
 
-    mapping(address collection => mapping(uint256 tokenId => StoredPet)) private _pets;
+    mapping(address collection => mapping(uint256 tokenId => Pet)) private _pets;
     mapping(bytes32 runId => bool) public usedRuns;
 
     error WrongChain();
     error UnsupportedCollection();
     error NotOwner();
-    error DailyLimit();
+    error ActionNotReady(uint256 readyAt);
     error PlayDisabled();
     error ExpiredPlay();
     error RunAlreadyUsed();
     error InvalidSignature();
 
     event CaredFor(
-        address indexed collection, uint256 indexed tokenId, address indexed owner, Action action, uint256 day
+        address indexed collection,
+        uint256 indexed tokenId,
+        address indexed owner,
+        Action action,
+        uint256 timestamp
     );
     event PlayClaimed(bytes32 indexed runId, address indexed collection, uint256 indexed tokenId);
 
@@ -76,45 +80,50 @@ contract RarePet {
         playSigner = playSigner_;
     }
 
-    /// @notice Refresh care at any time; earn +1 kinship and one streak day at most once per UTC day.
-    /// @dev Exactly 24 hours is on time. After that, the projected streak has already reset.
+    /// @notice +1 Kinship and one streak step every 24h, with 24h grace after unlock.
     function pet(address collection, uint256 tokenId) external {
         _checkOwner(collection, tokenId);
-        StoredPet storage stored = _prepare(collection, tokenId);
-        Pet storage care = stored.pet;
-        if (!stored.hasPet || care.lastPetAt / DAY < care.careDay) {
-            care.kinship += 1;
-            care.streak += 1;
-            care.rarity = care.streak / 7;
+        Pet storage care = _prepare(collection, tokenId);
+        if (care.hasPet && block.timestamp < care.lastPetAt + DAY) {
+            revert ActionNotReady(care.lastPetAt + DAY);
         }
+        care.kinship += 1;
+        care.streak += 1;
+        care.rarity = care.streak / 7;
         care.lastPetAt = block.timestamp;
-        stored.hasPet = true;
-        stored.appliedDecay = 0;
-        emit CaredFor(collection, tokenId, msg.sender, Action.Petting, care.careDay);
+        care.hasPet = true;
+        care.decayApplied = 0;
+        emit CaredFor(collection, tokenId, msg.sender, Action.Petting, block.timestamp);
     }
 
-    /// @notice Each meal grants +1 Strength and +5 Stamina, up to five meals per UTC day.
+    /// @notice Each meal grants +1 Strength and +5 Stamina, once every four hours.
     function feed(address collection, uint256 tokenId) external {
         _checkOwner(collection, tokenId);
-        Pet storage care = _prepare(collection, tokenId).pet;
-        if (care.feedsToday == MAX_FEEDS) revert DailyLimit();
-        care.feedsToday += 1;
+        Pet storage care = _prepare(collection, tokenId);
+        if (care.hasFed && block.timestamp < care.lastFeedAt + FOUR_HOURS) {
+            revert ActionNotReady(care.lastFeedAt + FOUR_HOURS);
+        }
+        care.lastFeedAt = block.timestamp;
+        care.hasFed = true;
         care.strength += 1;
         care.stamina += 5;
-        emit CaredFor(collection, tokenId, msg.sender, Action.Feeding, care.careDay);
+        emit CaredFor(collection, tokenId, msg.sender, Action.Feeding, block.timestamp);
     }
 
-    /// @notice Each poop grants +1 Health, up to three per UTC day.
+    /// @notice Each poop grants +1 Health, once every four hours.
     function poop(address collection, uint256 tokenId) external {
         _checkOwner(collection, tokenId);
-        Pet storage care = _prepare(collection, tokenId).pet;
-        if (care.poopsToday == MAX_POOPS) revert DailyLimit();
-        care.poopsToday += 1;
+        Pet storage care = _prepare(collection, tokenId);
+        if (care.hasPooped && block.timestamp < care.lastPoopAt + FOUR_HOURS) {
+            revert ActionNotReady(care.lastPoopAt + FOUR_HOURS);
+        }
+        care.lastPoopAt = block.timestamp;
+        care.hasPooped = true;
         care.health += 1;
-        emit CaredFor(collection, tokenId, msg.sender, Action.Pooping, care.careDay);
+        emit CaredFor(collection, tokenId, msg.sender, Action.Pooping, block.timestamp);
     }
 
-    /// @notice Claim +10 Experience for one attested Rare Rush completion; at most three claims per UTC day.
+    /// @notice Claim +10 Experience for one attested Rare Rush completion; at most three claims in any rolling 24h.
     /// @dev The attestor must verify the run and selected Friend; opening the game is never sufficient proof.
     function play(
         address collection,
@@ -129,20 +138,20 @@ contract RarePet {
         if (usedRuns[runId]) revert RunAlreadyUsed();
         bytes32 digest = playDigest(msg.sender, collection, tokenId, runId, deadline);
         if (_recover(digest, signature) != playSigner) revert InvalidSignature();
-        Pet storage care = _prepare(collection, tokenId).pet;
-        if (care.playsToday == MAX_PLAYS) revert DailyLimit();
+        Pet storage care = _prepare(collection, tokenId);
+        if (care.playCount == MAX_PLAYS) revert ActionNotReady(care.playTimes[0] + DAY);
         usedRuns[runId] = true;
-        care.playsToday += 1;
+        care.playTimes[care.playCount] = block.timestamp;
+        care.playCount += 1;
         care.experience += 10;
-        emit CaredFor(collection, tokenId, msg.sender, Action.Playing, care.careDay);
+        emit CaredFor(collection, tokenId, msg.sender, Action.Playing, block.timestamp);
         emit PlayClaimed(runId, collection, tokenId);
     }
 
-    /// @notice Current care, including overdue decay and quota resets even without a keeper transaction.
+    /// @notice Current care, including overdue decay and expiring play slots even without a keeper transaction.
     function getPet(address collection, uint256 tokenId) external view returns (Pet memory care) {
         _checkCollection(collection);
-        StoredPet storage stored = _pets[collection][tokenId];
-        (care,) = _project(stored);
+        care = _project(_pets[collection][tokenId]);
     }
 
     /// @notice EIP-712 hash to be signed by the trusted completion service, never a wallet ownership proof.
@@ -158,32 +167,31 @@ contract RarePet {
         return keccak256(abi.encodePacked("\x19\x01", domain, claim));
     }
 
-    function _prepare(address collection, uint256 tokenId) private returns (StoredPet storage stored) {
-        stored = _pets[collection][tokenId];
-        (Pet memory care, uint256 decay) = _project(stored);
-        stored.pet = care;
-        stored.appliedDecay = decay;
+    function _prepare(address collection, uint256 tokenId) private returns (Pet storage care) {
+        _pets[collection][tokenId] = _project(_pets[collection][tokenId]);
+        care = _pets[collection][tokenId];
     }
 
-    function _project(StoredPet storage stored) private view returns (Pet memory care, uint256 decay) {
-        care = stored.pet;
-        decay = stored.appliedDecay;
-        uint256 today = block.timestamp / DAY;
-        if (care.careDay != today) {
-            care.careDay = today;
-            care.feedsToday = 0;
-            care.playsToday = 0;
-            care.poopsToday = 0;
+    function _project(Pet memory care) private view returns (Pet memory) {
+        uint256 count;
+        for (uint256 i; i < care.playCount; ++i) {
+            if (block.timestamp < care.playTimes[i] + DAY) care.playTimes[count++] = care.playTimes[i];
         }
-        if (stored.hasPet && block.timestamp > care.lastPetAt + DAY) {
-            // Decay starts one second past the deadline, then repeats every 24 hours.
-            uint256 missed = (block.timestamp - care.lastPetAt - 1) / DAY;
-            uint256 pending = missed - decay;
+        for (uint256 i = count; i < MAX_PLAYS; ++i) {
+            care.playTimes[i] = 0;
+        }
+        care.playCount = count;
+        uint256 deadline = care.lastPetAt + DAY + PET_GRACE;
+        if (care.hasPet && block.timestamp > deadline) {
+            // The exact grace deadline is on time. Decay begins one second later.
+            uint256 missed = (block.timestamp - deadline - 1) / DAY + 1;
+            uint256 pending = missed > care.decayApplied ? missed - care.decayApplied : 0;
             care.kinship = pending >= care.kinship ? 0 : care.kinship - pending;
             care.streak = 0;
             care.rarity = 0;
-            decay = missed;
+            care.decayApplied = missed;
         }
+        return care;
     }
 
     function _checkOwner(address collection, uint256 tokenId) private view {

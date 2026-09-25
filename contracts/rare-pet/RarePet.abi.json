@@ -38,6 +38,19 @@
   },
   {
     "type": "function",
+    "name": "FOUR_HOURS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "GENERATIONS",
     "inputs": [],
     "outputs": [
@@ -64,19 +77,6 @@
   },
   {
     "type": "function",
-    "name": "MAX_FEEDS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "MAX_PLAYS",
     "inputs": [],
     "outputs": [
@@ -90,7 +90,7 @@
   },
   {
     "type": "function",
-    "name": "MAX_POOPS",
+    "name": "PET_GRACE",
     "inputs": [],
     "outputs": [
       {
@@ -199,24 +199,54 @@
             "internalType": "uint256"
           },
           {
-            "name": "careDay",
+            "name": "lastFeedAt",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "feedsToday",
+            "name": "lastPoopAt",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "playsToday",
+            "name": "lastLaunchAt",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "poopsToday",
+            "name": "playTimes",
+            "type": "uint256[3]",
+            "internalType": "uint256[3]"
+          },
+          {
+            "name": "playCount",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "decayApplied",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "hasPet",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "hasFed",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "hasPooped",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "hasLaunched",
+            "type": "bool",
+            "internalType": "bool"
           }
         ]
       }
@@ -392,7 +422,7 @@
         "internalType": "enum RarePet.Action"
       },
       {
-        "name": "day",
+        "name": "timestamp",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -427,8 +457,14 @@
   },
   {
     "type": "error",
-    "name": "DailyLimit",
-    "inputs": []
+    "name": "ActionNotReady",
+    "inputs": [
+      {
+        "name": "readyAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

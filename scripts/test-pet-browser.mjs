@@ -10,7 +10,7 @@ const externalRequests = [];
 const trait = (page, name) => page.locator('.trait').filter({ has: page.locator('span', { hasText: new RegExp(`^${name}$`) }) }).locator('strong').innerText();
 const careButton = (page, name) => page.getByRole('button', { name: new RegExp(`^${name},`) });
 const modeButton = (page, name) => page.locator('.mode-switch').getByRole('button', { name: new RegExp(`^${name}$`, 'i') });
-const careRecords = page => page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => key.startsWith('rarepet:preview:v1:'))));
+const careRecords = page => page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => key.startsWith('rarepet:preview:v2:'))));
 async function fits(page, label) {
   assert.equal(await page.locator('body').evaluate(el => el.scrollWidth > innerWidth), false, `${label}: no horizontal overflow`);
 }
@@ -35,6 +35,7 @@ async function choosePreview(page, collection, name) {
 async function collectReactions(page, action, count) {
   const variants = new Set();
   for (let i = 0; i < count; i++) {
+    if (i > 0) await page.clock.fastForward((action === 'Pet' ? 24 : 4) * 3_600_000 + 1000);
     await careButton(page, action).click();
     const motion = page.locator(`[data-action="${action.toLowerCase()}"][data-variant]`);
     await motion.waitFor();
@@ -53,13 +54,17 @@ async function play(page, { complete = false, portrait, bodyId } = {}) {
   }
   const before = await trait(page, 'Experience');
   assert.equal(before, '0XP', 'Entering a game never awards XP');
-  if (complete) await page.clock.install();
+  assert.equal(await dialog.locator('.rush-context').count(), 0, 'Play has one shared header, not a second context stripe');
+  assert.equal(await dialog.locator('.pet-play-heading').count(), 1);
+  const proportions = await dialog.locator('.world-svg').evaluate(svg => { const matrix = svg.getScreenCTM(); return [matrix.a, matrix.d]; });
+  assert(Math.abs(proportions[0] - proportions[1]) < 0.001, 'The gameplay world keeps equal horizontal and vertical scale');
+  await dialog.screenshot({ path: `artifacts/rarepet-play-ready-${page.viewportSize().width}.png` });
   await dialog.getByRole('button', { name: /LET.S RUSH/ }).click();
   if (portrait) {
     assert.equal(await dialog.locator('[data-genesis-body]').first().getAttribute('data-genesis-body'), bodyId, 'Starting a run keeps the chosen body');
   }
   if (complete) await page.clock.runFor(125_000);
-  await dialog.getByRole('button', { name: 'Close dialog' }).click();
+  await dialog.getByRole('button', { name: 'Close Rare Rush' }).click();
   assert.equal(await trait(page, 'Experience'), complete ? '10XP' : '0XP', complete ? 'A completed preview run awards XP once' : 'Leaving an unfinished run earns no XP');
   if (complete) {
     await page.locator('.friend-art[data-action="play"]').waitFor();
@@ -70,7 +75,7 @@ async function play(page, { complete = false, portrait, bodyId } = {}) {
 }
 
 try {
-  for (const [width, height] of [[1440, 1100], [390, 844], [320, 700]]) {
+  for (const [width, height] of [[1440, 900], [390, 844], [320, 700]]) {
     const page = await browser.newPage({ viewport: { width, height } });
     page.setDefaultTimeout(15_000);
     page.on('pageerror', error => errors.push(error.message));
@@ -80,6 +85,7 @@ try {
       externalRequests.push(url.href);
       return route.abort();
     });
+    await page.clock.install({ time: new Date('2026-09-25T12:00:00Z') });
     await page.goto(origin);
     await page.getByRole('heading', { name: 'My RarePet.' }).waitFor();
     await page.evaluate(() => document.fonts.ready);
@@ -91,18 +97,24 @@ try {
     await page.screenshot({ path: `artifacts/rarepet-${width}.png`, fullPage: true });
 
     await collectReactions(page, 'Pet', 3);
-    assert.equal(await trait(page, 'Kinship'), '1', 'Extra same-day pets refresh the bond without repeated rewards');
-    await collectReactions(page, 'Feed', 5);
-    assert.equal(await trait(page, 'Strength'), '5');
-    assert.equal(await trait(page, 'Stamina'), '25');
+    assert.equal(await trait(page, 'Kinship'), '3', 'Each pet after its 24-hour cooldown earns one reward');
+    assert.equal(await careButton(page, 'Pet').isDisabled(), true);
+    assert.match(await page.locator('[data-countdown=pet]').innerText(), /^2[34]:/, 'Pet shows its 24-hour cooldown');
+    await collectReactions(page, 'Feed', 3);
+    assert.equal(await trait(page, 'Strength'), '3');
+    assert.equal(await trait(page, 'Stamina'), '15');
     assert.equal(await careButton(page, 'Feed').isDisabled(), true);
     await collectReactions(page, 'Poop', 3);
     assert.equal(await trait(page, 'Health'), '3');
     assert.equal(await careButton(page, 'Poop').isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: /Launch coming soon/ }).isDisabled(), true);
+    assert.match(await page.locator('[data-countdown=poop]').innerText(), /^0[34]:/, 'Poop shows its own four-hour timer');
+    assert.equal(await page.locator('.site-header').getByText('ROBINHOOD CHAIN', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.footer-brand small').innerText(), 'ROBINHOOD CHAIN');
+    assert.equal(await page.locator('.site-header .nav-docs').getAttribute('href'), '/docs/');
     const generationRecords = await careRecords(page);
     assert.equal(Object.keys(generationRecords).length, 1);
-    assert.match(Object.keys(generationRecords)[0], /^rarepet:preview:v1:\d+$/, 'Existing Generations care keeps its storage namespace');
+    assert.match(Object.keys(generationRecords)[0], /^rarepet:preview:v2:\d+$/, 'Generations care uses the new timing storage namespace');
 
     for (const floor of ['Meadow', 'Moon', 'Arcade', 'Beach', 'Rare']) {
       const button = page.getByRole('button', { name: floor, exact: true });
@@ -112,7 +124,9 @@ try {
       if (width === 1440) await page.screenshot({ path: `artifacts/rarepet-island-${floor.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`, fullPage: true });
     }
     await page.reload();
-    assert.equal(await trait(page, 'Strength'), '5', 'Preview care persists locally');
+    assert.equal(await trait(page, 'Strength'), '3', 'Preview care persists locally');
+    assert.equal(await careButton(page, 'Pet').isDisabled(), true, 'Reload preserves the Pet cooldown');
+    assert.equal(await careButton(page, 'Poop').isDisabled(), true, 'Reload preserves the Poop cooldown');
     assert.equal(await page.getByRole('button', { name: 'Rare', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
 
     const firstGeneration = await choosePreview(page, 'Generations');
@@ -146,7 +160,7 @@ try {
     assert.equal(await trait(page, 'Strength'), '0', 'Reset clears the current Genesis preview');
     assert.equal(await trait(page, 'Experience'), '0XP');
     await choosePreview(page, 'Generations', defaultLabel);
-    assert.equal(await trait(page, 'Strength'), '5', 'Resetting Genesis leaves the existing Generations preview intact');
+    assert.equal(await trait(page, 'Strength'), '3', 'Resetting Genesis leaves the existing Generations preview intact');
     await choosePreview(page, 'Genesis', genesisLabel);
     assert.equal(await trait(page, 'Strength'), '0', 'Reset remains saved for that Genesis');
     await page.context().setOffline(false);

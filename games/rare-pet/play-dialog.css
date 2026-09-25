@@ -1,0 +1,133 @@
+/* Match Rare Rush's content-sized cabinet, including its 960 × 500 world.
+ * The SDK footer is absent here, so the unused 48px bottom reservation is removed. */
+.pet-play-dialog{box-sizing:border-box;position:fixed;inset:0;margin:auto;width:min(964px,calc(100vw - 32px),max(700px,calc((100dvh - 310px)*1.92)));max-width:none;max-height:calc(100dvh - 32px);padding:0;border:2px solid #10110e;background:#000;color:#10110e;box-shadow:5px 5px 0 #ccff00;overflow:auto;overscroll-behavior:contain;font:14px/1.45 var(--rush-font-body);color-scheme:light}
+.pet-play-dialog::backdrop{background:#000c;backdrop-filter:blur(3px)}
+.pet-play-heading{position:sticky;top:0;z-index:12;display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,340px) 36px;align-items:center;gap:18px;min-height:57px;padding:9px 14px;border-bottom:1px solid #10110e;background:#ccff00}
+.pet-play-heading h2{margin:0;font:400 14px/1.45 var(--rush-font-display);letter-spacing:-.2px;overflow-wrap:anywhere}
+.pet-play-heading p{margin:0;font:500 10px/1.45 var(--rush-font-mono)}
+.pet-play-heading button{width:36px;height:36px;flex-shrink:0;border:1px solid #10110e;background:#fff;color:#10110e;font:26px/1 var(--rush-font-body);padding:0}
+.pet-play-heading button:hover{background:#10110e;color:#ccff00;text-decoration:none}
+.pet-play-heading button:focus-visible{outline:2px solid #10110e;outline-offset:2px}
+.pet-play-cabinet{container:pet-arcade / inline-size;min-width:0;background:#000}
+.pet-play-dialog .pet-rush{position:relative;width:100%;height:calc(100cqw * 500 / 960 + 218px);min-height:0}
+.pet-play-dialog .pet-rush .rare-rush{width:100%;height:100%;min-height:0}
+.pet-play-dialog .arcade-bottom{bottom:0}
+.pet-play-dialog .playfield{bottom:68px}
+.pet-play-dialog .game-overlay{bottom:68px}
+.pet-play-dialog .start-screen{bottom:97px}
+.pet-play-dialog .world-svg{image-rendering:pixelated}
+.pet-play-dialog .error-toast{bottom:82px}
+.pet-play-dialog .rare-rush .eyebrow{color:#ccff00}
+.pet-play-dialog .rare-rush .game-overlay .eyebrow{color:#000}
+@container pet-arcade (max-width:800px){
+  .pet-play-dialog .start-screen{left:28px;right:28px;gap:30px}
+  .pet-play-dialog .start-title{padding:14px}
+  .pet-play-dialog .start-title h1{font-size:50px}
+  .pet-play-dialog .start-title sup{font-size:20px;margin-left:5px}
+  .pet-play-dialog .selected-friend{gap:5px;font-size:9px}
+  .pet-play-dialog .selected-friend>span{font-size:9px}
+  .pet-play-dialog .start-card{padding:12px 15px}
+  .pet-play-dialog .start-card h2{font-size:17px}
+  .pet-play-dialog .keyboard-controls{gap:10px;font-size:9px}
+  .pet-play-dialog .keyboard-controls>span{gap:4px}
+  .pet-play-dialog .keyboard-controls>span:last-child{font-size:9px}
+  .pet-play-dialog .keyboard-controls kbd{font-size:9px;padding:4px}
+  .pet-play-dialog .arcade-bottom{padding:0 18px;gap:12px}
+  .pet-play-dialog .economy-bar{gap:10px}
+  .pet-play-dialog .economy-bar>span{font-size:9px;max-width:110px}
+}
+/* Use the cabinet width, not the browser width: a modal can be narrow on desktop.
+ * The minimum playfield leaves room for the ready/result cards on a small phone;
+ * preserveAspectRatio keeps the world undistorted within that space. */
+@container pet-arcade (max-width:600px){
+  .pet-play-dialog .pet-rush{height:calc(max(100cqw * 500 / 520,380px) + 275px)}
+  .pet-play-dialog .arcade-top{height:60px;padding:0 12px}
+  .pet-play-dialog .arcade-logo{gap:7px}
+  .pet-play-dialog .arcade-logo>.brand-icon{width:32px;height:32px}
+  .pet-play-dialog .arcade-logo>.brand-name{font-size:14px}
+  .pet-play-dialog .arcade-logo small{font-size:7px;letter-spacing:1.6px;margin-top:5px}
+  .pet-play-dialog .top-actions{gap:5px}
+  .pet-play-dialog .top-actions button{font-size:10px;min-width:29px;padding:4px 5px;height:32px}
+  .pet-play-dialog .preview-tag{position:absolute;top:68px;right:14px;font-size:8px;margin:0;padding:2px 4px;border-color:#000}
+  .pet-play-dialog .hud{top:60px;height:91px;grid-template-columns:1fr 1fr 1.1fr;padding:26px 15px 10px;gap:10px}
+  .pet-play-dialog .hud span{font-size:9px;letter-spacing:.1px}
+  .pet-play-dialog .hud strong{font-size:22px}
+  .pet-play-dialog .hud>div:nth-child(3){border:0}
+  .pet-play-dialog .hud strong small{font-size:11px;margin-left:3px}
+  .pet-play-dialog .hud .life-hud{position:absolute;right:16px;top:62px}
+  .pet-play-dialog .life-hud>span{display:none}
+  .pet-play-dialog .life-hud strong{gap:5px}
+  .pet-play-dialog .life-hud b{font-size:14px}
+  .pet-play-dialog .token-hud strong{font-size:20px}
+  .pet-play-dialog .playfield{top:151px;bottom:124px}
+  .pet-play-dialog .zone-label{left:12px;top:12px;font-size:9px;letter-spacing:.4px}
+  .pet-play-dialog .zone-line{width:20px}
+  .pet-play-dialog .rare-rush[data-screen=ready] .zone-label{visibility:hidden}
+  .pet-play-dialog .run-score{left:12px;top:48px}
+  .pet-play-dialog .run-score strong{font-size:23px}
+  .pet-play-dialog .run-score small{font-size:10px}
+  .pet-play-dialog .pickup-notice{font-size:14px;top:30%;padding:5px 8px}
+  .pet-play-dialog .run-modifiers{right:12px;top:12px;width:101px;padding:5px 7px;font-size:9px}
+  .pet-play-dialog .run-modifiers b{font-size:11px}
+  .pet-play-dialog .start-screen{inset:163px 16px 137px;display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:10px}
+  .pet-play-dialog .start-title{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:6px;max-width:none;min-height:77px;padding:10px 73px 10px 11px}
+  .pet-play-dialog .start-title>.eyebrow{width:100%;white-space:nowrap;font-size:8px;letter-spacing:.1px}
+  .pet-play-dialog .start-title h1{font-size:25px;line-height:1.1;letter-spacing:0;margin:0}
+  .pet-play-dialog .start-title h1 br{display:none}
+  .pet-play-dialog .start-title h1>span{margin-left:5px}
+  .pet-play-dialog .start-title sup{display:none}
+  .pet-play-dialog .mobile-friend{display:block;position:absolute;right:11px;top:17px;width:49px;height:49px;background:#fff;border:1px solid #fff;padding:4px;image-rendering:pixelated}
+  .pet-play-dialog .selected-friend{font-size:8px;gap:4px;margin:0;width:100%;white-space:nowrap}
+  .pet-play-dialog .selected-friend>span{font-size:8px;padding:1px 4px}
+  .pet-play-dialog .start-card{padding:8px 13px 12px}
+  .pet-play-dialog .start-card-heading{justify-content:flex-end;min-height:44px}
+  .pet-play-dialog .start-card .card-kicker{display:none}
+  .pet-play-dialog .start-card h2{position:absolute;top:17px;left:13px;right:83px;font-size:14px;line-height:1.25;letter-spacing:0;margin:0}
+  .pet-play-dialog .start-card h2 br{display:none}
+  .pet-play-dialog .start-card .difficulty-picker{gap:5px;padding-top:7px}
+  .pet-play-dialog .difficulty-picker button{min-height:44px;padding:4px 2px}
+  .pet-play-dialog .difficulty-picker b{font-size:10px}
+  .pet-play-dialog .difficulty-picker span{font-size:9px}
+  .pet-play-dialog .mode-description{font-size:9px;margin:5px 0 8px}
+  .pet-play-dialog .mode-description>span{display:none}
+  .pet-play-dialog .primary{min-height:45px;padding:9px 12px;font-size:12px}
+  .pet-play-dialog .entry-note{font-size:9px;line-height:1.4;margin-top:9px}
+  .pet-play-dialog .arcade-bottom{bottom:0;height:124px;padding:10px 12px;display:flex;flex-direction:column;gap:11px;align-items:stretch}
+  .pet-play-dialog .keyboard-controls{display:none}
+  .pet-play-dialog .touch-controls{display:flex;gap:8px}
+  .pet-play-dialog .touch-controls>button{height:66px;flex:1;min-width:0;border:2px solid #000;background:#fff;color:#000;font-size:25px;display:flex;gap:5px;align-items:center;justify-content:center;touch-action:none;box-shadow:2px 2px 0 #000}
+  .pet-play-dialog .touch-controls>button>span{font-size:11px;font-weight:800;letter-spacing:0}
+  .pet-play-dialog .touch-controls small{font-size:9px}
+  .pet-play-dialog .touch-controls>.touch-jump{background:#ccff00}
+  .pet-play-dialog .touch-controls>.touch-pace{flex:0 0 44px;flex-direction:column;gap:0;font-size:22px}
+  .pet-play-dialog .touch-controls>.touch-pace>span{font-size:9px}
+  .pet-play-dialog .touch-controls>.touch-pace:active:not(:disabled){background:#ccff00}
+  .pet-play-dialog .economy-bar{justify-content:space-between;gap:10px;margin-left:0}
+  .pet-play-dialog .economy-bar>span{font-size:9px;max-width:none}
+  .pet-play-dialog .economy-bar button{font-size:11px;padding:0;min-height:22px}
+  .pet-play-dialog .economy-bar b{font-size:11px}
+  .pet-play-dialog .game-overlay{inset:151px 0 124px;padding:16px}
+  .pet-play-dialog .game-overlay h2{font-size:20px}
+  .pet-play-dialog .result-card h2{font-size:16px}
+  .pet-play-dialog .result-score{font-size:32px}
+  .pet-play-dialog .results-grid{margin:10px 0;padding:8px 0}
+  .pet-play-dialog .results-grid b{font-size:17px}
+  .pet-play-dialog .results-grid span{font-size:9px}
+  .pet-play-dialog .result-card>small{display:block;font-size:9px}
+  .pet-play-dialog .result-card p{font-size:11px}
+  .pet-play-dialog .game-overlay .eyebrow{font-size:9px}
+  .pet-play-dialog .pause-card h2{font-size:36px}
+  .pet-play-dialog .change-difficulty{font-size:11px}
+  .pet-play-dialog .rare-rush .rf-frame-scrim{padding:10px}
+  .pet-play-dialog .rare-rush .rf-frame-menu-body{padding:15px}
+  .pet-play-dialog .rare-rush .rf-frame-menu-heading{padding:8px 12px}
+  .pet-play-dialog .rare-rush .rf-frame-menu-heading h2{font-size:12px}
+  .pet-play-dialog .error-toast{bottom:134px;font-size:12px}
+}
+@media(max-width:700px){
+  .pet-play-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);box-shadow:4px 4px 0 #ccff00}
+  .pet-play-heading{grid-template-columns:minmax(0,1fr) 44px;gap:5px 12px;padding:10px 12px}
+  .pet-play-heading h2{font-size:12px}
+  .pet-play-heading p{grid-column:1;font-size:9px;max-width:420px}
+  .pet-play-heading button{grid-column:2;grid-row:1/3;align-self:center;width:44px;height:44px}
+}

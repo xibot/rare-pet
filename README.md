@@ -12,39 +12,41 @@ npm run dev
 # http://localhost:4175
 ```
 
-This is the standalone RarePet repository. The app lives in `games/rare-pet`; the minimum Rare Rush engine, identity reader, fonts, and canonical preview artwork needed by RarePet are retained under `games/rare-rush`. `npm run build` creates the static distributable in `dist-pet`. The included `vercel.json` uses `npm ci`, `npm run build`, and that output directory; it does not deploy anything. The care contract has not been deployed.
+This is the standalone RarePet repository. The app lives in `games/rare-pet`; the minimum Rare Rush engine, identity reader, fonts, and canonical preview artwork needed by RarePet are retained under `games/rare-rush`. `npm run build` creates the static distributable in `dist-pet`, including a real `/docs/` page. The local server supports `/docs`, `/docs/` and direct reloads; both pages load the shared root-level assets. The included `vercel.json` uses `npm ci`, `npm run build`, and that output directory; it does not deploy anything. The care contract has not been deployed.
 
 ## What works
 
-- Explicit Preview and My Wallet modes. Preview offers three canonical Genesis and three Generations Friends, wallet-free Pet, Feed, Poop and actual Rare Rush play. Per-Friend device storage, daily limits, deadline decay and seven-day rarity milestones remain separate from wallet care. Reset Preview resets only the selected sample’s care.
+- Explicit Preview and My Wallet modes. Preview offers three canonical Genesis and three Generations Friends, wallet-free Pet, Feed, Poop and actual Rare Rush play. Per-Friend device storage, independent care cooldowns, deadline decay and seven-pet rarity milestones remain separate from wallet care. Reset Preview resets only the selected sample’s care.
 - Genesis portraits use the same 36 canonical Generations bodies as Rare Rush. Change Body selects a different body and carries it into the embedded game; the original portrait stays intact. Meadow, Moon, Arcade, Beach and monochrome Rare islands, the chosen body and the last preview Friend are remembered on this device. All showcase choices are cosmetic.
 - Three reactions each for Pet, Feed, Poop and completed Play, with hearts, different snacks, cleanup effects and XP celebrations. Reduced-motion preferences disable animation and decorative effects.
 - Connect an injected browser wallet through FriendSDK; switch to Robinhood Chain (4663); discover and select Genesis or Generations. Current ownership and original art are reverified before selection. Manual token verification remains available if transfer-history discovery is incomplete. Generation 0 can receive care; Rare Rush requires a Genesis or hardwired Generations Friend.
-- Left-side actions and a large Friend stage; trait panel, 24-hour bond clock, seven-day streak strip, guide, transaction status, collection selector, keyboard-accessible native dialogs, reduced-motion behavior.
-- Rare Rush embedded with the same selected NFT. Preview XP is granted only by an actual completed run, once per run, at most three per UTC day. Closing a game does not earn XP.
-- Solidity care ledger in `contracts/rare-pet`. Every write checks current ownership. Each `(collection, tokenId)` has its own care state, which follows the NFT on transfer. Daily quotas, decay, and rarity are enforced onchain, separately from original NFT metadata.
+- Left-side actions and a large Friend stage; trait panel, per-action countdowns, bond deadline, seven-pet streak strip, documentation page, transaction status, collection selector, keyboard-accessible native dialogs, reduced-motion behavior.
+- Rare Rush embedded with the same selected NFT. Preview XP is granted only by an actual completed run, once per run, with three completion slots in a rolling 24-hour window. Each rewarded completion releases its slot 24 hours later. Closing a game does not earn XP.
+- Solidity care ledger in `contracts/rare-pet`. Every write checks current ownership. Each `(collection, tokenId)` has its own care state, which follows the NFT on transfer. Care cooldowns, rolling Play slots, decay, and rarity are enforced onchain, separately from original NFT metadata.
 - Live client path for Pet, Feed, and Poop: fresh ownership, transaction simulation, explicit wallet confirmation, matching receipt/event verification, and confirmed-block readback. Actions remain unavailable until a trusted care deployment is configured.
 
-## Initial care rules
+## Care rules
 
-These are the explicit first implementation choices for the user's concept; they can be revised before deployment.
+Each action has an independent timer; there is no shared midnight reset.
 
-| Action | Limit | Result |
+| Action | Cooldown | Result |
 | --- | --- | --- |
-| Pet | One reward per UTC day; extra refreshes allowed | +1 Kinship; maintain a rolling 24-hour bond |
-| Feed | 5/day | +1 Strength and +5 Stamina per meal |
-| Play | 3 rewarded completed runs/day | +10 Experience per completion |
-| Launch | Soon; intended 1/day | Brain integration reserved |
-| Poop | 3/day | +1 Health per break |
-| Streak | Consecutive daily pets within 24 hours | +1 Rarity per 7 days |
+| Pet | Once every 24 hours | +1 Kinship; advance an unbroken care streak |
+| Feed | Once every 4 hours | +1 Strength and +5 Stamina per meal |
+| Play | 3 rewarded completed runs in a rolling 24-hour window | +10 Experience per completion; each slot returns 24 hours later |
+| Launch | Soon; intended once every 24 hours | Brain integration reserved |
+| Poop | Once every 4 hours | +1 Health per break |
+| Streak | Pet after its 24-hour cooldown and within a further 24-hour grace window | +1 Rarity per 7 consecutive care cycles |
 
-First pet starts streak 1. Extra same-day pets refresh the deadline without granting more points. Exactly 24 hours is on time. Going one second past the deadline breaks the streak, resets its Rarity, and loses one Kinship; another point is lost for each additional missed 24-hour period, clamped at zero. The contract projects decay in reads and persists it at the next action, without a scheduled keeper. Feeding, playing, and pooping do not refresh the bond. Quotas reset at midnight UTC. The UI labels these rules in How to care.
+The first pet starts streak 1. Pet unlocks exactly 24 hours later, followed by a 24-hour grace window: the bond deadline is 48 hours after the last successful pet. Exactly at the deadline is on time. Going one second past it breaks the streak, resets its Rarity, and loses one Kinship; another point is lost for each additional missed 24-hour period, clamped at zero. The next Pet starts a new streak. The contract projects decay in reads and persists it at the next action, without a scheduled keeper. Feeding, playing, and pooping do not refresh the bond.
+
+The `/docs/` page explains modes, collections, cosmetic choices, every action and trait, cooldowns, streaks and activation status. Its grace-period copy receives the care model's configured value from the app.
 
 Stamina currently accumulates as a care trait; it does not charge for play or regenerate on a separate schedule. Rarity is a RarePet streak score, not the original collection rarity. Brain remains zero until a real launch integration exists.
 
 ## Activation boundaries
 
-The wallet selector reads **real ownership**. The initial habitat is explicitly **Preview Mode**. Its state is namespaced `rarepet:preview:v1` and never becomes onchain state. Genesis samples have collection-prefixed keys to separate them from Generations with the same token number; existing Generations preview saves are preserved. Owned Friends do not receive simulated care points. The app never signs a message merely to imitate a blockchain write.
+The wallet selector reads **real ownership**. The initial habitat is explicitly **Preview Mode**. Its state is namespaced `rarepet:preview:v2` and never becomes onchain state. Existing v1 saves are migrated once, preserving earned traits and assigning conservative cooldown timestamps where the old save did not track action times. Genesis samples have collection-prefixed keys to separate them from Generations with the same token number; existing Generations preview saves are preserved. Owned Friends do not receive simulated care points. The app never signs a message merely to imitate a blockchain write.
 
 To enable live Pet/Feed/Poop after deployment, build with the trusted deployment address:
 
@@ -69,7 +71,7 @@ npm run test:wallet
 cd contracts/rare-pet && forge test -vv
 ```
 
-The care-model tests cover UTC reset, duplicate pet rewards, exact/overdue 24-hour boundaries, projected decay, streaks, and quota caps. Canonical body tests verify 324 frames, connected geometry, portrait placement and body selection. Browser checks exercise desktop and 390px/320px mobile layouts, both preview collections, isolated care/reset, island and body persistence, varied action effects, reduced motion, real game completion and no XP on incomplete games. Wallet fixtures check fresh ownership, network/account changes and switching back to Preview without signing. Contract tests additionally cover transfers, identity separation, signatures, replay, and fuzzed decay. Live-chain deployment testing is still outstanding.
+The care-model tests cover independent cooldowns, duplicate rewards, exact/overdue bond boundaries, projected decay, streaks, and rolling Play slots. Canonical body tests verify 324 frames, connected geometry, portrait placement and body selection. Browser checks exercise desktop and 390px/320px mobile layouts, both preview collections, isolated care/reset, island and body persistence, varied action effects, reduced motion, real game completion and no XP on incomplete games. Wallet fixtures check fresh ownership, network/account changes and switching back to Preview without signing. Contract tests additionally cover transfers, identity separation, signatures, replay, and fuzzed decay. Live-chain deployment testing is still outstanding.
 
 ## Artwork and reuse
 
