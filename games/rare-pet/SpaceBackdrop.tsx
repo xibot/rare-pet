@@ -1,25 +1,17 @@
 import { useState, type CSSProperties } from 'react';
 import { pickSpacePassenger, SpaceRider } from './SpaceRider';
-import type { Island } from './habitat';
+import { CanonicalSpaceIsland, SPACE_ISLAND_ART } from './CanonicalSpaceIsland';
 import './space-backdrop.css';
 
-const accents: Record<Island, string> = {
-  meadow: '#96a680',
-  moon: '#a49ab8',
-  arcade: '#a9b46d',
-  beach: '#b7a680',
-  rare: '#d3d6da',
-};
-
 const islands = [
-  { x: '24%', y: '22%', size: 28, depth: 'far', delay: -9, direction: 'right' },
-  { x: '69%', y: '15%', size: 32, depth: 'far', delay: -31, direction: 'left' },
-  { x: '86%', y: '44%', size: 26, depth: 'far', delay: -17, direction: 'right' },
-  { x: '7%', y: '36%', size: 48, depth: 'middle', delay: -14, direction: 'left' },
-  { x: '75%', y: '32%', size: 44, depth: 'middle', delay: -4, direction: 'right' },
-  { x: '20%', y: '65%', size: 42, depth: 'middle', delay: -21, direction: 'left' },
-  { x: '2%', y: '76%', size: 68, depth: 'near', delay: -7, direction: 'right' },
-  { x: '85%', y: '69%', size: 62, depth: 'near', delay: -15, direction: 'left' },
+  { x: '24%', y: '22%', size: 46, depth: 'far', delay: -9, direction: 'right' },
+  { x: '69%', y: '15%', size: 52, depth: 'far', delay: -31, direction: 'left' },
+  { x: '86%', y: '44%', size: 44, depth: 'far', delay: -17, direction: 'right' },
+  { x: '7%', y: '36%', size: 76, depth: 'middle', delay: -14, direction: 'left' },
+  { x: '75%', y: '32%', size: 72, depth: 'middle', delay: -4, direction: 'right' },
+  { x: '20%', y: '65%', size: 68, depth: 'middle', delay: -21, direction: 'left' },
+  { x: '2%', y: '76%', size: 112, depth: 'near', delay: -7, direction: 'right' },
+  { x: '85%', y: '69%', size: 104, depth: 'near', delay: -15, direction: 'left' },
 ] as const;
 
 const stars = [
@@ -29,34 +21,29 @@ const stars = [
 ] as const;
 
 /** Random neighbours cross the whole habitat, changing only beyond the edges. */
-export function SpaceBackdrop({ island }: { island: Island }) {
+export function SpaceBackdrop() {
   const [passengers, setPassengers] = useState(() => islands.map(() => pickSpacePassenger()));
-  return <div className="space-backdrop" aria-hidden="true" style={{ '--space-accent': accents[island] } as CSSProperties}>
+  return <div className="space-backdrop" aria-hidden="true">
     <div className="space-stars">{stars.map(([x, y], index) => <i
       className={`space-star${index % 6 === 0 ? ' space-star-bright' : ''}`}
       key={index}
       style={{ left: `${x}%`, top: `${y}%` }}
     />)}</div>
-    {islands.map((item, index) => <div
-      className={`space-flight space-flight-${item.direction} space-island-${item.depth}`}
-      key={index}
-      style={{ top: item.y, '--space-rest-x': item.x, '--space-size': `${item.size}px`, animationDelay: `${item.delay}s` } as CSSProperties}
-      onAnimationIteration={event => {
-        if (event.target !== event.currentTarget) return;
-        setPassengers(current => current.map((passenger, slot) => slot === index ? pickSpacePassenger(passenger) : passenger));
-      }}
-    >
-      <div className="space-island"><svg className="space-island-floor" viewBox="0 0 80 40" shapeRendering="crispEdges" focusable="false">
-        <path className="space-island-base" d="M8 17H72V25H64V29H56V33H48V36H32V33H24V29H16V25H8Z"/>
-        <path className="space-island-edge" d="M4 15H76V21H68V25H56V28H24V25H12V21H4Z"/>
-        <path className="space-island-top" d="M24 5H56V8H68V11H76V17H68V20H56V23H24V20H12V17H4V11H12V8H24Z"/>
-        <path className="space-island-grain" d={index % 3 === 0
-          ? 'M18 11H26V13H18ZM51 16H59V18H51ZM35 8H39V10H35Z'
-          : index % 3 === 1
-            ? 'M22 13H28V15H22ZM52 9H58V11H52ZM41 18H45V20H41Z'
-            : 'M18 10H22V12H26V14H22V16H18V14H14V12H18ZM54 15H60V17H54Z'}/>
-        <path className="space-island-facet" d="M22 26H28V31H32V33H28V31H24V29H22ZM51 28H57V30H51Z"/>
-      </svg><SpaceRider passenger={passengers[index]} direction={item.direction}/></div>
-    </div>)}
+    {islands.map((item, index) => {
+      const scene = SPACE_ISLAND_ART[index % SPACE_ISLAND_ART.length];
+      return <div
+        className={`space-flight space-flight-${item.direction} space-island-${item.depth}`}
+        key={index}
+        style={{ top: item.y, '--space-rest-x': item.x, '--space-size': `${item.size}px`, animationDelay: `${item.delay}s` } as CSSProperties}
+        onAnimationIteration={event => {
+          if (event.target !== event.currentTarget) return;
+          setPassengers(current => current.map((passenger, slot) => slot === index ? pickSpacePassenger(passenger) : passenger));
+        }}
+      >
+        <div className="space-island" style={{ aspectRatio: scene.aspectRatio, '--space-rider-x': scene.riderX, '--space-rider-y': scene.riderY, '--space-rider-size': scene.riderSize } as CSSProperties}>
+          <CanonicalSpaceIsland scene={scene}/><SpaceRider passenger={passengers[index]} direction={item.direction}/>
+        </div>
+      </div>;
+    })}
   </div>;
 }

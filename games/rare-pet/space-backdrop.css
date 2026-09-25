@@ -6,16 +6,11 @@
 .space-flight{position:absolute;left:calc((var(--space-render-size) + 16px)*-1);right:calc((var(--space-render-size) + 16px)*-1);height:0;--space-render-size:var(--space-size);animation:space-island-cross var(--space-duration) linear infinite;will-change:transform}
 .space-flight-left{animation-direction:reverse}
 .space-island{position:relative;width:var(--space-render-size);aspect-ratio:2/1}
-.space-island .space-passenger{position:absolute;left:50%;bottom:48%;width:48%;height:auto;transform:translateX(-50%);image-rendering:pixelated}
+.space-island .space-passenger{position:absolute;left:var(--space-rider-x);top:var(--space-rider-y);width:var(--space-rider-size);height:auto;transform:translate(-50%,-94.444444%);image-rendering:pixelated}
 .space-island svg{display:block;width:100%;height:auto;overflow:visible}
 .space-island-far{opacity:.3;--space-duration:38s}
 .space-island-middle{opacity:.46;--space-duration:26s}
 .space-island-near{opacity:.64;--space-duration:18s}
-.space-island-base{fill:#525761}
-.space-island-edge{fill:#858a92}
-.space-island-top{fill:var(--space-accent)}
-.space-island-grain{fill:#14191f;opacity:.4}
-.space-island-facet{fill:#9ba1aa;opacity:.6}
 @keyframes space-island-cross{from{transform:translate3d(0,0,0)}to{transform:translate3d(100%,0,0)}}
 @media(max-width:650px){.space-flight{--space-render-size:calc(var(--space-size)*.7)}.space-star{opacity:.26}.space-star-bright{opacity:.4}}
 @media(prefers-reduced-motion:reduce){.space-flight{left:var(--space-rest-x);right:auto;animation:none;transform:none;will-change:auto}}
