@@ -116,7 +116,7 @@ try {
     assert.equal(Object.keys(generationRecords).length, 1);
     assert.match(Object.keys(generationRecords)[0], /^rarepet:preview:v2:\d+$/, 'Generations care uses the new timing storage namespace');
 
-    for (const floor of ['Garden', 'Circuit', 'Crystal', 'Rooftop', 'Tidal', 'Rare']) {
+    for (const floor of ['Garden', 'Circuit', 'Crystal', 'Rooftop', 'Tidal', 'Orbital']) {
       const button = page.getByRole('button', { name: floor, exact: true });
       await button.click();
       assert.equal(await button.getAttribute('aria-pressed'), 'true', `${floor} is selectable`);
@@ -127,7 +127,7 @@ try {
     assert.equal(await trait(page, 'Strength'), '3', 'Preview care persists locally');
     assert.equal(await careButton(page, 'Pet').isDisabled(), true, 'Reload preserves the Pet cooldown');
     assert.equal(await careButton(page, 'Poop').isDisabled(), true, 'Reload preserves the Poop cooldown');
-    assert.equal(await page.getByRole('button', { name: 'Rare', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
+    assert.equal(await page.getByRole('button', { name: 'Orbital', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
 
     const firstGeneration = await choosePreview(page, 'Generations');
     assert.notEqual(firstGeneration, defaultLabel);

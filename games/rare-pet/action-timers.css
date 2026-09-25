@@ -1,6 +1,6 @@
 .care-actions .care-action { display:grid; grid-template-columns:30px minmax(0,1fr); gap:6px 12px; min-height:93px; }
 .care-layout .habitat { display:flex; flex-direction:column; }
-.care-layout .friend-stage { flex:1 0 439px; }
+.care-layout .friend-stage { flex:1 0 480px; }
 .care-action .action-icon { grid-column:1; grid-row:1 / 3; }
 .care-action .action-text { grid-column:2; }
 .action-timing { grid-column:2; display:flex; flex-wrap:wrap; align-items:center; gap:3px 8px; font:8px/1.5 var(--rush-font-mono); }

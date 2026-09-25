@@ -8,9 +8,9 @@
 .friend-stage .speech-bubble{box-shadow:3px 3px 0 #3d4434}
 .friend-stage .missing-friend{color:#fff}
 /* Uniformly scale the original SDK scene; place the pet on its ground anchor. */
-.habitat-island{position:absolute;bottom:24px;left:50%;width:min(94%,620px);transform:translateX(-50%);pointer-events:none;z-index:1}
+.habitat-island{position:absolute;bottom:24px;left:50%;width:min(94%,var(--island-max-width));transform:translateX(-50%);pointer-events:none;z-index:1}
 .habitat-island>svg{display:block;width:100%;height:auto;overflow:visible}
-.friend-art.pet-motion{left:var(--pet-ground-x);top:var(--pet-ground-y);bottom:auto;width:clamp(128px,38%,235px);height:auto;max-width:var(--pet-max-width);aspect-ratio:1;transform:translate(-50%,-100%);animation:none}
+.friend-art.pet-motion{left:var(--pet-ground-x);top:var(--pet-ground-y);bottom:auto;width:var(--pet-size);height:auto;max-width:none;aspect-ratio:1;transform:translate(-50%,-100%);animation:none}
 .friend-art>.speech-bubble{top:auto;bottom:calc(100% + 18px)}
 .pet-idle,.pet-action-motion{width:100%;height:100%;transform-origin:50% 92%}
 .pet-idle{animation:pet-idle-breathe 1.733333s steps(10,end) infinite}
@@ -46,11 +46,11 @@
 .care-celebrate.particle-0{left:6%;top:28%;--spark-x:-15px;--spark-y:-28px}.care-celebrate.particle-1{left:83%;top:22%;--spark-x:15px;--spark-y:-35px;animation-delay:.1s;color:#b399de}.care-celebrate.particle-2{left:30%;top:3%;--spark-x:-10px;--spark-y:-20px;animation-delay:.2s}.care-celebrate.particle-3{left:89%;top:61%;--spark-x:20px;--spark-y:-10px;animation-delay:.15s;color:#79cbd3}.care-celebrate.particle-4{left:7%;top:69%;--spark-x:-17px;--spark-y:-8px;animation-delay:.05s;color:#cf94a1}.care-celebrate.particle-5{left:62%;top:0%;--spark-x:5px;--spark-y:-20px;animation-delay:.2s}
 .care-xp{left:45%;top:33%;font:600 16px var(--rush-font-mono);background:#ccff00;color:#111;border:1px solid #111;box-shadow:3px 3px 0 #111;padding:4px 8px;white-space:nowrap;animation:pet-xp-rise 2.2s steps(12,end) both}
 .island-picker{min-width:0;margin:0;padding:13px 24px 15px;border:0;border-top:1px solid #e2e6da;background:#fff}
-.island-picker legend{float:left;width:100%;padding:0;margin:0 0 9px;font:500 9px var(--rush-font-mono);letter-spacing:.8px;color:#686f5b}
-.island-picker>div{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;clear:both}
-.island-picker button{min-height:54px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #cbd0c2;background:#fff;padding:7px 8px;color:#4a5240;font:500 10px var(--rush-font-mono);transition:background .12s,border-color .12s}
-.island-picker button:hover{background:#f3f7e9;border-color:#879373}.island-picker button[aria-pressed="true"]{color:#111;background:#f5f8ed;border-color:#111;box-shadow:inset 0 -2px 0 #111}
-.island-thumbnail{display:block;width:44px;height:24px;flex-shrink:0}.island-thumbnail svg{display:block;width:100%;height:100%;overflow:visible}
+.island-picker legend{float:left;width:100%;display:flex;justify-content:space-between;gap:8px;padding:0;margin:0 0 9px;font:500 9px var(--rush-font-mono);letter-spacing:.8px;color:#686f5b}
+.island-options{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;clear:both}
+.island-choice{min-height:54px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #cbd0c2;background:#fff;padding:7px 8px;color:#4a5240;font:500 10px var(--rush-font-mono);transition:background .12s,border-color .12s}
+.island-choice:hover{background:#f3f7e9;border-color:#879373}.island-choice[aria-pressed="true"]{color:#111;background:#f5f8ed;border-color:#111;box-shadow:inset 0 -2px 0 #111}
+.island-family-switch{display:flex;gap:5px;clear:both;margin-bottom:8px}.island-family-switch button{flex:1;min-height:34px;padding:5px;border:1px solid #b8bfad;background:#fff;color:#4a5240;font:10px var(--rush-font-mono)}.island-family-switch button[aria-pressed="true"]{background:#10110e;color:#ccff00;border-color:#10110e}.island-picker legend>span{color:#10110e;letter-spacing:0}.island-thumbnail{display:block;width:44px;height:24px;flex-shrink:0}.island-thumbnail svg{display:block;width:100%;height:100%;overflow:visible}
 @keyframes pet-idle-breathe{0%,100%{transform:translate(0,0)}25%{transform:translate(1px,-4px)}50%{transform:translate(0,-7px)}75%{transform:translate(-1px,-3px)}}
 @keyframes pet-nuzzle{0%,100%{transform:none}18%,54%{transform:rotate(-5deg) translateY(-2px)}36%,72%{transform:rotate(4deg) translateY(-3px)}}
 @keyframes pet-happy-hop{0%,100%,45%,83%{transform:none}24%{transform:translateY(-18px) rotate(3deg)}65%{transform:translateY(-10px) rotate(-3deg)}}
@@ -74,5 +74,5 @@
 @keyframes pet-celebrate{0%{opacity:0;transform:translate(0,8px) scale(.5)}20%,58%{opacity:1}100%{opacity:0;transform:translate(var(--spark-x),var(--spark-y)) scale(1)}}
 @keyframes pet-xp-rise{0%{opacity:0;transform:translateY(10px)}20%,63%{opacity:1}100%{opacity:0;transform:translateY(-48px)}}
 
-@media(max-width:650px){.habitat-island{width:94%;bottom:38px}.island-picker{padding:11px 10px 12px}.island-picker legend{font-size:8px;margin-bottom:8px}.island-picker>div{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.island-picker button{flex-direction:column;gap:6px;min-height:44px;padding:7px 2px;font-size:8px}.island-thumbnail{width:38px;height:20px}.care-heart{width:16px;height:16px}.care-snack{width:34px;height:34px}.care-bowl{width:40px;height:22px}.care-puff{width:56px;height:44px}.care-poop{width:18px;height:18px}.care-celebrate{width:14px;height:14px}.care-xp{font-size:11px;padding:3px 5px}.pet-motion .pet-portrait{object-fit:contain}}
-@media(prefers-reduced-motion:reduce){.pet-idle,.pet-action-motion,.pet-effects>span,.pet-effects>i{animation:none!important;transform:none;translate:none;scale:none}.pet-effects{display:none}.island-picker button{transition:none}}
+@media(max-width:650px){.habitat-island{width:94%;bottom:38px}.island-picker{padding:11px 10px 12px}.island-picker legend{font-size:8px;margin-bottom:8px}.island-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.island-choice{flex-direction:column;gap:6px;min-height:44px;padding:7px 2px;font-size:8px}.island-family-switch{gap:3px}.island-family-switch button{font-size:8px;min-height:34px;padding:5px 2px}.island-thumbnail{width:38px;height:20px}.care-heart{width:16px;height:16px}.care-snack{width:34px;height:34px}.care-bowl{width:40px;height:22px}.care-puff{width:56px;height:44px}.care-poop{width:18px;height:18px}.care-celebrate{width:14px;height:14px}.care-xp{font-size:11px;padding:3px 5px}.pet-motion .pet-portrait{object-fit:contain}}
+@media(prefers-reduced-motion:reduce){.pet-idle,.pet-action-motion,.pet-effects>span,.pet-effects>i{animation:none!important;transform:none;translate:none;scale:none}.pet-effects{display:none}.island-choice{transition:none}}

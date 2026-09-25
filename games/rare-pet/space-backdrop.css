@@ -6,7 +6,7 @@
 .space-flight{position:absolute;left:calc((var(--space-render-size) + 16px)*-1);right:calc((var(--space-render-size) + 16px)*-1);height:0;--space-render-size:var(--space-size);animation:space-island-cross var(--space-duration) linear infinite;will-change:transform}
 .space-flight-left{animation-direction:reverse}
 .space-island{position:relative;width:var(--space-render-size);aspect-ratio:2/1}
-.space-island .space-passenger{position:absolute;left:var(--space-rider-x);top:var(--space-rider-y);width:var(--space-rider-size);height:auto;transform:translate(-50%,-94.444444%);image-rendering:pixelated}
+.space-island .space-passenger{position:absolute;left:var(--pet-ground-x);top:var(--pet-ground-y);width:var(--pet-size);height:auto;transform:translate(-50%,-100%);image-rendering:pixelated}
 .space-island svg{display:block;width:100%;height:auto;overflow:visible}
 .space-island-far{opacity:.3;--space-duration:38s}
 .space-island-middle{opacity:.46;--space-duration:26s}

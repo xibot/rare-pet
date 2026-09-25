@@ -4,7 +4,8 @@ import { createGamePreview, parseChanceGame } from '@rarefriends/friendsdk/game'
 import RareRush, { GenesisRush } from '../rare-rush/index';
 import rushDefinition from '../rare-rush/game.json';
 import { PetBrand, Icon, PetSprite, GenesisPetSprite, previewFriends, GENESIS_BODIES, DEFAULT_BODY_ID, pickGenesisBody, type PreviewFriend } from './art';
-import { IslandPicker, HabitatIsland, FriendMotion, restoreIsland, type Island } from './habitat';
+import { IslandPicker, BackgroundPicker, HabitatIsland, FriendMotion } from './habitat';
+import { restoreIsland, restoreBackground, type Background, type Island } from './islands';
 import { createPetWalletSession, listOwnedPets, verifyPet, PetDiscoveryError, type PetCollection, type PetIdentity } from './wallet';
 import { applyCare, blankCare, DAY, PET_GRACE, actionAvailability, duration, projectCare, readPreview, savePreview, type CareAction, type CareState } from './care';
 import { readCare, writeCare } from './chain';
@@ -60,6 +61,17 @@ function App() {
   const [pickerMode, setPickerMode] = useState<'preview' | 'wallet'>('preview');
   const [previewCollection, setPreviewCollection] = useState<PetCollection>(() => previewFriends[lastPreview].collection);
   const [island, setIsland] = useState<Island>(() => restoreIsland(savedChoice('rarepet:island:v1', 'garden')));
+  const [background, setBackground] = useState<Background>(() => restoreBackground(savedChoice('rarepet:background:v1', 'all')));
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageWidth, setStageWidth] = useState(0);
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    setStageWidth(stage.clientWidth);
+    const observer = new ResizeObserver(([entry]) => setStageWidth(entry.contentRect.width));
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
   const [bodyId, setBodyId] = useState(() => {
     const saved = savedChoice('rarepet:body:v1', DEFAULT_BODY_ID);
     return GENESIS_BODIES.some(body => body.id === saved) ? saved : DEFAULT_BODY_ID;
@@ -140,6 +152,7 @@ function App() {
     setNotice('A fresh preview. Try the daily routine again.');
   }
   function chooseIsland(next: Island) { setIsland(next); saveChoice('rarepet:island:v1', next); }
+  function chooseBackground(next: Background) { setBackground(next); saveChoice('rarepet:background:v1', next); }
   function changeBody() { const next = pickGenesisBody(bodyId); setBodyId(next); saveChoice('rarepet:body:v1', next); }
   async function chooseOwned(which: PetCollection, tokenId: string) {
     if (lock.current) return;
@@ -200,8 +213,8 @@ function App() {
           })}<div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
           <div className={`habitat ${reaction ? `reaction-${reaction}` : ''}`}>
             <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'WALLET CHANGED'}</span><h2>{label}</h2></div><span className="friend-status">{due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span></div>
-            <div className="friend-stage"><SpaceBackdrop/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island}><FriendMotion speech={reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
-            <div className="habitat-customize"><IslandPicker value={island} onChange={chooseIsland}/>{isGenesis && <button className="change-body" onClick={changeBody} title="Try one of 36 Rare Rush bodies">CHANGE BODY <span aria-hidden="true">↻</span><small>36 RARE RUSH BODIES</small></button>}</div>
+            <div className="friend-stage" ref={stageRef}><SpaceBackdrop key={`${background}:${background === 'match' ? island : ''}`} background={background} mainIsland={island} stageWidth={stageWidth}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
+            <div className="habitat-customize"><IslandPicker value={island} onChange={chooseIsland}/><BackgroundPicker value={background} onChange={chooseBackground}/>{isGenesis && <button className="change-body" onClick={changeBody} title="Try one of 36 Rare Rush bodies">CHANGE BODY <span aria-hidden="true">↻</span><small>36 RARE RUSH BODIES</small></button>}</div>
             <div className="bond-status"><span className="bond-heart">♡</span><div><b>{due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. Then you have 24 hours to keep the streak.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{due > 0 ? duration(due) : 'PET ME'}</span></div>
           </div>
         </div>

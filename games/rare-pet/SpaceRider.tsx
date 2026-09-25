@@ -20,7 +20,7 @@ export function SpaceRider({ passenger, direction }: {
   passenger: SpacePassenger; direction: 'left' | 'right';
 }) {
   const { friend, bodyId } = passenger;
-  return <svg className="space-passenger" viewBox="-1 -1 18 18" aria-hidden="true" focusable="false"
+  return <svg className="space-passenger" viewBox="0 0 16 16" aria-hidden="true" focusable="false"
     data-space-friend={`${friend.collection}:${friend.tokenId}`} shapeRendering="crispEdges">
     <g transform={direction === 'left' ? 'translate(16 0) scale(-1 1)' : undefined}>
       {friend.collection === 'genesis'

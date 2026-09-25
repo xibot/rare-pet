@@ -1,44 +1,37 @@
-import { type CSSProperties, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { CareAction } from './care';
-import { CanonicalSpaceIsland, SPACE_ISLAND_ART } from './CanonicalSpaceIsland';
-
-export const islandOptions = [
-  { id: 'garden', name: 'Garden', scene: SPACE_ISLAND_ART[0], description: 'The original Rare Friends garden.' },
-  { id: 'circuit', name: 'Circuit', scene: SPACE_ISLAND_ART[1], description: 'A home in the circuit courtyard.' },
-  { id: 'crystal', name: 'Crystal', scene: SPACE_ISLAND_ART[2], description: 'Life on the crystal mesa.' },
-  { id: 'rooftop', name: 'Rooftop', scene: SPACE_ISLAND_ART[3], description: 'Your own rooftop terrace.' },
-  { id: 'tidal', name: 'Tidal', scene: SPACE_ISLAND_ART[4], description: 'A little home among the tidal islands.' },
-  { id: 'orbital', name: 'Rare', scene: SPACE_ISLAND_ART[5], description: 'The Rare Friends orbital islands.' },
-] as const;
-export type Island = (typeof islandOptions)[number]['id'];
-export function isIsland(value: unknown): value is Island { return islandOptions.some(island => island.id === value); }
-
-/** Keep saved cosmetic choices when upgrading from the original custom floors. */
-export function restoreIsland(value: string): Island {
-  if (isIsland(value)) return value;
-  const previous: Record<string, Island> = { meadow: 'garden', moon: 'crystal', arcade: 'circuit', beach: 'tidal', rare: 'orbital' };
-  return Object.hasOwn(previous, value) ? previous[value] : 'garden';
-}
+import { getIsland, IslandArt, islandFamilies, islandOptions, islandStyle, type Background, type Island } from './islands';
 
 export function IslandPicker({ value, onChange }: { value: Island; onChange: (island: Island) => void }) {
-  return <fieldset className="island-picker"><legend>YOUR ISLAND</legend><div>{islandOptions.map(island =>
-    <button key={island.id} type="button" data-island={island.id} aria-pressed={value === island.id} title={island.description} onClick={() => onChange(island.id)}>
-      <span className="island-thumbnail" aria-hidden="true"><CanonicalSpaceIsland scene={island.scene}/></span>{island.name}
-    </button>,
-  )}</div></fieldset>;
+  const selected = getIsland(value);
+  const [family, setFamily] = useState(selected.family);
+  return <fieldset className="island-picker"><legend>YOUR ISLAND <span>{selected.name}</span></legend>
+    <div className="island-family-switch" aria-label="Island collections">{islandFamilies.map(group =>
+      <button type="button" key={group.id} aria-pressed={family === group.id} onClick={() => setFamily(group.id)}>{group.name}</button>,
+    )}</div>
+    <div className="island-options">{islandOptions.filter(island => island.family === family).map(island =>
+      <button className="island-choice" key={island.id} type="button" data-island={island.id} aria-pressed={value === island.id} onClick={() => onChange(island.id)}>
+        <span className="island-thumbnail" aria-hidden="true"><IslandArt option={island}/></span>{island.name}
+      </button>,
+    )}</div>
+  </fieldset>;
 }
 
-/** The pet and its original SDK world share one coordinate system. */
-export function HabitatIsland({ island, children }: { island: Island; children: ReactNode }) {
-  const scene = islandOptions.find(option => option.id === island)!.scene;
-  return <div className="habitat-island" data-island={island} style={{
-    aspectRatio: scene.aspectRatio,
-    '--pet-ground-x': scene.petX,
-    '--pet-ground-y': scene.petY,
-    '--pet-max-width': scene.petMaxWidth,
-  } as CSSProperties}>
-    <CanonicalSpaceIsland scene={scene}/>
-    {children}
+export function BackgroundPicker({ value, onChange }: { value: Background; onChange: (background: Background) => void }) {
+  return <label className="background-picker"><span>BACKGROUND ISLANDS</span>
+    <select value={value} onChange={event => onChange(event.target.value as Background)}>
+      <option value="all">Mix all islands</option><option value="match">Match my island</option>
+      <optgroup label="Mix a collection">{islandFamilies.map(family => <option key={family.id} value={family.id}>{family.name} mix</option>)}</optgroup>
+      {islandFamilies.map(family => <optgroup key={family.id} label={family.name}>{islandOptions.filter(island => island.family === family.id).map(island => <option key={island.id} value={island.id}>{family.name} / {island.name}</option>)}</optgroup>)}
+    </select>
+  </label>;
+}
+
+/** The pet and its island share coordinates and scale with the background. */
+export function HabitatIsland({ island, stageWidth, children }: { island: Island; stageWidth: number; children: ReactNode }) {
+  const option = getIsland(island);
+  return <div className="habitat-island" data-island={island} style={islandStyle(option, stageWidth)}>
+    <IslandArt option={option}/>{children}
   </div>;
 }
 
