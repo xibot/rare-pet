@@ -6,7 +6,7 @@ export const islandOptions = [
   { id: 'moon', name: 'Moon', color: '#b8a6e9', description: 'Somewhere a little further out.' },
   { id: 'arcade', name: 'Arcade', color: '#ccff00', description: 'A home for high scores.' },
   { id: 'beach', name: 'Beach', color: '#e9ca79', description: 'All days are beach days.' },
-  { id: 'rare', name: 'Rare B/W', color: '#fff', description: 'Black, white, and very Rare Friends.' },
+  { id: 'rare', name: 'Rare', color: '#fff', description: 'Black, white, and very Rare Friends.' },
 ] as const;
 export type Island = (typeof islandOptions)[number]['id'];
 export function isIsland(value: unknown): value is Island { return islandOptions.some(island => island.id === value); }
@@ -64,7 +64,7 @@ export function HabitatIsland({ island }: { island: Island }) {
         <path d="M0 20H320M0 38H320M0 56H320M0 74H320M16 0V90M52 0V90M88 0V90M124 0V90M160 0V90M196 0V90M232 0V90M268 0V90M304 0V90" stroke="#b0d929" strokeWidth="1"/>
         <path d="M16 38H52V56H16ZM52 20H88V38H52ZM88 56H124V74H88ZM232 20H268V38H232ZM268 38H304V56H268ZM196 56H232V74H196Z" fill="#c0ea36"/>
         <path d="M42 37H60V41H66V45H60V49H42V45H49V41H42ZM252 37H270V41H263V45H270V49H252V45H246V41H252Z" fill="#323c1b"/>
-        <path d="M94 68H226V72H94ZM118 21H202V24H118Z" fill="#f0ffc3"/>
+        <path d="M118 21H202V24H118Z" fill="#f0ffc3"/>
       </>}
       {island === 'beach' && <>
         <path d="M0 14H104V20H83V26H61V32H43V42H34V53H23V72H0Z" fill="#75d5e6"/>
@@ -78,7 +78,7 @@ export function HabitatIsland({ island }: { island: Island }) {
     </g>
     {island === 'meadow' && <g><path d="M48 35V25H52V35Z" fill="#fff6d9"/><path d="M42 23H58V27H42ZM46 19H54V23H46Z" fill="#dc8269"/><path d="M46 22H49V25H46Z" fill="#fff6d9"/></g>}
     {island === 'moon' && <g fill="#b8a6e9"><path d="M46 3H49V7H53V10H49V14H46V10H42V7H46ZM273 11H276V15H280V18H276V22H273V18H269V15H273Z"/></g>}
-    {island === 'arcade' && <g><path d="M53 74H81V77H53ZM239 74H267V77H239Z" fill="#ccff00"/><path d="M132 84H188V87H132Z" fill="#b6a7f1"/></g>}
+    {island === 'arcade' && <g><path d="M53 74H81V77H53ZM239 74H267V77H239Z" fill="#ccff00"/></g>}
     {island === 'rare' && <path d="M58 73H74V76H58ZM91 81H107V84H91ZM133 85H153V88H133ZM181 85H197V88H181ZM223 81H239V84H223ZM250 72H266V75H250Z" fill="#fff"/>}
   </svg></div>;
 }
@@ -98,7 +98,7 @@ function Snack({ variant }: { variant: number }) {
 function ActionEffects({ action, variant }: { action: CareAction | ''; variant: number }) {
   if (!action) return null;
   return <div className={`pet-effects effect-${action} variant-${variant}`} aria-hidden="true">
-    {action === 'pet' && <>{Array.from({ length: 5 }, (_, index) => <span className={`care-heart particle-${index}`} key={index}><Heart/></span>)}<span className="pet-pat"><svg viewBox="0 0 26 22"><path d="M12 1H16V8H19V5H22V13H25V17H21V21H8V18H4V14H1V10H5V12H8V5H12Z" fill="#f3dbb1" stroke="#4a3f32" strokeWidth="1"/><path d="M11 11V16M16 10V16M20 13V17" stroke="#bda077" strokeWidth="1"/></svg></span></>}
+    {action === 'pet' && <>{Array.from({ length: 5 }, (_, index) => <span className={`care-heart particle-${index}`} key={index}><Heart/></span>)}</>}
     {action === 'feed' && <><span className="care-snack"><Snack variant={variant}/></span><span className="care-bowl"><svg viewBox="0 0 30 16"><path d="M0 2H30V6H27V10H24V14H6V10H3V6H0Z" fill="#191f16"/><path d="M3 3H27V6H24V9H6V6H3Z" fill="#ccff00"/><path d="M9 14H21V16H9Z" fill="#191f16"/></svg></span>{Array.from({ length: 4 }, (_, index) => <i className={`care-crumb particle-${index}`} key={index}/>)}</>}
     {action === 'poop' && <><span className="care-puff"><svg viewBox="0 0 34 26"><path d="M9 2H21V5H27V10H32V20H27V24H7V20H2V11H6V6H9Z" fill="#e4e8d9"/><path d="M12 7H22V11H27V17H23V21H12V18H7V11H12Z" fill="#f5f7ee"/></svg></span><span className="care-poop"><svg viewBox="0 0 20 20"><path d="M10 1H13V5H15V8H17V12H19V17H1V12H3V9H6V6H9V4H10Z" fill="#8b7157"/><path d="M5 11H14V13H5ZM3 16H17V18H3Z" fill="#614c39"/><path d="M6 12H8V14H6ZM12 12H14V14H12Z" fill="#fff7e8"/></svg></span>{[0, 1, 2].map(index => <span className={`care-clean particle-${index}`} key={index}><Spark/></span>)}</>}
     {action === 'play' && <>{Array.from({ length: 6 }, (_, index) => <span className={`care-celebrate particle-${index}`} key={index}><Spark/></span>)}<span className="care-xp">+XP</span></>}

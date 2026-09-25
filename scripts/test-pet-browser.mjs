@@ -104,7 +104,7 @@ try {
     assert.equal(Object.keys(generationRecords).length, 1);
     assert.match(Object.keys(generationRecords)[0], /^rarepet:preview:v1:\d+$/, 'Existing Generations care keeps its storage namespace');
 
-    for (const floor of ['Meadow', 'Moon', 'Arcade', 'Beach', 'Rare B/W']) {
+    for (const floor of ['Meadow', 'Moon', 'Arcade', 'Beach', 'Rare']) {
       const button = page.getByRole('button', { name: floor, exact: true });
       await button.click();
       assert.equal(await button.getAttribute('aria-pressed'), 'true', `${floor} is selectable`);
@@ -113,7 +113,7 @@ try {
     }
     await page.reload();
     assert.equal(await trait(page, 'Strength'), '5', 'Preview care persists locally');
-    assert.equal(await page.getByRole('button', { name: 'Rare B/W', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
+    assert.equal(await page.getByRole('button', { name: 'Rare', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
 
     const firstGeneration = await choosePreview(page, 'Generations');
     assert.notEqual(firstGeneration, defaultLabel);
