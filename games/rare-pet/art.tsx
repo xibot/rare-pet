@@ -32,7 +32,16 @@ export function PetSprite({ sprites, frame, walking = false, direction = 'down' 
 }) {
   const rows = spriteFrame(sprites, direction, walking, frame % 8).frame.rows;
   const paths = rows.flatMap((row, y) => [...row].flatMap((pixel, x) => pixel === '#' ? [`M${x} ${y}h1v1h-1z`] : [])).join('');
-  return <svg className="pet-portrait" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-label="Your Rare Friend"><path d={paths}/></svg>;
+  // One white pixel around the original silhouette, like Rare Rush. Keep the
+  // source pixels black; outlining individual cells would change the artwork.
+  const halo = new Set<string>();
+  rows.forEach((row, y) => [...row].forEach((pixel, x) => {
+    if (pixel === '#') for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) halo.add(`${x + dx} ${y + dy}`);
+  }));
+  return <svg className="pet-portrait" viewBox="0 0 16 16" shapeRendering="crispEdges" role="img" aria-label="Your Rare Friend">
+    <path data-pet-outline="true" d={[...halo].map(point => `M${point}h1v1h-1z`).join('')} fill="#fff"/>
+    <path d={paths} fill="#000"/>
+  </svg>;
 }
 export function GenesisPetSprite(props: GenesisRunnerSpriteProps) {
   return <svg className="pet-portrait pet-portrait-genesis" viewBox="0 0 16 16" shapeRendering="crispEdges" role="img" aria-label="Your Genesis Rare Friend">

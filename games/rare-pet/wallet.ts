@@ -1,6 +1,6 @@
 import { createFriendWalletSession } from '@rarefriends/friendsdk/wallet';
 import {
-  decodeGenerationSprites, FAMILIES_REGISTRY_ABI, GENERATION_SPRITE_MANIFEST, spriteFrame,
+  decodeGenerationSprites, FAMILIES_REGISTRY_ABI, GENERATION_SPRITE_MANIFEST, spriteFrame, type GenerationSprites,
 } from '@rarefriends/friendsdk/sprites';
 import { createPublicClient, defineChain, http, isAddress, parseAbi, parseAbiItem, zeroAddress, type Address } from 'viem';
 import { GENESIS_DEPLOYMENT, readGenesisIdentity, readOwnedGenesis, type GenesisClient } from '../rare-rush/genesis/identity';
@@ -14,6 +14,8 @@ export type PetIdentity = Readonly<{
   tokenId: string;
   label: string;
   image: string;
+  /** Canonical decoded frames for a crisp outlined Generations showcase. */
+  sprites?: GenerationSprites;
   owner: Address;
   /** A generation-0 Friend has no verified hardwired wallet yet. */
   walletAddress: Address | null;
@@ -140,7 +142,7 @@ async function generationAt(client: PetReadClient, id: bigint, account: Address,
   }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#000" d="${path.join('')}"/></svg>`;
   return Object.freeze({ collection: 'generations', chainId: 4663, contract, tokenId: String(id),
-    label: `Generations #${id}`, image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+    label: `Generations #${id}`, sprites, image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
     owner, walletAddress, blockNumber: String(blockNumber), generation, rushEligible: generation >= 1 });
 }
 
