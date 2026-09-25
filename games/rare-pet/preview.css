@@ -38,8 +38,3 @@
   .change-body { width:100%; display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; font-size:9px; }
   .change-body small { width:100%; font-size:7px; }
 }
-
-.background-picker{display:flex;flex:0 1 190px;min-width:0;flex-direction:column;gap:8px;align-self:flex-end}
-.background-picker>span{font:500 9px var(--rush-font-mono);letter-spacing:.7px;color:#686f5b}
-.background-picker select{width:100%;max-width:100%;min-width:0;min-height:40px;border:1px solid #a9b19c;background:#fff;color:#10110e;padding:8px;font:10px var(--rush-font-mono)}
-@media(max-width:650px){.background-picker{flex-basis:100%}.background-picker>span{font-size:8px}.background-picker select{font-size:9px}}

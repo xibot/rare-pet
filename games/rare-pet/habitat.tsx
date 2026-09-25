@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { CareAction } from './care';
-import { getIsland, IslandArt, islandFamilies, islandOptions, islandStyle, type Background, type Island } from './islands';
+import { getIsland, IslandArt, islandFamilies, islandOptions, islandStyle, type Island } from './islands';
 
 export function IslandPicker({ value, onChange }: { value: Island; onChange: (island: Island) => void }) {
   const selected = getIsland(value);
@@ -15,16 +15,6 @@ export function IslandPicker({ value, onChange }: { value: Island; onChange: (is
       </button>,
     )}</div>
   </fieldset>;
-}
-
-export function BackgroundPicker({ value, onChange }: { value: Background; onChange: (background: Background) => void }) {
-  return <label className="background-picker"><span>BACKGROUND ISLANDS</span>
-    <select value={value} onChange={event => onChange(event.target.value as Background)}>
-      <option value="all">Mix all islands</option><option value="match">Match my island</option>
-      <optgroup label="Mix a collection">{islandFamilies.map(family => <option key={family.id} value={family.id}>{family.name} mix</option>)}</optgroup>
-      {islandFamilies.map(family => <optgroup key={family.id} label={family.name}>{islandOptions.filter(island => island.family === family.id).map(island => <option key={island.id} value={island.id}>{family.name} / {island.name}</option>)}</optgroup>)}
-    </select>
-  </label>;
 }
 
 /** The pet and its island share coordinates and scale with the background. */

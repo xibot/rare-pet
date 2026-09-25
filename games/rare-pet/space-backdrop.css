@@ -2,15 +2,14 @@
 .space-stars{position:absolute;inset:0}
 .space-star{position:absolute;width:1px;height:1px;background:#a4abb7;opacity:.34}
 .space-star-bright{width:2px;height:2px;opacity:.52}
-/* A stage-wide track moves via transform; both loop endpoints are offscreen. */
-.space-flight{position:absolute;left:calc((var(--space-render-size) + 16px)*-1);right:calc((var(--space-render-size) + 16px)*-1);height:0;--space-render-size:var(--space-size);animation:space-island-cross var(--space-duration) linear infinite;will-change:transform}
-.space-flight-left{animation-direction:reverse}
-.space-island{position:relative;width:var(--space-render-size);aspect-ratio:2/1}
+/* Each reserved corridor is disjoint from every other corridor and the main pet. */
+.space-flight{position:absolute;animation:space-island-cross 38s linear infinite alternate;will-change:transform}
+.space-island{position:relative;width:100%;aspect-ratio:2/1}
 .space-island .space-passenger{position:absolute;left:var(--pet-ground-x);top:var(--pet-ground-y);width:var(--pet-size);height:auto;transform:translate(-50%,-100%);image-rendering:pixelated}
 .space-island svg{display:block;width:100%;height:auto;overflow:visible}
-.space-island-far{opacity:.3;--space-duration:38s}
-.space-island-middle{opacity:.46;--space-duration:26s}
-.space-island-near{opacity:.64;--space-duration:18s}
-@keyframes space-island-cross{from{transform:translate3d(0,0,0)}to{transform:translate3d(100%,0,0)}}
-@media(max-width:650px){.space-flight{--space-render-size:calc(var(--space-size)*.7)}.space-star{opacity:.26}.space-star-bright{opacity:.4}}
-@media(prefers-reduced-motion:reduce){.space-flight{left:var(--space-rest-x);right:auto;animation:none;transform:none;will-change:auto}}
+.space-island-far{opacity:.3}
+.space-island-middle{opacity:.46}
+.space-island-near{opacity:.64}
+@keyframes space-island-cross{from{transform:translate3d(0,0,0)}to{transform:translate3d(var(--flight-travel),0,0)}}
+@media(max-width:650px){.space-star{opacity:.26}.space-star-bright{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.space-flight{animation:none;transform:translate3d(var(--flight-rest),0,0);will-change:auto}}
