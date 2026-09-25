@@ -12,7 +12,7 @@
 .habitat-island svg{display:block;width:100%;overflow:visible}
 .friend-art.pet-motion{bottom:76px;width:235px;height:235px;transform:translateX(-50%);animation:none}
 .pet-idle,.pet-action-motion{width:100%;height:100%;transform-origin:50% 92%}
-.pet-idle{animation:pet-idle-breathe 2.6s steps(10,end) infinite}
+.pet-idle{animation:pet-idle-breathe 1.733333s steps(10,end) infinite}
 .pet-motion .pet-portrait{display:block;filter:none;overflow:visible}
 .pet-motion[data-action="pet"][data-variant="0"] .pet-action-motion{animation:pet-nuzzle 2.2s ease-in-out both}
 .pet-motion[data-action="pet"][data-variant="1"] .pet-action-motion{animation:pet-happy-hop 2.2s ease-in-out both}
