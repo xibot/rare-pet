@@ -7,7 +7,7 @@
 .friend-stage .stage-mark{color:#79806d}
 .friend-stage .speech-bubble{box-shadow:3px 3px 0 #3d4434}
 .friend-stage .missing-friend{color:#fff}
-/* Center the full island, pet and speech composition while preserving its ground anchor. */
+/* Center the full composition horizontally and leave a tighter gap below its island. */
 .habitat-island{position:absolute;top:50%;left:50%;width:min(94%,var(--island-max-width));transform:translate(calc(-50% + var(--habitat-center-x,0px)),calc(-50% + var(--habitat-center-y,0px)));pointer-events:none;z-index:1}
 .habitat-island>svg{display:block;width:100%;height:auto;overflow:visible}
 .friend-art.pet-motion{left:var(--pet-ground-x);top:var(--pet-ground-y);bottom:auto;width:var(--pet-size);height:auto;max-width:none;aspect-ratio:1;transform:translate(-50%,-100%);animation:none}

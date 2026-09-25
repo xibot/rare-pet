@@ -23,7 +23,8 @@ export function HabitatIsland({ island, stageWidth, children }: { island: Island
   const groupRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const group = groupRef.current;
-    if (!group) return;
+    const stage = group?.parentElement;
+    if (!group || !stage) return;
     const friend = group.querySelector<HTMLElement>('.friend-art');
     const bubble = group.querySelector<HTMLElement>('.speech-bubble');
     const center = () => {
@@ -39,12 +40,15 @@ export function HabitatIsland({ island, stageWidth, children }: { island: Island
       // Use the stable sprite frame so idle bobs and action hops do not move the island.
       if (friend) include(friend, friend.getBoundingClientRect().width / 16);
       if (bubble) include(bubble, 0, 3);
+      const centerY = (floor.height - top - bottom) / 2;
+      const bottomGap = Math.max(0, (stage.getBoundingClientRect().height - floor.height) / 2 - centerY);
       group.style.setProperty('--habitat-center-x', `${(floor.width - left - right) / 2}px`);
-      group.style.setProperty('--habitat-center-y', `${(floor.height - top - bottom) / 2}px`);
+      // Keep two thirds of the centered space below the island.
+      group.style.setProperty('--habitat-center-y', `${centerY + bottomGap / 3}px`);
     };
     center();
     const observer = new ResizeObserver(center);
-    [group, friend, bubble].forEach(element => { if (element) observer.observe(element); });
+    [stage, group, friend, bubble].forEach(element => { if (element) observer.observe(element); });
     return () => observer.disconnect();
   }, [island, stageWidth]);
   return <div className="habitat-island" ref={groupRef} data-island={island} style={islandStyle(option, stageWidth)}>
