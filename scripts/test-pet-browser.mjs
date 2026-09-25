@@ -104,16 +104,16 @@ try {
     assert.equal(Object.keys(generationRecords).length, 1);
     assert.match(Object.keys(generationRecords)[0], /^rarepet:preview:v1:\d+$/, 'Existing Generations care keeps its storage namespace');
 
-    for (const floor of ['Meadow', 'Moon', 'Arcade', 'Beach']) {
+    for (const floor of ['Meadow', 'Moon', 'Arcade', 'Beach', 'Rare B/W']) {
       const button = page.getByRole('button', { name: floor, exact: true });
       await button.click();
       assert.equal(await button.getAttribute('aria-pressed'), 'true', `${floor} is selectable`);
       await fits(page, `${width}px ${floor} island`);
-      if (width === 1440) await page.screenshot({ path: `artifacts/rarepet-island-${floor.toLowerCase()}.png`, fullPage: true });
+      if (width === 1440) await page.screenshot({ path: `artifacts/rarepet-island-${floor.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`, fullPage: true });
     }
     await page.reload();
     assert.equal(await trait(page, 'Strength'), '5', 'Preview care persists locally');
-    assert.equal(await page.getByRole('button', { name: 'Beach', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
+    assert.equal(await page.getByRole('button', { name: 'Rare B/W', exact: true }).getAttribute('aria-pressed'), 'true', 'Island choice persists locally');
 
     const firstGeneration = await choosePreview(page, 'Generations');
     assert.notEqual(firstGeneration, defaultLabel);

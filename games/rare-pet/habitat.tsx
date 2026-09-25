@@ -6,13 +6,14 @@ export const islandOptions = [
   { id: 'moon', name: 'Moon', color: '#b8a6e9', description: 'Somewhere a little further out.' },
   { id: 'arcade', name: 'Arcade', color: '#ccff00', description: 'A home for high scores.' },
   { id: 'beach', name: 'Beach', color: '#e9ca79', description: 'All days are beach days.' },
+  { id: 'rare', name: 'Rare B/W', color: '#fff', description: 'Black, white, and very Rare Friends.' },
 ] as const;
 export type Island = (typeof islandOptions)[number]['id'];
 export function isIsland(value: unknown): value is Island { return islandOptions.some(island => island.id === value); }
 
 export function IslandPicker({ value, onChange }: { value: Island; onChange: (island: Island) => void }) {
   return <fieldset className="island-picker"><legend>YOUR ISLAND</legend><div>{islandOptions.map(island =>
-    <button key={island.id} type="button" aria-pressed={value === island.id} title={island.description} onClick={() => onChange(island.id)} style={{ '--island-swatch': island.color } as CSSProperties}>
+    <button key={island.id} type="button" data-island={island.id} aria-pressed={value === island.id} title={island.description} onClick={() => onChange(island.id)} style={{ '--island-swatch': island.color } as CSSProperties}>
       <span className="island-swatch" aria-hidden="true"/>{island.name}
     </button>,
   )}</div></fieldset>;
@@ -26,6 +27,7 @@ const palettes = {
   moon: { top: '#d2c6ef', rim: '#9c85c5', earth: '#7c6898', bottom: '#514260' },
   arcade: { top: '#d6ff43', rim: '#93b818', earth: '#383c34', bottom: '#191c18' },
   beach: { top: '#f7e0a2', rim: '#ddba66', earth: '#ba8d50', bottom: '#785e40' },
+  rare: { top: '#fff', rim: '#000', earth: '#fff', bottom: '#000' },
 } as const;
 
 /** Every island is decorative. Its named selection remains available in IslandPicker. */
@@ -34,11 +36,18 @@ export function HabitatIsland({ island }: { island: Island }) {
   const color = palettes[island];
   return <div className={`habitat-island island-${island}`} aria-hidden="true"><svg viewBox="0 0 320 104" shapeRendering="crispEdges">
     <defs><clipPath id={clipId}><path d={surface}/></clipPath></defs>
-    <path d="M80 96H240V100H80Z" fill="#18201a" opacity=".1"/>
+    <path d="M80 96H240V100H80Z" fill={island === 'rare' ? '#000' : '#18201a'} opacity=".1"/>
     <path d={underside} fill={color.bottom}/><path d="M40 54H280V68H264V78H240V86H216V90H104V86H80V78H56V68H40Z" fill={color.earth}/>
     <path d="M72 72H82V81H72ZM116 83H128V90H116ZM220 71H228V81H220ZM257 62H266V71H257Z" fill={color.bottom} opacity=".6"/>
     <path d={rim} fill={color.rim}/><path d={surface} fill={color.top}/>
+    {island === 'rare' && <path d={surface} fill="none" stroke="#000" strokeWidth="2"/>}
     <g clipPath={`url(#${clipId})`}>
+      {island === 'rare' && <>
+        <path d="M72 16H88V22H104V28H88V22H72ZM120 16H136V22H152V28H136V22H120ZM168 16H184V22H200V28H184V22H168ZM216 16H232V22H248V28H232V22H216Z" fill="#000"/>
+        <path d="M48 58H64V64H80V70H64V64H48ZM96 64H112V70H128V76H112V70H96ZM144 64H160V70H176V76H160V70H144ZM192 64H208V70H224V76H208V70H192ZM240 58H256V64H272V70H256V64H240Z" fill="#000"/>
+        <path d="M62 33H66V39H72V43H66V49H62V43H56V39H62ZM254 33H258V39H264V43H258V49H254V43H248V39H254Z" fill="#000"/>
+        <path d="M93 38H97V42H93ZM223 49H227V53H223ZM38 45H42V49H38ZM278 35H282V39H278Z" fill="#000"/>
+      </>}
       {island === 'meadow' && <>
         <path d="M16 37H50V42H70V47H31V55H17ZM236 16H247V27H274V35H249V31H232ZM71 60H87V65H116V74H71ZM224 55H244V62H268V69H224Z" fill="#9acd47"/>
         <path d="M50 29H58V32H50ZM82 22H88V25H82ZM250 43H258V46H250ZM218 64H224V67H218Z" fill="#e1f6a2"/>
@@ -70,6 +79,7 @@ export function HabitatIsland({ island }: { island: Island }) {
     {island === 'meadow' && <g><path d="M48 35V25H52V35Z" fill="#fff6d9"/><path d="M42 23H58V27H42ZM46 19H54V23H46Z" fill="#dc8269"/><path d="M46 22H49V25H46Z" fill="#fff6d9"/></g>}
     {island === 'moon' && <g fill="#b8a6e9"><path d="M46 3H49V7H53V10H49V14H46V10H42V7H46ZM273 11H276V15H280V18H276V22H273V18H269V15H273Z"/></g>}
     {island === 'arcade' && <g><path d="M53 74H81V77H53ZM239 74H267V77H239Z" fill="#ccff00"/><path d="M132 84H188V87H132Z" fill="#b6a7f1"/></g>}
+    {island === 'rare' && <path d="M58 73H74V76H58ZM91 81H107V84H91ZM133 85H153V88H133ZM181 85H197V88H181ZM223 81H239V84H223ZM250 72H266V75H250Z" fill="#fff"/>}
   </svg></div>;
 }
 
