@@ -7,8 +7,8 @@
 .friend-stage .stage-mark{color:#79806d}
 .friend-stage .speech-bubble{box-shadow:3px 3px 0 #3d4434}
 .friend-stage .missing-friend{color:#fff}
-/* Uniformly scale the original SDK scene; place the pet on its ground anchor. */
-.habitat-island{position:absolute;bottom:29px;left:50%;width:min(94%,var(--island-max-width));transform:translateX(-50%);pointer-events:none;z-index:1}
+/* Center the full island, pet and speech composition while preserving its ground anchor. */
+.habitat-island{position:absolute;top:50%;left:50%;width:min(94%,var(--island-max-width));transform:translate(calc(-50% + var(--habitat-center-x,0px)),calc(-50% + var(--habitat-center-y,0px)));pointer-events:none;z-index:1}
 .habitat-island>svg{display:block;width:100%;height:auto;overflow:visible}
 .friend-art.pet-motion{left:var(--pet-ground-x);top:var(--pet-ground-y);bottom:auto;width:var(--pet-size);height:auto;max-width:none;aspect-ratio:1;transform:translate(-50%,-100%);animation:none}
 .friend-art>.speech-bubble{top:auto;bottom:calc(100% + 18px)}
@@ -74,5 +74,5 @@
 @keyframes pet-celebrate{0%{opacity:0;transform:translate(0,8px) scale(.5)}20%,58%{opacity:1}100%{opacity:0;transform:translate(var(--spark-x),var(--spark-y)) scale(1)}}
 @keyframes pet-xp-rise{0%{opacity:0;transform:translateY(10px)}20%,63%{opacity:1}100%{opacity:0;transform:translateY(-48px)}}
 
-@media(max-width:650px){.habitat-island{width:94%;bottom:43px}.island-picker{padding:11px 10px 12px}.island-picker legend{font-size:8px;margin-bottom:8px}.island-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.island-choice{flex-direction:column;gap:6px;min-height:44px;padding:7px 2px;font-size:8px}.island-family-switch{gap:3px}.island-family-switch button{font-size:8px;min-height:34px;padding:5px 2px}.island-thumbnail{width:38px;height:20px}.care-heart{width:16px;height:16px}.care-snack{width:34px;height:34px}.care-bowl{width:40px;height:22px}.care-puff{width:56px;height:44px}.care-poop{width:18px;height:18px}.care-celebrate{width:14px;height:14px}.care-xp{font-size:11px;padding:3px 5px}.pet-motion .pet-portrait{object-fit:contain}}
+@media(max-width:650px){.habitat-island{width:94%}.island-picker{padding:11px 10px 12px}.island-picker legend{font-size:8px;margin-bottom:8px}.island-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.island-choice{flex-direction:column;gap:6px;min-height:44px;padding:7px 2px;font-size:8px}.island-family-switch{gap:3px}.island-family-switch button{font-size:8px;min-height:34px;padding:5px 2px}.island-thumbnail{width:38px;height:20px}.care-heart{width:16px;height:16px}.care-snack{width:34px;height:34px}.care-bowl{width:40px;height:22px}.care-puff{width:56px;height:44px}.care-poop{width:18px;height:18px}.care-celebrate{width:14px;height:14px}.care-xp{font-size:11px;padding:3px 5px}.pet-motion .pet-portrait{object-fit:contain}}
 @media(prefers-reduced-motion:reduce){.pet-idle,.pet-action-motion,.pet-effects>span,.pet-effects>i{animation:none!important;transform:none;translate:none;scale:none}.pet-effects{display:none}.island-choice{transition:none}}

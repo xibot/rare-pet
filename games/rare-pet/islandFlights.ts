@@ -30,7 +30,7 @@ export function islandFlights(option: IslandOption, measuredWidth: number, measu
   // Keep the existing stage proportions around the main pet and its speech bubble.
   const mainTop = Math.min(0, main.ground - main.pet - 56, main.ground - main.pet * 17 / 16 - 30);
   const mainSpan = main.height - mainTop;
-  const bottomInset = 38; // Preserve stage height while the foreground moves up five pixels.
+  const bottomInset = 38; // Keep the established stage height around the centered foreground.
   const skyWidth = (classic ? 52 : 84) * (compact ? .7 : 1);
   const sky = footprint(option, skyWidth, ratio);
   const skyTop = 84;

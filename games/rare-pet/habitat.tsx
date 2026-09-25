@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { CareAction } from './care';
 import { getIsland, IslandArt, islandFamilies, islandOptions, islandStyle, type Island } from './islands';
 
@@ -20,7 +20,34 @@ export function IslandPicker({ value, onChange }: { value: Island; onChange: (is
 /** The pet and its island share coordinates and scale with the background. */
 export function HabitatIsland({ island, stageWidth, children }: { island: Island; stageWidth: number; children: ReactNode }) {
   const option = getIsland(island);
-  return <div className="habitat-island" data-island={island} style={islandStyle(option, stageWidth)}>
+  const groupRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    const friend = group.querySelector<HTMLElement>('.friend-art');
+    const bubble = group.querySelector<HTMLElement>('.speech-bubble');
+    const center = () => {
+      const floor = group.getBoundingClientRect();
+      let left = 0, top = 0, right = floor.width, bottom = floor.height;
+      const include = (element: HTMLElement, halo = 0, shadow = 0) => {
+        const box = element.getBoundingClientRect();
+        left = Math.min(left, box.left - floor.left - halo);
+        top = Math.min(top, box.top - floor.top - halo);
+        right = Math.max(right, box.right - floor.left + halo + shadow);
+        bottom = Math.max(bottom, box.bottom - floor.top + halo + shadow);
+      };
+      // Use the stable sprite frame so idle bobs and action hops do not move the island.
+      if (friend) include(friend, friend.getBoundingClientRect().width / 16);
+      if (bubble) include(bubble, 0, 3);
+      group.style.setProperty('--habitat-center-x', `${(floor.width - left - right) / 2}px`);
+      group.style.setProperty('--habitat-center-y', `${(floor.height - top - bottom) / 2}px`);
+    };
+    center();
+    const observer = new ResizeObserver(center);
+    [group, friend, bubble].forEach(element => { if (element) observer.observe(element); });
+    return () => observer.disconnect();
+  }, [island, stageWidth]);
+  return <div className="habitat-island" ref={groupRef} data-island={island} style={islandStyle(option, stageWidth)}>
     <IslandArt option={option}/>{children}
   </div>;
 }
@@ -51,7 +78,7 @@ function ActionEffects({ action, variant }: { action: CareAction | ''; variant: 
 export function FriendMotion({ children, speech, action = '', sequence = 0, variant = sequence % 3 }: { children: ReactNode; speech?: ReactNode; action?: CareAction | ''; sequence?: number; variant?: number }) {
   const safeVariant = ((variant % 3) + 3) % 3;
   return <div className="friend-art pet-motion" data-action={action || 'idle'} data-variant={safeVariant}>
-    {speech && <div className="speech-bubble" key={action}>{speech}</div>}
+    {speech && <div className="speech-bubble">{speech}</div>}
     <div className="pet-idle"><div className="pet-action-motion" key={`${sequence}-${action}`}>{children}</div></div>
     <ActionEffects key={`${sequence}-${action}-effects`} action={action} variant={safeVariant}/>
   </div>;
