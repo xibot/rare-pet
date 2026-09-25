@@ -116,7 +116,7 @@ try {
     assert.equal(Object.keys(generationRecords).length, 1);
     assert.match(Object.keys(generationRecords)[0], /^rarepet:preview:v2:\d+$/, 'Generations care uses the new timing storage namespace');
 
-    for (const floor of ['Meadow', 'Moon', 'Arcade', 'Beach', 'Rare']) {
+    for (const floor of ['Garden', 'Circuit', 'Crystal', 'Rooftop', 'Tidal', 'Rare']) {
       const button = page.getByRole('button', { name: floor, exact: true });
       await button.click();
       assert.equal(await button.getAttribute('aria-pressed'), 'true', `${floor} is selectable`);

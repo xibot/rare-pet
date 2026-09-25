@@ -16,7 +16,7 @@
 .friend-picker button[aria-pressed=true] { border-color:#10110e; box-shadow:inset 0 0 0 2px #ccff00; }
 .friend-picker .pet-portrait { display:block; width:100%; height:100px; filter:none; margin-bottom:10px; }
 .habitat-customize { position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:12px 20px; padding:12px 24px; border-top:1px solid #dfe3d6; background:#fff; }
-.habitat-customize .island-picker { padding:0; border:0; }
+.habitat-customize .island-picker { flex:1 1 420px; padding:0; border:0; }
 .change-body { margin-left:auto; background:#fff; color:#10110e; border:1px solid #a9b19c; padding:9px 12px; min-height:44px; font:10px var(--rush-font-mono); text-align:left; }
 .change-body:hover { background:#eff9d0; border-color:#10110e; }
 .change-body span { margin-left:9px; }
