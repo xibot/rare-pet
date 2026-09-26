@@ -6,6 +6,9 @@ import { formatHoldingBalance, readNativeBalance, readNftHolding, readTokenHoldi
 import { readRareWalletInventory, type RareWalletInventoryCursor } from './rare-wallet-inventory';
 import { buildRareWalletTransfer, parseRareWalletAmount, RareWalletTransferError, sendRareWalletTransfer, type RareWalletTransferIntent } from './rare-wallet-transfer';
 import { getRareWalletTransfer, setRareWalletTransfer, subscribeRareWalletTransfers, refreshRareWalletTransfer } from './rare-wallet-transactions';
+import { getLaunchClaim, subscribeLaunchClaims } from './launch-claim-record';
+import { launchpadContract } from './config';
+import { LaunchHistory } from './LaunchHistory';
 import './rare-wallet.css';
 
 type Asset = NativeHolding | TokenHolding | NftHolding;
@@ -34,12 +37,17 @@ export function RareWalletDialog({ friend, pet, session, revision, bodyId, close
 }) {
   const dialog = useRef<HTMLDialogElement>(null), addressInput = useRef<HTMLInputElement>(null);
   const alive = useRef(true), sending = useRef(false), loadingMore = useRef(false);
+  const claimRequest = useRef(false);
+  const [claimRequestBusy, setClaimRequestBusy] = useState(false);
   const controller = useRef(new AbortController());
   const inventoryController = useRef<AbortController | null>(null), inventoryGeneration = useRef(0);
   const wallet = pet?.walletAddress ?? null;
   const transfer = useSyncExternalStore(subscribeRareWalletTransfers, () => getRareWalletTransfer(wallet));
   const hash = transfer?.hash ?? null, confirmed = transfer?.status === 'confirmed';
   const unresolved = !!transfer && ['awaiting-wallet', 'pending', 'unverified'].includes(transfer.status);
+  const claimRecord = useSyncExternalStore(subscribeLaunchClaims, () => getLaunchClaim(wallet));
+  const unresolvedClaim = !!claimRecord && ['awaiting-wallet', 'pending', 'unverified'].includes(claimRecord.status);
+  const transactionBlocked = unresolved || unresolvedClaim || claimRequestBusy;
   const [rechecking, setRechecking] = useState(false);
   const lastConfirmedHash = useRef(confirmed ? hash : null);
   const [native, setNative] = useState<NativeHolding | null>(null);
@@ -94,7 +102,7 @@ export function RareWalletDialog({ friend, pet, session, revision, bodyId, close
     catch { addressInput.current?.focus(); addressInput.current?.select(); setStatus('Address selected. Copy it from the address field.'); }
   }
   function startSend(kind: 'tokens' | 'nfts', choice?: Asset) {
-    if (sending.current || unresolved) return;
+    if (sending.current || transactionBlocked || claimRequest.current) return;
     const list = kind === 'tokens' ? allTokens : nfts;
     setSendKind(kind); setSelected(choice ? keyOf(choice) : list.find(canSend) ? keyOf(list.find(canSend)!) : '');
     setAmount(choice?.kind === 'erc1155' ? '1' : ''); setRecipient(''); setReview(null); setError(''); setStatus(''); if (wallet) setRareWalletTransfer(wallet, null); setView('send');
@@ -102,6 +110,7 @@ export function RareWalletDialog({ friend, pet, session, revision, bodyId, close
   function prepare(event: FormEvent) {
     event.preventDefault(); setError('');
     try {
+      if (transactionBlocked || claimRequest.current) throw new Error('Finish the pending wallet transaction before preparing another transfer.');
       if (!wallet || !pet || !asset || !canSend(asset)) throw new Error('Choose an asset with an available balance.');
       if (!isAddress(recipient.trim()) || recipient.trim().toLowerCase() === zeroAddress) throw new Error('Enter a valid recipient address.');
       const to = getAddress(recipient.trim());
@@ -123,7 +132,9 @@ export function RareWalletDialog({ friend, pet, session, revision, bodyId, close
     } catch (cause) { setError(message(cause)); }
   }
   async function send() {
-    if (!pet || !wallet || !review || sending.current || unresolved) return;
+    if (!pet || !wallet || !review || sending.current || transactionBlocked || claimRequest.current) return;
+    const currentClaim = getLaunchClaim(wallet);
+    if (currentClaim && ['awaiting-wallet', 'pending', 'unverified'].includes(currentClaim.status)) return;
     sending.current = true; setBusy(true); setError(''); setStatus('Checking ownership and transfer…');
     const record = { owner: pet.owner, intent: review.intent, friendLabel: friend.label.slice(0, 120) };
     setRareWalletTransfer(wallet, { ...record, hash: null, status: 'awaiting-wallet' });
@@ -180,19 +191,25 @@ export function RareWalletDialog({ friend, pet, session, revision, bodyId, close
     } catch (cause) { if (alive.current && !signal.aborted && generation === inventoryGeneration.current) setImportError(message(cause)); }
     finally { if (alive.current && !signal.aborted && generation === inventoryGeneration.current) setImporting(false); }
   }
-  const requestClose = () => { if (!sending.current) close(); };
+  function acquireClaimRequest() {
+    const currentTransfer = wallet ? getRareWalletTransfer(wallet) : null;
+    if (sending.current || claimRequest.current || currentTransfer && ['awaiting-wallet', 'pending', 'unverified'].includes(currentTransfer.status)) throw new Error('Finish the pending transfer before claiming fees.');
+    claimRequest.current = true; setClaimRequestBusy(true); let released = false;
+    return () => { if (!released) { released = true; claimRequest.current = false; if (alive.current) setClaimRequestBusy(false); } };
+  }
+  const requestClose = () => { if (!sending.current && !claimRequest.current) close(); };
   return <dialog ref={dialog} className="pet-dialog rare-wallet-dialog" aria-labelledby="rw-heading" onCancel={event => { event.preventDefault(); requestClose(); }} onClick={event => { if (event.target === dialog.current) requestClose(); }}>
-    <div className="dialog-heading"><h2 id="rw-heading"><Icon name="wallet"/> RARE WALLET</h2><button aria-label="Close Rare Wallet" disabled={busy} onClick={requestClose}>×</button></div>
+    <div className="dialog-heading"><h2 id="rw-heading"><Icon name="wallet"/> RARE WALLET</h2><button aria-label="Close Rare Wallet" disabled={busy || claimRequestBusy} onClick={requestClose}>×</button></div>
     <div className="rw-content">
       <div className="rw-profile"><div className="rw-portrait">{friend.collection === 'genesis' ? <GenesisPetSprite portraitUrl={friend.image} bodyId={bodyId}/> : friend.sprites ? <PetSprite sprites={friend.sprites} frame={0}/> : <img src={friend.image} alt={friend.label}/>}</div><div className="rw-identity"><span className="rw-eyebrow">{friend.collection.toUpperCase()} / ROBINHOOD CHAIN</span><h3>{friend.label}</h3>{wallet ? <><label className="rw-address-label" htmlFor="rw-address">YOUR FRIEND’S WALLET</label><div className="rw-address"><input ref={addressInput} id="rw-address" readOnly value={wallet} aria-label="Rare Friend wallet address" onClick={event => event.currentTarget.select()}/><button onClick={() => void copyAddress()} aria-label="Copy wallet address">COPY</button></div><a className="rw-explorer" href={`${PET_DEPLOYMENT.explorer}/address/${wallet}`} target="_blank" rel="noopener noreferrer">VIEW ON EXPLORER ↗</a></> : <p className="rw-subtitle">A wallet of their own.</p>}</div></div>
       {!pet ? <div className="rw-empty"><Icon name="wallet"/><h4>Your Friend. Their wallet.</h4><p>Connect your wallet and choose a Rare Friend you own to see its assets and make transfers.</p><button className="rw-primary" onClick={chooseFriend}>CHOOSE MY FRIEND ↗</button><small>Preview Friends do not give access to a real wallet.</small></div> : !wallet ? <div className="rw-empty"><h4>This Friend is not hardwired yet.</h4><p>Rare Wallet supports Genesis and hardwired Generations Friends. This Generations Friend does not have an active wallet to manage.</p><button className="rw-primary" onClick={chooseFriend}>CHOOSE ANOTHER FRIEND ↗</button></div> : <>
         {view === 'holdings' ? <>
-          <div className="rw-send-buttons"><button className="rw-primary" disabled={!allTokens.some(canSend) || unresolved} onClick={() => startSend('tokens')}>SEND TOKENS <span>↗</span></button><button disabled={!nfts.some(canSend) || unresolved} onClick={() => startSend('nfts')}>SEND NFT <span>↗</span></button></div>
+          <div className="rw-send-buttons"><button className="rw-primary" disabled={!allTokens.some(canSend) || transactionBlocked} onClick={() => startSend('tokens')}>SEND TOKENS <span>↗</span></button><button disabled={!nfts.some(canSend) || transactionBlocked} onClick={() => startSend('nfts')}>SEND NFT <span>↗</span></button></div>
           <div className="rw-list-toolbar"><div className="rw-tabs" role="group" aria-label="Wallet holdings"><button aria-pressed={tab === 'tokens'} onClick={() => setTab('tokens')}>TOKENS</button><button aria-pressed={tab === 'nfts'} onClick={() => setTab('nfts')}>NFTs <span>{nfts.length}{!complete ? '+' : ''}</span></button></div><button className="rw-refresh" disabled={loading || nativeLoading || importing} onClick={() => { setStatus(''); setRefresh(value => value + 1); }} aria-label="Refresh wallet holdings">REFRESH ↻</button></div>
           <div className="rw-assets" aria-busy={loading || tab === 'tokens' && nativeLoading}>
             {tab === 'tokens' && nativeLoading && <p className="rw-reading">Reading ETH balance…</p>}
             {tab === 'tokens' && nativeError && <p className="rw-warning" role="alert">ETH balance unavailable. {nativeError}</p>}
-            {(tab === 'tokens' ? allTokens : nfts).map(item => <div className="rw-asset" key={keyOf(item)}><AssetIcon asset={item}/><div className="rw-asset-info"><strong>{isToken(item) ? item.name : item.collectionName}</strong><small>{item.kind === 'native' ? 'NATIVE TOKEN' : <a href={`${PET_DEPLOYMENT.explorer}/token/${item.contract}`} target="_blank" rel="noopener noreferrer">{item.kind.toUpperCase().replace('ERC', 'ERC-')} · {short(item.contract)} ↗</a>}{'tokenId' in item && <span className="rw-token-id">ID #{item.tokenId}</span>}</small></div><div className="rw-asset-balance"><strong>{formatHoldingBalance(item.balance, isToken(item) ? item.decimals : 0)}</strong><small>{isToken(item) ? item.symbol : 'HELD'}</small></div><button className="rw-asset-send" aria-label={`Send ${assetName(item)}`} disabled={!canSend(item) || unresolved} onClick={() => startSend(isToken(item) ? 'tokens' : 'nfts', item)}>↗</button></div>)}
+            {(tab === 'tokens' ? allTokens : nfts).map(item => <div className="rw-asset" key={keyOf(item)}><AssetIcon asset={item}/><div className="rw-asset-info"><strong>{isToken(item) ? item.name : item.collectionName}</strong><small>{item.kind === 'native' ? 'NATIVE TOKEN' : <a href={`${PET_DEPLOYMENT.explorer}/token/${item.contract}`} target="_blank" rel="noopener noreferrer">{item.kind.toUpperCase().replace('ERC', 'ERC-')} · {short(item.contract)} ↗</a>}{'tokenId' in item && <span className="rw-token-id">ID #{item.tokenId}</span>}</small></div><div className="rw-asset-balance"><strong>{formatHoldingBalance(item.balance, isToken(item) ? item.decimals : 0)}</strong><small>{isToken(item) ? item.symbol : 'HELD'}</small></div><button className="rw-asset-send" aria-label={`Send ${assetName(item)}`} disabled={!canSend(item) || transactionBlocked} onClick={() => startSend(isToken(item) ? 'tokens' : 'nfts', item)}>↗</button></div>)}
             {loading && <p className="rw-reading" role="status">Finding your Friend’s assets onchain…</p>}
             {!loading && complete && (tab === 'tokens' ? tokens.length : nfts.length) === 0 && <p className="rw-empty-list">{tab === 'tokens' ? 'No other tokens found in standard transfer history.' : 'No NFTs found in standard transfer history.'}</p>}
           </div>
@@ -200,9 +217,11 @@ export function RareWalletDialog({ friend, pet, session, revision, bodyId, close
           {warnings.length > 0 && <div className="rw-warning" role="status">{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</div>}
           {cursor && <button className="rw-more" disabled={loading} onClick={() => void loadMore()}>{loading ? 'READING…' : 'LOAD MORE ASSETS ↓'}</button>}
           <details className="rw-import"><summary>Add a missing asset</summary><p>Enter its Robinhood Chain contract. RarePet checks what this Friend holds.</p><form onSubmit={event => void importAsset(event)}><label>ASSET TYPE<select value={importKind} onChange={event => setImportKind(event.target.value as typeof importKind)} disabled={importing}><option value="erc20">Token (ERC-20)</option><option value="erc721">NFT (ERC-721)</option><option value="erc1155">NFT (ERC-1155)</option></select></label><label>CONTRACT ADDRESS<input value={importContract} onChange={event => setImportContract(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required disabled={importing}/></label>{importKind !== 'erc20' && <label>TOKEN ID<input value={importId} onChange={event => setImportId(event.target.value)} placeholder="0" inputMode="numeric" pattern="[0-9]+" maxLength={78} required disabled={importing}/></label>}<button disabled={importing || loading}>{importing ? 'CHECKING…' : 'FIND ASSET'}</button></form>{importError && <p className="rw-warning" role="alert">{importError}</p>}</details>
-          <div className="rw-bottom"><small>Assets belong to this Friend’s wallet.</small><button onClick={chooseFriend}>CHANGE FRIEND ⇄</button></div>
+          <div className="rw-launched-tokens">{launchpadContract ? <LaunchHistory key={`${wallet}:${revision}`} mode="friend" creator={wallet} pet={pet} session={session} revision={revision} router={launchpadContract} refresh={null} title="TOKENS LAUNCHED" transactionsBlocked={unresolved || busy} acquireWalletRequest={acquireClaimRequest} onClaimConfirmed={() => setRefresh(value => value + 1)}/> : <section className="launch-my-tokens"><h4>TOKENS LAUNCHED</h4><p className="launch-fine">Your Friend’s confirmed tokens and trading fees will appear here when Rare Launchpad is enabled.</p></section>}</div>
+          <div className="rw-bottom"><small>Assets belong to this Friend’s wallet.</small><button disabled={claimRequestBusy} onClick={chooseFriend}>CHANGE FRIEND ⇄</button></div>
         </> : view === 'send' ? <form className="rw-send-form" onSubmit={prepare}><button type="button" className="rw-back" onClick={() => { setView('holdings'); setError(''); }}>← HOLDINGS</button><h4>{sendKind === 'tokens' ? 'Send tokens' : 'Send an NFT'}</h4><label>ASSET<select value={selected} onChange={event => { setSelected(event.target.value); setAmount(''); setError(''); }} required><option value="" disabled>Choose an asset</option>{options.map(item => <option key={keyOf(item)} value={keyOf(item)} disabled={!canSend(item)}>{assetName(item)} — {formatHoldingBalance(item.balance, isToken(item) ? item.decimals : 0)}</option>)}</select></label>{asset && <div className="rw-selected-asset"><span>AVAILABLE: {formatHoldingBalance(asset.balance, isToken(asset) ? asset.decimals : 0)} {isToken(asset) ? asset.symbol : 'held'}</span>{asset.kind !== 'native' && <code>{asset.contract}{'tokenId' in asset ? ` / #${asset.tokenId}` : ''}</code>}</div>}<label>RECIPIENT ADDRESS<input value={recipient} onChange={event => setRecipient(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} maxLength={42} required/></label>{asset?.kind !== 'erc721' && <label>{asset?.kind === 'erc1155' ? 'QUANTITY' : 'AMOUNT'}<div className="rw-amount"><input value={amount} onChange={event => setAmount(event.target.value)} placeholder="0" inputMode="decimal" maxLength={340} required/><button type="button" disabled={!asset || !canSend(asset)} onClick={() => { if (asset) setAmount(formatHoldingBalance(asset.balance, isToken(asset) ? asset.decimals : 0)); }}>MAX</button></div></label>}<p className="rw-fee-note">Sent from {friend.label}’s wallet on Robinhood Chain. Your connected owner wallet pays the network fee.</p><button className="rw-primary" disabled={!asset || !canSend(asset)}>REVIEW TRANSFER ↗</button></form> : review && <div className="rw-review"><button className="rw-back" disabled={busy || !!hash} onClick={() => { setView('send'); setError(''); }}>← EDIT TRANSFER</button><h4>{confirmed ? 'Transfer confirmed.' : 'Review your transfer.'}</h4><dl><div><dt>FROM / {friend.label}</dt><dd>{wallet}</dd></div><div><dt>TO / RECIPIENT</dt><dd data-recipient>{review.recipient}</dd></div><div><dt>{isToken(review.asset) ? 'AMOUNT' : 'NFT / QUANTITY'}</dt><dd data-transfer-amount>{review.amount} × {assetName(review.asset)}</dd></div>{review.asset.kind !== 'native' && <div><dt>ASSET CONTRACT</dt><dd>{review.asset.contract}</dd></div>}<div><dt>NETWORK</dt><dd>Robinhood Chain · 4663</dd></div><div><dt>NETWORK FEE PAID BY</dt><dd>{pet.owner}</dd></div></dl>{!hash && (!unresolved || busy) && <><p className="rw-fee-note">Your wallet will show the network fee and ask you to approve this transfer.</p><button className="rw-primary" disabled={busy} onClick={() => void send()}>{busy ? 'CONFIRMING…' : 'CONFIRM IN WALLET ↗'}</button></>}{(confirmed || transfer?.status === 'failed') && <button className="rw-primary" onClick={() => { setView('holdings'); setError(''); }}>BACK TO HOLDINGS ↗</button>}</div>}
       </>}
+      {(!pet || !wallet) && <section className="rw-launched-tokens rw-launched-preview"><h4>TOKENS LAUNCHED</h4><p>{!pet ? 'Preview only. Connect your wallet and choose a Rare Friend you own to see its launched tokens and claim trading fees. No real wallet is read in preview.' : 'A hardwired Rare Wallet is needed to launch tokens and collect trading fees.'}</p></section>}
       {error && <p className="rw-warning" role="alert">{error}</p>}
       {transfer && !busy && <div className={`rw-transfer-record ${unresolved ? 'rw-warning' : ''}`} role="status"><p>{transfer.status === 'confirmed' ? 'Last transfer confirmed.' : transfer.status === 'failed' ? 'Last transfer reverted.' : transfer.error || 'A transfer is still pending. Check it before sending again.'}</p>{unresolved && hash && <button disabled={rechecking} onClick={() => void recheck()}>{rechecking ? 'CHECKING…' : 'RECHECK TRANSACTION'}</button>}{unresolved && !hash && <><a href={`${PET_DEPLOYMENT.explorer}/address/${transfer.owner}`} target="_blank" rel="noopener noreferrer">CHECK OWNER WALLET ACTIVITY ↗</a>{transfer.status === 'unverified' && <><p>If you cancelled or rejected the request in your wallet, clear it here to start again.</p><button onClick={() => { if (wallet) { setRareWalletTransfer(wallet, null); setStatus('Cancelled request cleared.'); } }}>CLEAR CANCELLED REQUEST</button></>}</>}</div>}
       {hash && <p className="rw-transaction"><a href={`${PET_DEPLOYMENT.explorer}/tx/${hash}`} target="_blank" rel="noopener noreferrer">{confirmed ? 'VIEW CONFIRMED TRANSFER' : 'CHECK TRANSACTION STATUS'} ↗</a>{!busy && !confirmed && <small>Check this transaction before sending again.</small>}</p>}
