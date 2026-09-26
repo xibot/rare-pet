@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "status": "DEPLOYED — transaction, runtime and configuration independently verified",
+  "status": "DEPLOYED \u2014 transaction, runtime and configuration independently verified",
   "chainId": 4663,
   "address": "0x8c46baA63079B8648b1cd5689058E0AAB33DF063",
   "transactionHash": "0x0cd33c88b3f34a17299d19c47a2a96f4682420397543fbb856ddb349ba2dd57f",
@@ -896,8 +896,14 @@
     ]
   },
   "sourceVerification": {
-    "status": "pending",
-    "explorer": "https://robinhoodchain.blockscout.com/address/0x8c46baA63079B8648b1cd5689058E0AAB33DF063?tab=contract"
+    "status": "Explorer publication not confirmed \u2014 verification API returned HTTP 403 Cloudflare challenge",
+    "explorer": "https://robinhoodchain.blockscout.com/address/0x8c46baA63079B8648b1cd5689058E0AAB33DF063?tab=contract",
+    "attemptedEndpoint": "https://robinhoodchain.blockscout.com/api",
+    "publicSource": "https://github.com/xibot/rare-pet/blob/001d66d9cea98963dcb000a5d24f381016eee83f/contracts/rare-launchpad/src/RarePetLaunchRouter.sol",
+    "publicSourceHashMatches": true,
+    "localStandardJsonInput": "out/verification/4663.standard-input.json",
+    "localConstructorArguments": "out/verification/4663.constructor-args.txt",
+    "scope": "Independent RPC verification of exact runtime, source build and configuration passed. An explorer verification badge is not claimed."
   },
   "scope": "Read-only post-deployment verification. No launch or fee-claim transaction was sent. Verification is not an audit of local or upstream contracts."
 }
