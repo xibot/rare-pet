@@ -98,16 +98,36 @@ The local signing server was stopped after deployment to prevent stale pages fro
 The ABI adapters match Doppler commit [`bda077cf05c834f3bb5eb311f5b86376910d7912`](https://github.com/whetstoneresearch/doppler/tree/bda077cf05c834f3bb5eb311f5b86376910d7912), including Airlock, DopplerHookInitializer, DopplerERC20V1Factory, NoOp governance/migration and FeesManager. See the [Doppler deployment directory](https://docs.doppler.lol/reference/contract-addresses), [Robinhood contract list](https://docs.robinhood.com/chain/contracts/) and [Robinhood stock-token API documentation](https://docs.robinhood.com/chain/stock-token-apis/). Pinned module approval is rechecked at construction and every launch; no protection is claimed against defects or privileged upgrades in upstream contracts.
 
 
-## Prepared RAREFRIENDS replacement
+## Prepared Doppler V1 pair expansion
 
-The new shared catalog adds `RAREFRIENDS` at `0x0779369854d3EcdEA927206718FFD7730C67B71f`: WETH + RAREFRIENDS + 195 stock/ETF tokens (197). The deployed router documented above remains the original 196-token router until a replacement is signed, mined, independently verified and configured in the app. No Solidity change is required; the constructor allowlist is immutable and already supports up to 256 quotes.
+The new shared catalog contains **199 pairs**: WETH + RAREFRIENDS + USDG + cbBTC + all 195 stock/ETF tokens. It adds:
+
+| Pair | Robinhood token | Decimals | Identity source |
+| --- | --- | ---: | --- |
+| RAREFRIENDS | `0x0779369854d3EcdEA927206718FFD7730C67B71f` | 18 | [Rare Friends](https://rarefriends.com/docs/contracts) |
+| USDG | `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` | 6 | [Robinhood](https://docs.robinhood.com/chain/contracts/), [Paxos](https://docs.sandbox.paxos.com/guides/stablecoin/usdg/mainnet) |
+| cbBTC | `0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4` | 8 | [Chainlink CCIP cbBTC directory](https://docs.chain.link/ccip/directory/mainnet/token/cbBTC) |
+
+cbBTC is the CCIP-bridged representation from Base. Catalog generation verifies the registered token pool and its remote Base token/pool mapping; this is not a claim that Coinbase supports direct Robinhood deposits or withdrawals. USDG and cbBTC use their verified Chainlink USD prices, not a hardcoded peg. SDK curves, initial-FDV review and creator fee displays account for the actual token decimals.
+
+This is the standard Doppler V1 flow: its approved token factory, initializer and fee manager remain in use, with **85% creator / 10% treasury / 5% Doppler**. The custom HOLD & CLAIM experiment is preserved separately and excluded from this build.
+
+ The deployed router documented above remains the original 196-token router until a replacement is signed, mined, independently verified and configured in the app. No Solidity change is required; the constructor allowlist is immutable and already supports up to 256 quotes.
 
 Keep the original deployment review, rehearsal and manifest. Prepare and rehearse separate replacement files:
 
 ```sh
-node contracts/rare-launchpad/script/prepare-deployment.mjs contracts/rare-launchpad/deployment-config.json contracts/rare-launchpad/deployment-review-rarefriends.json contracts/rare-launchpad/deployments/4663.json
-node contracts/rare-launchpad/script/rehearse-state-override.mjs contracts/rare-launchpad/deployment-review-rarefriends.json contracts/rare-launchpad/state-override-review-rarefriends.json
-node tools/launch-deploy/serve.mjs contracts/rare-launchpad/deployment-review-rarefriends.json
+node contracts/rare-launchpad/script/prepare-deployment.mjs contracts/rare-launchpad/deployment-config.json contracts/rare-launchpad/deployment-review-pairs.json contracts/rare-launchpad/deployments/4663.json
+node contracts/rare-launchpad/script/rehearse-state-override.mjs contracts/rare-launchpad/deployment-review-pairs.json contracts/rare-launchpad/state-override-review-pairs.json
+node tools/launch-deploy/serve.mjs contracts/rare-launchpad/deployment-review-pairs.json
 ```
 
-The full-route rehearsal covers RAREFRIENDS in both creator modes, WETH in both modes, and the final stock quote. The local signing handoff rechecks the exact reviewed nonce, predicted address, catalog and previous router activity. After the user signs, pass the transaction hash plus those same review/proof paths to `verify-deployment.mjs`; its address-specific output preserves `deployments/4663.json`. Any previous RF launch activity blocks a silent state reset. The legacy contract remains callable; history and fee claims remain available, but the two contracts cannot impose one shared cooldown.
+The full-route rehearsal covers RAREFRIENDS and WETH in both creator modes, and the final stock quote. USDG and cbBTC additionally exercise the actual app four-curve / forty-position preset in both creator modes at all three trading fees, with live verified prices and decimal-normalized initial FDVs. These are read-only simulations; no assets are created or funds spent. The local signing handoff rechecks the exact reviewed nonce, predicted address, catalog and previous router activity. After the user signs, pass the transaction hash plus those same review/proof paths to `verify-deployment.mjs`; its address-specific output preserves `deployments/4663.json`. Any previous RF launch activity blocks a silent state reset. The legacy contract remains callable; history and fee claims remain available, but the two contracts cannot impose one shared cooldown.
+
+### Pair expansion verification
+
+The 199-pair catalog was regenerated at block 73438134. The exact constructor and full-route read-only rehearsal passed at block 73439652: USDG and cbBTC each passed six actual-app launches (both creator modes × all three fees). Verified Chainlink prices produced approximately $10,058.46 and $10,017.06 starting FDVs respectively, within the intended $10,000 preset’s tick rounding.
+
+Validation: 278 app/unit tests, 6 deployment-policy tests, 28 local Solidity tests, the launch and wallet-fee browser suites, TypeScript checks and the production build passed. The optional fork test was skipped; the recorded mainnet state-override rehearsal supplies separate read-only integration coverage. No transaction was signed or broadcast.
+
+The new unsigned review and matching proof are local artifacts (`deployment-review-pairs.json` and `state-override-review-pairs.json`), bound to deployer nonce 2 and prospective router `0xc6a4b2D4D369747B26e4Ff805a79A57da2505dC3`. A nonce change requires a fresh review. The previous RAREFRIENDS-only review is stale and must not be reused. The original deployed router and its manifest remain unchanged.

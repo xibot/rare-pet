@@ -4,7 +4,7 @@ import { Icon, GenesisPetSprite, PetSprite, type PreviewFriend } from './art';
 import { type PetIdentity, type PetWalletSession, PET_DEPLOYMENT } from './wallet';
 import { launchpadContract, launchStorageReady, launchTreasury } from './config';
 import { prepareLaunchImage, validateLaunchName, validateLaunchTicker, type LaunchImage } from './launch-image';
-import { getLaunchQuoteAsset, readLaunchQuotePrice, type LaunchQuoteId } from './launch-quotes';
+import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset, readLaunchQuotePrice, type LaunchQuoteId } from './launch-quotes';
 import { tokenMetadataURI, uploadLaunchImage, selfTokenMetadataURI, uploadSelfLaunchImage } from './launch-upload';
 import { createRareLaunchSalt, prepareRareLaunch, readRareLaunchConfig, sendRareLaunch, type RareLaunchConfig, type PreparedRareLaunch, type RareLaunchFee, readRareSelfLaunchConfig, prepareRareSelfLaunch, sendRareSelfLaunch, type PreparedRareSelfLaunch, RareLaunchTransactionError } from './launch-doppler';
 import { getRareLaunchTransaction, subscribeRareLaunchTransactions, setRareLaunchTransaction, refreshRareLaunchTransaction } from './launch-transactions';
@@ -15,6 +15,11 @@ import './launch.css';
 const message = (cause: unknown) => cause instanceof Error ? cause.message : 'The launch could not be prepared. Please try again.';
 const percent = (shares: bigint) => `${Number(shares) / 1e16}%`;
 const explorer = (address: string) => `${PET_DEPLOYMENT.explorer}/address/${address}`;
+// A pairing appears only after its chain identity and price source enter the reviewed catalog.
+const tokenPairs = ['weth', 'rarefriends', 'usdg', 'cbbtc'].flatMap(id => {
+  const asset = LAUNCH_QUOTE_ASSETS.find(item => item.id === id && item.kind !== 'stock');
+  return asset ? [asset] : [];
+});
 type DraftReview = { name: string; symbol: string; quoteId: LaunchQuoteId; fee: RareLaunchFee; image: LaunchImage };
 
 type LaunchProps = {
@@ -145,9 +150,8 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
       {!review ? <form className="launch-form" onSubmit={reviewDraft}>
         <div className="launch-specs"><label className="launch-image-label"><span>TOKEN IMAGE</span><span className={`launch-image-box ${image ? 'has-image' : ''}`}>{image ? <img src={image.previewUrl} alt="Token image preview"/> : <><b>+</b><span>ADD IMAGE</span></>}<input aria-label="Token image" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { void selectImage(event.target.files?.[0]); event.target.value = ''; }} disabled={imageBusy}/></span><small>{imageBusy ? 'PREPARING…' : image ? 'CHANGE IMAGE ↗' : 'PNG, JPG, WEBP · UP TO 5 MB'}</small></label><div className="launch-names"><label htmlFor="launch-name">TOKEN NAME<input id="launch-name" placeholder="Rare Ideas" value={name} onChange={event => setName(event.target.value)} maxLength={40} autoComplete="off" required/></label><label htmlFor="launch-symbol">TICKER<span className="launch-ticker"><span>$</span><input id="launch-symbol" placeholder="RARE" value={symbol} onChange={event => setSymbol(event.target.value.toUpperCase())} maxLength={10} autoComplete="off" spellCheck={false} required/></span></label></div></div>
         <fieldset><legend>PAIR WITH</legend><div className="launch-options launch-pairs">
-          <button type="button" aria-pressed={quote.kind === 'weth'} onClick={() => setQuoteId('weth')}><b>Ξ WETH</b><small>Wrapped Ether</small></button>
-          <button type="button" aria-pressed={quote.kind === 'rarefriends'} onClick={() => setQuoteId('rarefriends')}><b>$RAREFRIENDS</b><small>Rare Friends token</small></button>
-          <button type="button" aria-pressed={quote.kind === 'stock'} onClick={() => { if (quote.kind !== 'stock') setQuoteId('nvda'); }}><b>↗ STOCKS</b><small>Stock tokens</small></button>
+          {tokenPairs.map(asset => <button key={asset.id} type="button" data-quote-id={asset.id} aria-pressed={quote.id === asset.id} onClick={() => setQuoteId(asset.id)}><b>{asset.id === 'weth' ? 'Ξ WETH' : asset.id === 'rarefriends' ? '$RAREFRIENDS' : asset.symbol}</b><small>{asset.name}</small></button>)}
+          <button type="button" data-quote-id="stock" aria-pressed={quote.kind === 'stock'} onClick={() => { if (quote.kind !== 'stock') setQuoteId('nvda'); }}><b>↗ STOCKS</b><small>Stock tokens</small></button>
         </div>{quote.kind === 'stock' && <LaunchStockPicker value={quoteId} onChange={setQuoteId}/>}
         {quote.kind === 'rarefriends' && <p className="launch-fine launch-pair-note">Uses a 30-minute RareFriends pool price and Chainlink ETH/USD. Recent onchain pool activity is required. Launch preparation stops if the price cannot be verified.</p>}</fieldset>
         <fieldset><legend>TRADING FEE</legend><div className="launch-options launch-fees">{([3000,10000,20000] as const).map(value => <button type="button" key={value} aria-pressed={fee === value} onClick={() => setFee(value)}><b>{value / 10000}%</b></button>)}</div><p className="launch-fine">Collected on swaps, in both pool tokens.</p></fieldset>

@@ -1,13 +1,20 @@
 /** Exact deployed runtime under eth_call state overrides. Read-only: no signer or broadcast. */
-import { readFile, writeFile, rename } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdtemp, rm } from 'node:fs/promises';
 import { dirname, resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { build } from 'esbuild';
 import { createPublicClient, decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getAddress, getContractAddress, http, keccak256, encodeDeployData, parseAbi, toHex } from 'viem';
 
 import { readDeploymentCatalog, RAREFRIENDS_QUOTE, reviewedDeploymentAddress } from './deployment-policy.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const appRoot = resolve(root, '../..');
+const appSources = ['games/rare-pet/launch-doppler.ts', 'games/rare-pet/launch-quotes.ts', 'games/rare-pet/config.ts', 'package-lock.json'];
+async function appSourceHashes() {
+  return Object.fromEntries(await Promise.all(appSources.map(async path => [path, createHash('sha256').update(await readFile(resolve(appRoot, path))).digest('hex')])));
+}
+const sourceHashes = await appSourceHashes();
 const reviewPath = resolve(process.argv[2] || resolve(root, 'deployment-review.json'));
 const outputPath = resolve(process.argv[3] || resolve(root, 'state-override-review.json'));
 const reviewRaw = await readFile(reviewPath, 'utf8');
@@ -86,6 +93,68 @@ const rfSelfResult = await client.call({ account: review.config.deployer, to: ro
 if (!rfSelfResult.data) throw new Error('RAREFRIENDS paired self launch returned no result.');
 const [rfSelfAsset] = decodeAbiParameters([{ type: 'address' }], rfSelfResult.data);
 if (rfFriendAsset.toLowerCase() === rfSelfAsset.toLowerCase()) throw new Error('RAREFRIENDS paired salt namespaces collided.');
+
+// The legacy rows above exercise module compatibility with a synthetic one-curve
+// request. New decimal-sensitive pairs use the actual app builder and price reader.
+const bundleDirectory = await mkdtemp(resolve(root, 'out/rehearsal-app-'));
+let app;
+try {
+  const bundlePath = resolve(bundleDirectory, 'app.mjs');
+  await build({ stdin: { contents: `export { buildRareLaunchParams, buildRareSelfLaunchParams, readRareLaunchConfig, readRareSelfLaunchConfig, RARE_LAUNCH_FEES } from './games/rare-pet/launch-doppler.ts'; export { createLaunchQuoteReader } from './games/rare-pet/launch-quotes.ts';`, resolveDir: appRoot, loader: 'ts' }, outfile: bundlePath, bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent' });
+  app = await import(pathToFileURL(bundlePath).href);
+} finally { await rm(bundleDirectory, { recursive: true, force: true }); }
+const pinnedClient = {
+  ...client,
+  getBlockNumber: async () => blockNumber,
+  getBlock: () => client.getBlock({ blockNumber }),
+  getCode: args => args.address.toLowerCase() === router.toLowerCase() ? Promise.resolve(creation.data) : client.getCode({ ...args, blockNumber }),
+  readContract: args => client.readContract({ ...args, blockNumber, stateOverride }),
+};
+const pet = { chainId: 4663, collection: 'genesis', contract: genesis, tokenId: '2', owner, walletAddress: wallet };
+const friendConfig = await app.readRareLaunchConfig(router, pet, { client: pinnedClient });
+const selfConfig = await app.readRareSelfLaunchConfig(router, review.config.deployer, { client: pinnedClient });
+const feedDirectoryUrl = 'https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json';
+const feedResponse = await fetch(feedDirectoryUrl, { redirect: 'error', signal: AbortSignal.timeout(20000) });
+if (!feedResponse.ok) throw new Error('The official Chainlink directory could not be loaded.');
+const feedDirectory = await feedResponse.json();
+const atSnapshot = () => Number(block.timestamp) * 1000;
+const priceReader = app.createLaunchQuoteReader({ clientFactory: () => pinnedClient, now: atSnapshot,
+  fetcher: async () => new Response(JSON.stringify({ chainlink: feedDirectory }), { headers: { 'content-type': 'application/json' } }),
+});
+async function rehearseAppPair(id, expectedAddress, decimals, saltOffset) {
+  const price = await priceReader.readLaunchQuotePrice(id);
+  if (price.asset.address.toLowerCase() !== expectedAddress.toLowerCase() || price.asset.decimals !== decimals) throw new Error(`${id} does not match its reviewed token identity.`);
+  const simulations = [];
+  for (const [index, fee] of app.RARE_LAUNCH_FEES.entries()) {
+    const draft = { name: `RarePet ${price.asset.symbol} rehearsal`, symbol: `RF${id.toUpperCase()}`, tokenURI: request.tokenURI, quote: price, fee, salt: toHex(BigInt(saltOffset + index), { size: 32 }) };
+    const friendBuilt = app.buildRareLaunchParams({ pet, config: friendConfig, draft, now: atSnapshot() });
+    const selfBuilt = app.buildRareSelfLaunchParams({ account: review.config.deployer, config: selfConfig, draft, now: atSnapshot() });
+    const curves = friendBuilt.request.curves;
+    const initialTick = Math.min(...curves.map(curve => curve.tickLower));
+    const normalizedInitialMarketCapUSD = 1.0001 ** initialTick * 10 ** (18 - decimals) * 1e9 * Number(price.usdPrice);
+    const expectedShares = [50n, 25n, 24n, 1n].map(percent => percent * 10n ** 16n);
+    if (curves.length !== 4 || curves.some((curve, i) => curve.numPositions !== 10 || curve.shares !== expectedShares[i])
+      || normalizedInitialMarketCapUSD !== friendBuilt.review.approximateStartMarketCapUSD
+      || normalizedInitialMarketCapUSD !== selfBuilt.review.approximateStartMarketCapUSD
+      || Math.abs(normalizedInitialMarketCapUSD / 10000 - 1) > 1.0001 ** 200 - 1 + 1e-9) throw new Error(`${id} app preset or normalized starting valuation changed.`);
+    const inner = encodeFunctionData({ abi: artifact.abi, functionName: 'launch', args: [friendBuilt.request] });
+    const friendCall = await client.call({ account: owner, to: wallet, data: encodeFunctionData({ abi: accountABI, functionName: 'execute', args: [router, 0n, inner, 0] }), value: 0n, blockNumber, stateOverride });
+    if (!friendCall.data) throw new Error(`${id} RF app launch returned no result.`);
+    const [innerResult] = decodeAbiParameters([{ type: 'bytes' }], friendCall.data);
+    const [pairedFriendAsset] = decodeAbiParameters([{ type: 'address' }], innerResult);
+    const selfCall = await client.call({ account: review.config.deployer, to: router, data: encodeFunctionData({ abi: artifact.abi, functionName: 'launchAsSelf', args: [selfBuilt.request] }), value: 0n, blockNumber, stateOverride });
+    if (!selfCall.data) throw new Error(`${id} self app launch returned no result.`);
+    const [pairedSelfAsset] = decodeAbiParameters([{ type: 'address' }], selfCall.data);
+    if (pairedFriendAsset.toLowerCase() === pairedSelfAsset.toLowerCase()) throw new Error(`${id} app launch namespaces collided.`);
+    simulations.push({ fee, friendAsset: pairedFriendAsset, selfAsset: pairedSelfAsset, initialTick, normalizedInitialMarketCapUSD,
+      curves: curves.map(curve => ({ ...curve, shares: String(curve.shares) })), farTick: friendBuilt.request.farTick, curveCount: 4, positionCount: 40 });
+  }
+  return { symbol: price.asset.symbol, quote: price.asset.address, decimals, friendAsset: simulations[0].friendAsset, selfAsset: simulations[0].selfAsset,
+    feesTested: [...app.RARE_LAUNCH_FEES], quoteUsdPrice: price.usdPrice, priceSource: price.source, priceFeed: price.feedAddress,
+    feedUpdatedAt: price.updatedAt, quoteBlockNumber: String(price.blockNumber), targetStartMarketCapUSD: 10000, simulations };
+}
+const usdg = await rehearseAppPair('usdg', '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', 6, 100);
+const cbbtc = await rehearseAppPair('cbbtc', '0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4', 8, 200);
 const again = await client.getBlock({ blockNumber });
 if (again.hash !== block.hash || await client.getChainId() !== 4663) throw new Error('The rehearsal block changed.');
 const result = {
@@ -97,16 +166,19 @@ const result = {
   self: { creator: review.config.deployer, simulatedAsset: selfAsset, creatorEqualsTreasury: review.config.deployer.toLowerCase() === review.config.treasury.toLowerCase() },
   tailStock: { symbol: stockQuote.symbol, quote: stockQuote.address, simulatedAsset: stockAsset },
   rarefriends: { symbol: rfQuote.symbol, quote: rfQuote.address, friendAsset: rfFriendAsset, selfAsset: rfSelfAsset },
+  usdg, cbbtc,
+  appPreset: { sourceHashes, priceDirectory: feedDirectoryUrl, priceDirectorySha256: createHash('sha256').update(JSON.stringify(feedDirectory)).digest('hex'),
+    coverage: 'USDG and cbBTC use the actual app builder and quote reader, four curves and forty positions, all three fees, RF and self modes. WETH, RAREFRIENDS and tail stock rows use a synthetic one-curve compatibility request.' },
   limitations: 'This is an eth_call state-override rehearsal, not deployment or proof of persisted storage. Constructor execution was separately simulated; local tests cover cooldown and Brain persistence.',
 };
-if (await readFile(reviewPath, 'utf8') !== reviewRaw || readDeploymentCatalog().catalogHash !== review.catalogHash) throw new Error('Review or catalog changed during rehearsal. Prepare a fresh review.');
+if (await readFile(reviewPath, 'utf8') !== reviewRaw || readDeploymentCatalog().catalogHash !== review.catalogHash || JSON.stringify(await appSourceHashes()) !== JSON.stringify(sourceHashes)) throw new Error('Review, catalog or app source changed during rehearsal. Prepare a fresh review.');
 const proofRaw = `${JSON.stringify(result, null, 2)}\n`;
 await writeFile(outputPath, proofRaw, { flag: 'wx' });
 review.validation = {
   fullRouterSimulation: 'passed', method: 'eth_call stateOverride', deploymentDataHash: review.deploymentDataHash, catalogHash: review.catalogHash,
   blockNumber: result.blockNumber, blockHash: result.blockHash, artifactPath: relative(resolve(root, '../..'), outputPath),
   artifactSha256: createHash('sha256').update(proofRaw).digest('hex'),
-  limitation: 'Exact constructor plus real RF and self routes with WETH and RAREFRIENDS, and the final catalog stock, simulated against mainnet. No state persisted or transaction was sent.',
+  limitation: 'Exact constructor and actual app USDG/cbBTC presets in RF/self modes at all three fees, plus synthetic WETH/RAREFRIENDS/tail-stock compatibility requests, simulated against pinned mainnet. No state persisted or transaction was sent.',
 };
 const temporary = `${reviewPath}.tmp`;
 await writeFile(temporary, `${JSON.stringify(review, null, 2)}\n`, { flag: 'wx' });

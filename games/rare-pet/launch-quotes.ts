@@ -7,7 +7,7 @@ import { readRareFriendsPoolPrice, RARE_FRIENDS_POOL, type RareFriendsPoolPrice 
  * See scripts/generate-launch-quote-catalog.mjs and the source hashes in the shared catalog.
  */
 export type LaunchQuoteAsset = Readonly<{
-  id: string; chainId: 4663; address: Address; symbol: string; name: string; kind: 'weth' | 'stock' | 'rarefriends'; decimals: 18;
+  id: string; chainId: 4663; address: Address; symbol: string; name: string; kind: 'weth' | 'stock' | 'rarefriends' | 'usdg' | 'cbbtc'; decimals: 6 | 8 | 18;
   assetId: string | null; priceSource: 'chainlink' | 'robinhood' | 'rarefriends-pool'; feedAddress: Address | null;
   feedDescription: string | null; feedName: string | null; feedRegistry: Readonly<Record<string, string | null>> | null;
 }>;
@@ -42,7 +42,7 @@ const exactDecimal = (value: unknown) => {
 /** Resolves only reviewed IDs, never an arbitrary contract supplied by a form. */
 export function getLaunchQuoteAsset(id: string): LaunchQuoteAsset {
   const asset = LAUNCH_QUOTE_ASSETS.find(item => item.id === id);
-  if (!asset) throw new Error('Choose a supported WETH, RAREFRIENDS or stock pair.');
+  if (!asset) throw new Error('Choose a supported quote token from the verified pair catalog.');
   return asset;
 }
 function verifyDirectory(value: unknown, asset: LaunchQuoteAsset) {

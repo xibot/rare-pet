@@ -76,10 +76,13 @@
 .launch-dialog .launch-content .launch-primary{color:#000}
 .launch-dialog .launch-content .launch-primary:disabled{color:#8f9983}
 
-/* Keep the token symbol intact beside the two other pair families, including small phones. */
-.launch-pairs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr)}
+/* Reviewed crypto pairs and stocks remain readable without squeezing their symbols. */
+.launch-pairs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.launch-pairs>button{min-width:0;justify-content:center}
 .launch-pairs b{white-space:nowrap}
+.launch-pairs small{line-height:1.4;overflow-wrap:anywhere}
 @media(max-width:550px){
- .launch-pairs{gap:6px}.launch-pairs>button{padding:10px 4px;justify-content:center}
- .launch-pairs b{font-size:11px}.launch-pairs small{font-size:8px;line-height:1.4}
+ .launch-pairs{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.launch-pairs>button{padding:10px 6px}
+ .launch-pairs>button:last-child:nth-child(odd){grid-column:1/-1}
+ .launch-pairs b{font-size:12px}.launch-pairs small{font-size:9px}
 }

@@ -107,7 +107,8 @@ async function prepare(configPath, outputPath, previousManifestPath) {
       const [codeHash, decimals] = await Promise.all([
         codeAt(quote.address), client.readContract({ address: quote.address, abi: ABI, functionName: 'decimals', blockNumber }),
       ]);
-      if (decimals !== 18) throw new Error(`${quote.symbol} changed decimals; review the pool model.`);
+      const expectedDecimals = catalogSnapshot.catalog.assets.find(asset => asset.address.toLowerCase() === quote.address.toLowerCase())?.decimals;
+      if (decimals !== expectedDecimals) throw new Error(`${quote.symbol} changed decimals; review the pool model.`);
       return { ...quote, codeHash, decimals };
     }));
     quotes.push(...rows);

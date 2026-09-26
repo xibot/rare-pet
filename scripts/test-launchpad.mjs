@@ -12,9 +12,19 @@ const artifact = path.resolve('artifacts/launchpad');
 const catalog = JSON.parse(await readFile(new URL('../games/rare-pet/launch-quote-catalog.json', import.meta.url), 'utf8'));
 const stockIds = catalog.assets.filter(asset => asset.kind === 'stock').sort((a, b) => a.symbol.localeCompare(b.symbol)).map(asset => asset.id);
 const rarefriends = catalog.assets.find(asset => asset.id === 'rarefriends');
+const tokenPairs = ['weth', 'rarefriends', 'usdg', 'cbbtc'].flatMap(id => catalog.assets.filter(asset => asset.id === id && asset.kind !== 'stock'));
+const additionalPairs = tokenPairs.filter(asset => asset.id === 'usdg' || asset.id === 'cbbtc');
+const pairIds = [...tokenPairs.map(asset => asset.id), 'stock'];
 assert.equal(rarefriends?.address.toLowerCase(), '0x0779369854d3ecdea927206718ffd7730c67b71f', 'Rare Friends pairing uses its reviewed Robinhood token');
 assert.equal(rarefriends.kind, 'rarefriends');
 assert(!stockIds.includes('rarefriends'), 'Rare Friends is a token option, never a stock entry');
+for (const asset of additionalPairs) {
+  const expected = asset.id === 'usdg'
+    ? ['0x5fc5360d0400a0fd4f2af552add042d716f1d168', 6]
+    : ['0xcec185eb182c47d1ba1efc84e6959e18cd620be4', 8];
+  assert.deepEqual([asset.address.toLowerCase(), asset.decimals], expected, `${asset.symbol} uses its reviewed address and native decimals`);
+  assert(!stockIds.includes(asset.id), `${asset.symbol} is a separate token option, never a stock entry`);
+}
 await mkdir(artifact, { recursive: true });
 const previous = Object.fromEntries(['RAREPET_LAUNCHPAD_ADDRESS', 'BLOB_READ_WRITE_TOKEN'].map(key => [key, process.env[key]]));
 process.env.RAREPET_LAUNCHPAD_ADDRESS = '0x7777777777777777777777777777777777777777';
@@ -85,12 +95,26 @@ async function fillDraft(root, { name = 'Rare Preview', ticker = 'rare' } = {}) 
 }
 async function pairState(root, selected) {
   const buttons = root.locator('.launch-pairs>button');
-  assert.equal(await buttons.count(), 3, 'there are exactly three pair families');
+  assert.equal(await buttons.count(), pairIds.length, 'only reviewed tokens and the stock family appear');
+  assert.deepEqual(await buttons.evaluateAll(elements => elements.map(element => element.dataset.quoteId)), pairIds, 'pair selectors match the approved catalog');
   assert.deepEqual(await buttons.evaluateAll(elements => elements.map(element => element.getAttribute('aria-pressed'))),
-    ['weth', 'rarefriends', 'stock'].map(kind => String(kind === selected)), 'only the selected pair family is pressed');
+    pairIds.map(kind => String(kind === selected)), 'only the selected pair family is pressed');
   assert.equal(await root.locator('.launch-stock-picker').count(), Number(selected === 'stock'), 'stock search and selector only appear for actual stocks');
   assert.equal(await root.locator('.launch-pair-note').count(), Number(selected === 'rarefriends'), 'pool pricing requirements only appear for Rare Friends');
   if (selected === 'rarefriends') assert.match(await root.locator('.launch-pair-note').innerText(), /30-minute.*Recent onchain pool activity.*stops if the price cannot be verified/);
+}
+async function reviewAdditionalPairs(page, root, mode, label) {
+  for (const asset of additionalPairs) {
+    await root.locator(`[data-quote-id="${asset.id}"]`).click();
+    await pairState(root, asset.id); await fits(page, root, `${label} ${asset.symbol} form`);
+    assert.equal(await root.getByLabel('TOKEN NAME', { exact: true }).inputValue(), 'Rare Preview', 'changing the pair preserves the token draft');
+    await imagePrepared(root);
+    await review(root, mode, asset.symbol, '2'); await fits(page, root, `${label} ${asset.symbol} review`);
+    await root.evaluate(element => { element.scrollTop = 0; });
+    await root.screenshot({ path: path.join(artifact, `${label}-${asset.id}-review.png`) });
+    await root.getByRole('button', { name: /EDIT TOKEN/ }).click();
+    await pairState(root, asset.id);
+  }
 }
 async function review(root, mode, quote = 'AAPL', fee = '2') {
   await root.getByRole('button', { name: /^REVIEW PREVIEW/ }).click();
@@ -205,6 +229,7 @@ try {
     await page.screenshot({ path: path.join(artifact, `self-rarefriends-form-${width}.png`), fullPage: true });
     await review(root, 'self', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends self review`);
     await root.getByRole('button', { name: /EDIT TOKEN/ }).click(); await pairState(root, 'rarefriends');
+    await reviewAdditionalPairs(page, root, 'self', `self-${width}`);
     await root.getByRole('button', { name: /STOCKS/ }).click(); await pairState(root, 'stock');
     assert.equal(await root.locator('#launch-stock').inputValue(), 'nvda', 'selecting stocks from Rare Friends picks a real stock');
     await root.getByRole('button', { name: /WETH/ }).click(); await pairState(root, 'weth');
@@ -221,6 +246,7 @@ try {
     await review(root, 'friend'); await fits(page, root, `${width} friend page review`);
     await page.screenshot({ path: path.join(artifact, `friend-page-review-${width}.png`), fullPage: true });
     await root.getByRole('button', { name: /EDIT TOKEN/ }).click();
+    await reviewAdditionalPairs(page, root, 'friend', `friend-page-${width}`);
     await root.getByRole('button', { name: /^\$RAREFRIENDS/ }).click(); await pairState(root, 'rarefriends');
     await review(root, 'friend', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends creator page review`);
     if (width === 1440) {
@@ -247,6 +273,7 @@ try {
     await root.evaluate(element => { element.scrollTop = 0; });
     await root.screenshot({ path: path.join(artifact, `friend-modal-review-${width}.png`) });
     await root.getByRole('button', { name: /EDIT TOKEN/ }).click();
+    await reviewAdditionalPairs(page, root, 'friend', `friend-modal-${width}`);
     await root.getByRole('button', { name: /^\$RAREFRIENDS/ }).click(); await pairState(root, 'rarefriends');
     await fits(page, root, `${width} Rare Friends modal form`);
     await review(root, 'friend', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends modal review`);

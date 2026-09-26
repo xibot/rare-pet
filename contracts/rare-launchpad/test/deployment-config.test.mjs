@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getContractAddress, keccak256 } from 'viem';
 import { validateDeploymentConfig, QUOTES } from '../script/prepare-deployment.mjs';
-import { readDeploymentCatalog, validateQuoteCatalog, rehearsalMatches, reviewedDeploymentAddress, validatePreviousManifest, RAREFRIENDS_QUOTE } from '../script/deployment-policy.mjs';
+import { readDeploymentCatalog, validateQuoteCatalog, rehearsalMatches, reviewedDeploymentAddress, validatePreviousManifest, RAREFRIENDS_QUOTE, USDG_QUOTE, CBBTC_QUOTE } from '../script/deployment-policy.mjs';
 
 const config = { chainId: 4663, deployer: '0x0000000000000000000000000000000000000001', treasury: '0x0000000000000000000000000000000000000002', friendFeeBps: 8500, totalSupply: '1000000000000000000000000000' };
 test('requires an explicit fee policy, treasury and deployer before any RPC read', () => {
@@ -13,18 +13,20 @@ test('requires an explicit fee policy, treasury and deployer before any RPC read
 });
 test('deployment derives every issuer token including QNT from the same catalog as the app', () => {
   const { catalog } = readDeploymentCatalog();
-  assert.equal(QUOTES.length, 197);
-  assert.equal(QUOTES.length, catalog.coverage.activeStocks + 2);
+  assert.equal(QUOTES.length, 199);
+  assert.equal(QUOTES.length, catalog.coverage.activeStocks + 4);
   assert.equal(QUOTES[0].symbol, 'WETH');
   assert.equal(QUOTES[1].symbol, 'RAREFRIENDS');
   assert.equal(QUOTES[1].address, RAREFRIENDS_QUOTE);
+  assert.equal(QUOTES[2].address, USDG_QUOTE);
+  assert.equal(QUOTES[3].address, CBBTC_QUOTE);
   assert(QUOTES.some(quote => quote.symbol === 'QNT'));
   assert.deepEqual(QUOTES.map(q=>q.address.toLowerCase()), catalog.assets.map(q=>q.address.toLowerCase()));
   assert.equal(new Set(QUOTES.map(quote => quote.address)).size, QUOTES.length);
 });
 test('catalog rejects missing coverage, duplicate identities, noncanonical quote identities and wrong chains', () => {
   const { catalog } = readDeploymentCatalog();
-  for (const change of [c=>c.assets.pop(), c=>c.assets.push(c.assets[1]), c=>c.assets[0].address=c.assets[1].address, c=>c.assets[1].chainId=1, c=>c.assets[1].decimals=6, c=>c.coverage.activeStocks--,
+  for (const change of [c=>c.assets.pop(), c=>c.assets.push(c.assets[1]), c=>c.assets[0].address=c.assets[1].address, c=>c.assets[1].chainId=1, c=>c.assets[1].decimals=6, c=>c.coverage.activeStocks--, c=>c.assets[2].decimals=18, c=>c.assets[3].decimals=18, c=>c.assets[2].address=config.deployer, c=>c.assets[3].symbol='BTC',
     c=>c.assets[1].address=c.assets[2].address, c=>c.assets[1].symbol='FAKE', c=>c.assets[1].id='fake', c=>c.assets[1].kind='stock', c=>c.assets.splice(1,1), c=>[c.assets[1],c.assets[2]]=[c.assets[2],c.assets[1]]]) {
     const altered = structuredClone(catalog); change(altered); assert.throws(()=>validateQuoteCatalog(altered));
   }
@@ -33,9 +35,9 @@ test('a rehearsal must bind exact constructor data, catalog bytes, count and dep
   const prospectiveRouter = getContractAddress({from: config.deployer, nonce: 1n});
   const review = { config, quotes: QUOTES, creationBytecodeHash: keccak256('0x6000'), deploymentDataHash: keccak256('0x60001234'), catalogHash: readDeploymentCatalog().catalogHash, unsignedTransaction: { data: '0x60001234', nonce: '0x1' }, deploymentAddressRead: { prospectiveRouter, deployerNonce: 1 } };
   const proof = { status: 'READ-ONLY eth_call PASSED — no contracts deployed or transactions sent', creationBytecodeHash: review.creationBytecodeHash, deploymentDataHash: review.deploymentDataHash, catalogHash: review.catalogHash, quoteCount: QUOTES.length, deployer: config.deployer,
-    prospectiveRouter, deployerNonceAtRead: 1, rarefriends: { quote: RAREFRIENDS_QUOTE, friendAsset: config.deployer, selfAsset: config.treasury } };
+    prospectiveRouter, deployerNonceAtRead: 1, usdg: {quote:USDG_QUOTE, decimals:6, friendAsset:config.deployer, selfAsset:config.treasury}, cbbtc: {quote:CBBTC_QUOTE, decimals:8, friendAsset:config.deployer, selfAsset:config.treasury}, rarefriends: { quote: RAREFRIENDS_QUOTE, friendAsset: config.deployer, selfAsset: config.treasury } };
   assert(rehearsalMatches(proof, review));
-  for (const patch of [{ deploymentDataHash: keccak256('0x60005678') }, { deploymentDataHash: undefined }, { catalogHash: 'old-catalog' }, { quoteCount: 5 }, { deployer: config.treasury }, { deployerNonceAtRead: 0 }, { prospectiveRouter: config.deployer }, { rarefriends: undefined }, { rarefriends: {...proof.rarefriends, quote: config.treasury} }, { rarefriends: {...proof.rarefriends, friendAsset: '0x0000000000000000000000000000000000000000'} }]) assert(!rehearsalMatches({...proof, ...patch}, review));
+  for (const patch of [{ usdg:undefined }, { cbbtc:undefined }, { usdg:{...proof.usdg, decimals:18} }, { cbbtc:{...proof.cbbtc, quote:config.deployer} }, { deploymentDataHash: keccak256('0x60005678') }, { deploymentDataHash: undefined }, { catalogHash: 'old-catalog' }, { quoteCount: 5 }, { deployer: config.treasury }, { deployerNonceAtRead: 0 }, { prospectiveRouter: config.deployer }, { rarefriends: undefined }, { rarefriends: {...proof.rarefriends, quote: config.treasury} }, { rarefriends: {...proof.rarefriends, friendAsset: '0x0000000000000000000000000000000000000000'} }]) assert(!rehearsalMatches({...proof, ...patch}, review));
   assert(!rehearsalMatches(proof, {...review, unsignedTransaction: {data:'0x60005678'}}));
 });
 test('replacement verification binds the exact reviewed nonce and CREATE address', () => {

@@ -47,7 +47,15 @@ function LaunchHistoryContent({ mode, creator, pet, session, revision, router, r
   async function inspect(item: RareLaunchHistoryItem) {
     if (locked.current || unresolved || transactionsBlocked) return;
     locked.current = true; setBusy(true); setError(''); setFees(null); setSelected(item);
-    try { assertActive(); const value = await readRareLaunchFees({ asset: item.asset, wallet: creator }); assertActive(); setFees(value); }
+    try {
+      assertActive(); const value = await readRareLaunchFees({ asset: item.asset, wallet: creator }); assertActive();
+      const quote = LAUNCH_QUOTE_ASSETS.find(asset => asset.address.toLowerCase() === item.quote.toLowerCase());
+      const currencies = [value.token0.toLowerCase(), value.token1.toLowerCase()];
+      if (!quote || !currencies.includes(item.asset.toLowerCase()) || !currencies.includes(quote.address.toLowerCase()) || currencies[0] === currencies[1]) {
+        throw new Error('The fee currencies do not match this launch’s verified pair. Refresh before claiming.');
+      }
+      setFees(value);
+    }
     catch (cause) { if (alive.current) setError(message(cause)); }
     finally { locked.current = false; if (alive.current) setBusy(false); }
   }
@@ -85,12 +93,16 @@ function LaunchHistoryContent({ mode, creator, pet, session, revision, router, r
     catch (cause) { if (getLaunchClaim(creator) === previous) setLaunchClaim(creator, { ...previous, status: cause instanceof RareLaunchTransactionError && cause.code === 'reverted' ? 'failed' : 'unverified', error: message(cause).slice(0,1000) }); }
     finally { locked.current = false; if (alive.current) setBusy(false); }
   }
-  function tokenLabel(token: Address) { return LAUNCH_QUOTE_ASSETS.find(item => item.address.toLowerCase() === token.toLowerCase())?.symbol ?? 'Launched token'; }
+  function feeAmount(amount: bigint, token: Address) {
+    if (selected?.asset.toLowerCase() === token.toLowerCase()) return `${formatUnits(amount, 18)} Launched token`;
+    const quote = LAUNCH_QUOTE_ASSETS.find(item => item.address.toLowerCase() === token.toLowerCase());
+    return quote ? `${formatUnits(amount, quote.decimals)} ${quote.symbol}` : 'Amount unavailable — unverified currency';
+  }
   return <section className="launch-my-tokens"><div className="launch-history-heading"><h4>{title ?? (mode === 'self' ? 'Your launches' : 'Your Friend’s launches')}</h4><button disabled={loading || busy} onClick={() => setReload(value => value + 1)}>REFRESH ↻</button></div>
     {loading ? <p className="launch-fine" role="status">Reading confirmed launches…</p> : !error && !items.length && <p className="launch-fine">{mode === 'friend' ? 'This Rare Friend has not launched a token yet. Its confirmed tokens and trading fees will appear here.' : 'A new idea starts here. Your confirmed tokens and fee claims will appear below.'}</p>}
     {items.map(item => <div className="launch-history-item" key={item.asset} data-launched-token={item.asset}><strong>Launched token</strong><p className="launch-token-ca"><span>CA</span> <code>{item.asset}</code></p><div className="launch-token-links"><button aria-label={`Copy contract address ${item.asset}`} onClick={() => void copyAddress(item.asset)}>COPY CA</button><a href={`${PET_DEPLOYMENT.explorer}/token/${item.asset}`} target="_blank" rel="noopener noreferrer">VIEW TOKEN ↗</a></div><div><span>{new Date(Number(item.timestamp) * 1000).toLocaleDateString()} · {item.fee / 10000}% trading fee</span><button disabled={busy || unresolved || transactionsBlocked} onClick={() => void inspect(item)}>CHECK FEES</button></div></div>)}
     {transactionsBlocked && <p className="launch-fine">Finish the pending wallet transaction before claiming trading fees.</p>}
-    {selected && fees && <div className="launch-claim-review"><h4>Review fee claim</h4><p className="launch-fine">Token CA: <code>{selected.asset}</code></p><p className="launch-fine">To {mode === 'friend' ? 'Rare Wallet' : 'creator wallet'}: <code>{creator}</code></p>{([0,1] as const).map(index => <p key={index} className="launch-fine">{formatUnits(index === 0 ? fees.amount0 : fees.amount1,18)} {tokenLabel(index === 0 ? fees.token0 : fees.token1)}</p>)}<p className="launch-fine">Your connected {mode === 'friend' ? 'owner ' : ''}wallet pays the ETH network fee. The amount is refreshed before signing.</p><button disabled={busy || unresolved || transactionsBlocked || fees.amount0 + fees.amount1 === 0n} onClick={() => void claim()}>CLAIM TO {mode === 'self' ? 'MY WALLET' : 'RARE WALLET'} ↗</button></div>}
+    {selected && fees && <div className="launch-claim-review"><h4>Review fee claim</h4><p className="launch-fine">Token CA: <code>{selected.asset}</code></p><p className="launch-fine">To {mode === 'friend' ? 'Rare Wallet' : 'creator wallet'}: <code>{creator}</code></p>{([0,1] as const).map(index => <p key={index} className="launch-fine" data-fee-currency={index === 0 ? fees.token0 : fees.token1}>{feeAmount(index === 0 ? fees.amount0 : fees.amount1, index === 0 ? fees.token0 : fees.token1)}</p>)}<p className="launch-fine">Your connected {mode === 'friend' ? 'owner ' : ''}wallet pays the ETH network fee. The amount is refreshed before signing.</p><button disabled={busy || unresolved || transactionsBlocked || fees.amount0 + fees.amount1 === 0n} onClick={() => void claim()}>CLAIM TO {mode === 'self' ? 'MY WALLET' : 'RARE WALLET'} ↗</button></div>}
     {error && <p className="launch-error" role="alert">{error}</p>}
     {record && <div className="launch-note" role="status"><p>{record.status === 'confirmed' ? 'Last fee claim confirmed.' : record.status === 'failed' ? 'Last fee claim reverted.' : record.error || 'A fee claim is awaiting confirmation.'}</p>{record.hash && <a href={`${PET_DEPLOYMENT.explorer}/tx/${record.hash}`} target="_blank" rel="noopener noreferrer">VIEW FEE CLAIM ↗</a>}{unresolved && record.hash && <button disabled={busy} onClick={() => void recheck()}>RECHECK CLAIM</button>}{unresolved && !record.hash && record.status === 'unverified' && <><a href={`${PET_DEPLOYMENT.explorer}/address/${record.owner}`} target="_blank" rel="noopener noreferrer">CHECK WALLET ACTIVITY ↗</a><p>If no claim was sent and you cancelled the request in your wallet, clear it here.</p><button disabled={busy} onClick={() => setLaunchClaim(creator,null)}>CLEAR CANCELLED REQUEST</button></>}</div>}
     <p className="launch-status" role="status">{status}</p>

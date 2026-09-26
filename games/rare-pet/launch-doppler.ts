@@ -112,7 +112,7 @@ function validateLaunchDraft(draft: RareLaunchDraft, now = Date.now(), currentCa
   if (!RARE_LAUNCH_FEES.includes(draft.fee)) throw new Error('Choose one of the supported trading fees.');
   if (!/^0x[0-9a-fA-F]{64}$/.test(draft.salt)) throw new Error('The launch salt must be exactly 32 bytes.');
   const quote = draft.quote;
-  if (!['chainlink', 'robinhood', 'rarefriends-pool'].includes(quote.source) || quote.asset.chainId !== 4663 || quote.asset.decimals !== 18
+  if (!['chainlink', 'robinhood', 'rarefriends-pool'].includes(quote.source) || quote.asset.chainId !== 4663 || ![6, 8, 18].includes(quote.asset.decimals)
     || ![quote.expiresAt, quote.readAt, quote.updatedAt, quote.heartbeatSeconds].every(Number.isSafeInteger)
     || quote.heartbeatSeconds <= 0 || quote.heartbeatSeconds > 86400 || quote.readAt <= 0 || quote.updatedAt <= 0
     || quote.expiresAt * 1000 <= now || quote.readAt * 1000 > now + 30000 || quote.updatedAt > quote.readAt + 30
@@ -143,7 +143,8 @@ function validateLaunchDraft(draft: RareLaunchDraft, now = Date.now(), currentCa
     const trusted = getLaunchQuoteAsset(quote.asset.id);
     const sameFeed = trusted.feedAddress === null ? quote.feedAddress === null : quote.feedAddress !== null && equal(trusted.feedAddress, quote.feedAddress);
     if (!equal(trusted.address, quote.asset.address) || !sameFeed || trusted.priceSource !== quote.source || trusted.priceSource !== quote.asset.priceSource
-      || trusted.assetId !== quote.asset.assetId || trusted.symbol !== quote.asset.symbol || trusted.name !== quote.asset.name || trusted.kind !== quote.asset.kind) throw new Error('The quoted pair does not match the supported catalog.');
+      || trusted.assetId !== quote.asset.assetId || trusted.symbol !== quote.asset.symbol || trusted.name !== quote.asset.name || trusted.kind !== quote.asset.kind
+      || trusted.decimals !== quote.asset.decimals) throw new Error('The quoted pair does not match the supported catalog.');
   }
   if (!/^(0|[1-9][0-9]*)(\.[0-9]{1,18})?$/.test(quote.usdPrice) || parseUnits(quote.usdPrice, 18) !== quote.usdPriceE18) throw new Error('The quoted oracle price is invalid.');
   const price = Number(quote.usdPrice);
@@ -184,7 +185,7 @@ function buildParticipantParams(input: { pet: Pick<PetIdentity, 'walletAddress' 
   const params = new MulticurveBuilder(4663)
     .tokenConfig({ type: 'dopplerERC20V1', name: draft.name, symbol: draft.symbol, tokenURI: draft.tokenURI })
     .saleConfig({ initialSupply: RARE_LAUNCH_SUPPLY, numTokensToSell: RARE_LAUNCH_SUPPLY, numeraire: draft.quote.asset.address })
-    .withCurves({ numerairePrice: Number(draft.quote.usdPrice), tokenDecimals: 18, numeraireDecimals: 18,
+    .withCurves({ numerairePrice: Number(draft.quote.usdPrice), tokenDecimals: 18, numeraireDecimals: draft.quote.asset.decimals,
       fee: draft.fee, tickSpacing: TICK_SPACING, beneficiaries,
       curves: [
         { marketCap: { start: 10_000, end: 100_000 }, numPositions: 10, shares: WAD / 2n },
@@ -200,8 +201,11 @@ function buildParticipantParams(input: { pet: Pick<PetIdentity, 'walletAddress' 
   const farTick = Math.max(...params.pool.curves.map(c => c.tickUpper)) - TICK_SPACING;
   const request: RareLaunchRequest = { name: draft.name, symbol: draft.symbol, tokenURI: draft.tokenURI, quote: draft.quote.asset.address, fee: draft.fee, curves: params.pool.curves, farTick, salt: draft.salt };
   const initialTick = Math.min(...params.pool.curves.map(c => c.tickLower));
+  // Curves use raw quote units per raw launched-token unit. Convert back to whole
+  // tokens before presenting USD value; USDG and cbBTC do not have 18 decimals.
+  const quotePerToken = 1.0001 ** initialTick * 10 ** (18 - draft.quote.asset.decimals);
   const review: RareLaunchReview = { name: draft.name, symbol: draft.symbol, tokenURI: draft.tokenURI, wallet: pet.walletAddress, router: config.router, supply: RARE_LAUNCH_SUPPLY,
-    startMarketCapUSD: RARE_LAUNCH_START_USD, approximateStartMarketCapUSD: 1.0001 ** initialTick * 1e9 * Number(draft.quote.usdPrice), quote: draft.quote, fee: draft.fee,
+    startMarketCapUSD: RARE_LAUNCH_START_USD, approximateStartMarketCapUSD: quotePerToken * 1e9 * Number(draft.quote.usdPrice), quote: draft.quote, fee: draft.fee,
     treasury: config.treasury, protocol: config.protocol, friendShares: config.friendShares, treasuryShares: config.treasuryShares, protocolShares: config.protocolShares };
   return immutable({ params, request, review });
 }
@@ -302,8 +306,10 @@ function verifyPreparedDoppler(prepared: PreparedMulticurveCreate<4663>, params:
   const ownData = encodeFunctionData({ abi: airlockAbi, functionName: 'create', args: [prepared.createParams] });
   if (!equal(ownData, data) || !equal(prepared.prediction.tokenAddress, prepared.prediction.poolOrHookAddress) || !equal(prepared.prediction.governanceAddress, RARE_LAUNCH_DOPPLER.dead) || !equal(prepared.prediction.timelockAddress, RARE_LAUNCH_DOPPLER.dead) || !prepared.prediction.migrationPoolAddress || !equal(prepared.prediction.migrationPoolAddress, RARE_LAUNCH_DOPPLER.migrationDead) || !equal(prepared.prediction.poolKey.hooks, RARE_LAUNCH_DOPPLER.initializer) || prepared.prediction.poolKey.fee !== params.pool.fee || prepared.prediction.poolKey.tickSpacing !== TICK_SPACING || !equal(computePoolId(prepared.prediction.poolKey), prepared.prediction.poolId)) throw new Error('Doppler predicted an unexpected market.');
   address(prepared.prediction.tokenAddress, 'predicted token');
-  const currencies = [prepared.prediction.poolKey.currency0, prepared.prediction.poolKey.currency1].map(a => a.toLowerCase()).sort();
-  if (currencies.join() !== [prepared.prediction.tokenAddress, params.sale.numeraire].map(a => a.toLowerCase()).sort().join()) throw new Error('Doppler predicted the wrong trading pair.');
+  const currencies = [prepared.prediction.poolKey.currency0, prepared.prediction.poolKey.currency1].map(a => a.toLowerCase());
+  const tokenIsCurrency0 = BigInt(prepared.prediction.tokenAddress) < BigInt(params.sale.numeraire);
+  if (currencies.join() !== [prepared.prediction.tokenAddress, params.sale.numeraire].map(a => a.toLowerCase()).sort().join()
+    || prepared.prediction.tokenIsCurrency0 !== tokenIsCurrency0) throw new Error('Doppler predicted the wrong trading pair or currency order.');
 }
 export async function prepareRareLaunch(options: SessionOptions & { router: Address; draft: RareLaunchDraft }, injected?: RareLaunchDependencies): Promise<PreparedRareLaunch> {
   const deps = injected ?? await defaultDependencies();

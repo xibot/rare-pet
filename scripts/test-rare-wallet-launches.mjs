@@ -19,6 +19,12 @@ const otherWallet = '0x3333333333333333333333333333333333333333';
 const token = '0x4444444444444444444444444444444444444444';
 const otherToken = '0x5555555555555555555555555555555555555555';
 const hash = `0x${'ab'.repeat(32)}`;
+const catalog = JSON.parse(await readFile(new URL('../games/rare-pet/launch-quote-catalog.json', import.meta.url), 'utf8'));
+const non18Pairs = ['usdg', 'cbbtc'].map(id => {
+  const asset = catalog.assets.find(item => item.id === id);
+  assert(asset, `The reviewed ${id} pairing exists for fee display tests`);
+  return { ...asset, amount: '1234567', expected: id === 'usdg' ? '1.234567 USDG' : '0.01234567 cbBTC' };
+});
 const modules = {
   wallet: `export const PET_DEPLOYMENT={chainId:4663,explorer:'https://robinhoodchain.blockscout.com'}; export const RARE_PET_CHAIN={id:4663}; export function createPetPublicClient(){throw new Error('Real RPC forbidden');} export function verifyPet(){throw new Error('Real identity RPC forbidden');}`,
   'rare-wallet-holdings': `import {formatUnits} from 'viem'; export function formatHoldingBalance(amount,decimals){return amount===null?'Unavailable':formatUnits(amount,decimals??0)} export async function readNativeBalance(wallet){window.test.reads.push({kind:'balance',wallet});return {kind:'native',symbol:'ETH',name:'Ether',balance:10n**18n,decimals:18,blockNumber:20n,source:'rpc'}} export function readTokenHolding(){throw new Error('No import fixture')} export function readNftHolding(){throw new Error('No import fixture')}`,
@@ -28,14 +34,17 @@ const modules = {
     export async function readRareLaunchHistory({pet}) {
       const wallet=pet.walletAddress; window.test.reads.push({kind:'history',wallet});
       if(window.test.holdHistory) await new Promise(resolve=>window.test.releaseHistory=resolve);
-      return {items:[{asset:wallet==='${wallet}'?'${token}':'${otherToken}',hash:'${hash}',timestamp:1800000000n,quote:'0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73',fee:10000}],blockNumber:20n,incomplete:false};
+      return {items:[{asset:wallet==='${wallet}'?'${token}':'${otherToken}',hash:'${hash}',timestamp:1800000000n,quote:window.test.quote,fee:10000}],blockNumber:20n,incomplete:false};
     }
     export function readRareSelfLaunchHistory(){throw new Error('Owner launch history leaked into RF wallet')}
     export function readAllRareLaunchHistory(input){return input.pet ? readRareLaunchHistory(input) : readRareSelfLaunchHistory(input)}
     export async function readRareLaunchFees({asset,wallet}) {
       window.test.reads.push({kind:'fees',wallet,asset});
       if(window.test.holdFees) await new Promise(resolve=>window.test.releaseFees=resolve);
-      return {asset,wallet,amount0:2n*10n**18n,amount1:3n*10n**18n,token0:asset,token1:'0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73'};
+      const quote=window.test.badCurrency||window.test.quote, amount=BigInt(window.test.quoteAmount);
+      return window.test.quoteFirst
+        ? {asset,wallet,amount0:amount,amount1:2n*10n**18n,token0:quote,token1:asset}
+        : {asset,wallet,amount0:2n*10n**18n,amount1:amount,token0:asset,token1:quote};
     }
     export async function claimRareLaunchFees(options) {
       options.assertActive(); window.test.claims.push({wallet:options.pet.walletAddress,owner:options.pet.owner,asset:options.asset});
@@ -60,8 +69,9 @@ const entry = `
   const session={getSnapshot:()=>({status:'connected',account:'${owner}',chainId:4663,revision}),getProvider:()=>provider};
   const friend=i=>({collection:'genesis',chainId:4663,contract:'0x116EaA62241751E0c98dA43d458600c6C17cD361',tokenId:String(i),label:'Genesis #'+i,image,owner:'${owner}',walletAddress:i===1?'${wallet}':'${otherWallet}',generation:null,blockNumber:'20',rushEligible:true});
   window.test={reads:[],claims:[],rechecks:[],holdHistory:false,holdFees:false,holdProvider:false,holdReceipt:false,
+    quote:'0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73',quoteAmount:'3000000000000000000',quoteFirst:false,badCurrency:null,
     open(mode='friend1'){const pet=mode==='preview'?null:friend(mode==='friend1'?1:2);root.render(<RareWalletDialog key={++instance} friend={pet??friend(1)} pet={pet} session={session} revision={revision} bodyId="classic" close={()=>root.render(null)} chooseFriend={()=>root.render(null)}/>);},
-    openWhite(){root.render(<div className="launch-content" style={{background:'#fff'}}><LaunchHistory mode="friend" creator="${wallet}" pet={friend(1)} session={session} revision={revision} router="${router}" refresh={null}/></div>)},
+    openWhite(){root.render(<div key={++instance} className="launch-content" style={{background:'#fff'}}><LaunchHistory mode="friend" creator="${wallet}" pet={friend(1)} session={session} revision={revision} router="${router}" refresh={null}/></div>)},
     invalidate(){revision++;root.render(null)},
     blockTransfer(){setRareWalletTransfer('${wallet}',{owner:'${owner}',intent:{kind:'native',to:'${otherWallet}',amount:1n},hash:'${hash}',status:'pending'})},
     clearTransfer(){setRareWalletTransfer('${wallet}',null)},
@@ -121,6 +131,20 @@ try {
   assert.equal(await white.evaluate(el=>el.scrollWidth>el.clientWidth+1),false,'Shared white Launchpad history and claim fit320px');
   assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false,'White Launchpad has no page overflow');
   await white.screenshot({path:path.join(artifacts,'white-launch-history-320.png')});
+  for (const asset of non18Pairs) for (const quoteFirst of [false,true]) for (const surface of ['wallet','launch']) {
+    await page.evaluate(({asset,quoteFirst,surface})=>{window.test.quote=asset.address;window.test.quoteAmount=asset.amount;window.test.quoteFirst=quoteFirst;surface==='wallet'?window.test.open():window.test.openWhite()}, {asset,quoteFirst,surface});
+    const root=surface==='wallet'?dialog():page.locator('.launch-content');
+    await root.getByRole('button',{name:'CHECK FEES',exact:true}).click();
+    await root.getByRole('heading',{name:'Review fee claim',exact:true}).waitFor();
+    assert.equal(await root.locator(`[data-fee-currency="${asset.address}"]`).innerText(),asset.expected,`${surface} uses ${asset.decimals} quote decimals in either currency order`);
+    assert.equal(await root.locator(`[data-fee-currency="${token}"]`).innerText(),'2 Launched token','Launched token stays at 18 decimals');
+    assert.equal(await root.evaluate(el=>el.scrollWidth>el.clientWidth+1),false,`${asset.symbol} fee review fits 320px`);
+  }
+  await page.evaluate(()=>{window.test.badCurrency='0x9999999999999999999999999999999999999999';window.test.open()});
+  await dialog().getByRole('button',{name:'CHECK FEES',exact:true}).click();
+  await dialog().getByRole('alert').filter({hasText:'fee currencies do not match'}).waitFor();
+  assert.equal(await dialog().getByRole('heading',{name:'Review fee claim',exact:true}).count(),0,'An unknown or mismatched quote cannot be shown as 18 decimals');
+  assert.equal(await dialog().getByRole('button',{name:'CLAIM TO RARE WALLET ↗',exact:true}).count(),0,'An unverified currency cannot proceed to a claim');
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);await context.close();
-  console.log('Rare Wallet launched tokens: full CA/copy/explorer, RF-only claims, transfer/request locks, pending close+reload recovery, holdings refresh, preview zero reads and stale identity isolation passed. No real RPC or signatures.');
+  console.log('Rare Wallet launched tokens: full CA/copy/explorer, RF-only claims, transfer/request locks, pending close+reload recovery, holdings refresh, preview zero reads, stale identity isolation, 6/8-decimal fees in both currency orders and unknown currency rejection passed. No real RPC or signatures.');
 } finally {await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());await rm(outdir,{recursive:true,force:true})}

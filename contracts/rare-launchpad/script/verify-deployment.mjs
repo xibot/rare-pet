@@ -47,9 +47,22 @@ await Promise.all(Object.entries(expected).map(async ([key, value]) => {
 }));
 const quotes = await read('quoteTokens');
 if (quotes.length !== snapshot.quotes.length || quotes.some((quote, i)=>!equal(quote, snapshot.quotes[i].address))) throw new Error('Deployed quote list differs in length, order or identity.');
-for (let i = 0; i < quotes.length; i += 24) {
-  const allowed = await Promise.all(quotes.slice(i, i + 24).map(quote=>read('allowedQuote', [quote])));
-  if (allowed.some(value=>value!==true)) throw new Error('A catalog entry is not allowed.');
+const quoteAbi = parseAbi(['function decimals() view returns(uint8)', 'function symbol() view returns(string)']);
+const verifiedQuotes = [];
+for (let i = 0; i < quotes.length; i += 12) {
+  const rows = await Promise.all(quotes.slice(i, i + 12).map(async quote => {
+    const expected = snapshot.catalog.assets.find(asset => equal(asset.address, quote));
+    const reviewed = review.quotes.find(asset => equal(asset.address, quote));
+    const [allowed, decimals, symbol, code] = await Promise.all([
+      read('allowedQuote', [quote]),
+      client.readContract({ address: quote, abi: quoteAbi, functionName: 'decimals', blockNumber }),
+      client.readContract({ address: quote, abi: quoteAbi, functionName: 'symbol', blockNumber }),
+      client.getCode({ address: quote, blockNumber }),
+    ]);
+    if (!allowed || decimals !== expected?.decimals || symbol !== expected?.symbol || !code || code === '0x' || keccak256(code) !== reviewed?.codeHash) throw new Error(`Quote identity, decimals or bytecode changed: ${expected?.symbol ?? quote}`);
+    return { symbol, address: quote, decimals, codeHash: keccak256(code) };
+  }));
+  verifiedQuotes.push(...rows);
 }
 if (await read('allowedQuote', [zeroAddress])) throw new Error('Zero-address quote unexpectedly allowed.');
 const airlockAbi = parseAbi(['function getModuleState(address) view returns(uint8)', 'function owner() view returns(address)']);
@@ -84,7 +97,7 @@ const manifest = {
   receipt: { status: receipt.status, gasUsed: receipt.gasUsed.toString(), effectiveGasPriceWei: receipt.effectiveGasPrice.toString(), networkFeeETH: formatEther(receipt.gasUsed * receipt.effectiveGasPrice), confirmationsAtVerification: (blockNumber - receipt.blockNumber + 1n).toString() },
   source: { path: 'src/RarePetLaunchRouter.sol', contract: 'RarePetLaunchRouter', sourceHash, compiler: artifact.metadata.compiler, settings: artifact.metadata.settings },
   integrity: { deploymentDataHash: review.deploymentDataHash, creationBytecodeHash: review.creationBytecodeHash, runtimeCodeHash: keccak256(code), compiledRuntimeMatchesAfterImmutableNormalization: true, exactReviewedConstructorRuntimeMatches: true, catalogSha256: snapshot.catalogHash },
-  configuration: { treasury: review.config.treasury, totalSupply: review.config.totalSupply, feePercent: { creator: 85, treasury: 10, protocol: 5 }, getters, protocolBeneficiaryAtVerification: protocol, modules, quoteCount: quotes.length, quotes: snapshot.quotes },
+  configuration: { treasury: review.config.treasury, totalSupply: review.config.totalSupply, feePercent: { creator: 85, treasury: 10, protocol: 5 }, getters, protocolBeneficiaryAtVerification: protocol, modules, quoteCount: quotes.length, quotes: verifiedQuotes },
   deploymentReview: { path: reviewPath, deployerNonce: tx.nonce, proofPath },
   previousDeployment: review.previousDeployment ?? null,
   previousActivityAtActivation,

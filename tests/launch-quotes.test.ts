@@ -30,7 +30,7 @@ function setup(options: Record<string, unknown> = {}) {
     readContract: async (args: Record<string, unknown>) => {
       calls.push(args); if (['poolKey', 'poolManager', 'poolId', 'seedComplete', 'getSlot0', 'getLiquidity', 'getPositionInfo'].includes(args.functionName as string)) return pool.client.readContract(args); const asset = LAUNCH_QUOTE_ASSETS.find(asset => asset.address === args.address || asset.feedAddress === args.address);
       assert(asset, 'only pinned addresses can be read');
-      if (args.functionName === 'decimals') return args.address === asset.address ? 18 : 8;
+      if (args.functionName === 'decimals') return args.address === asset.address ? asset.decimals : 8;
       if (args.functionName === 'symbol') return asset.symbol;
       if (args.functionName === 'uid') return asset.assetId;
       if (args.functionName === 'description') return asset.feedDescription;
@@ -52,16 +52,20 @@ const feed = data => data.chainlink.find(entry => entry.proxyAddress === getLaun
 const price = data => data.price.quotes.find(entry => entry.tokenSymbol === 'QNT');
 
 test('shared reviewed catalog covers every issuer stock, including the asset Bankr omits', () => {
-  assert.equal(LAUNCH_QUOTE_ASSETS.length, 197); assert.equal(catalog.coverage.activeStocks, 195);
+  assert.equal(LAUNCH_QUOTE_ASSETS.length, catalog.assets.length); assert.equal(catalog.coverage.activeStocks, 195);
+  assert.equal(getLaunchQuoteAsset('usdg').decimals, 6);
+  assert.equal(getLaunchQuoteAsset('cbbtc').decimals, 8);
+  assert.equal(getLaunchQuoteAsset('cbbtc').address.toLowerCase(), '0xcec185eb182c47d1ba1efc84e6959e18cd620be4');
+  assert.equal(getLaunchQuoteAsset('usdg').address.toLowerCase(), '0x5fc5360d0400a0fd4f2af552add042d716f1d168');
   assert.equal(catalog.coverage.chainlinkStocks, 35); assert.equal(catalog.coverage.issuerPricedStocks, 160);
   assert.equal(getLaunchQuoteAsset('qnt').address, '0xB7EDfE2F33C1aC06830a971dFb559bDe8A2a3d76');
   assert.equal(getLaunchQuoteAsset('qnt').priceSource, 'robinhood');
   for (const asset of LAUNCH_QUOTE_ASSETS) {
-    assert.match(asset.address, /^0x[0-9a-fA-F]{40}$/); assert.equal(asset.chainId, 4663); assert.equal(asset.decimals, 18); assert(Object.isFrozen(asset));
+    assert.match(asset.address, /^0x[0-9a-fA-F]{40}$/); assert.equal(asset.chainId, 4663); assert.equal(asset.decimals, asset.kind === 'usdg' ? 6 : asset.kind === 'cbbtc' ? 8 : 18); assert(Object.isFrozen(asset));
     if (asset.priceSource === 'chainlink' || asset.priceSource === 'rarefriends-pool') { assert.match(asset.feedAddress, /^0x[0-9a-fA-F]{40}$/); assert(Object.isFrozen(asset.feedRegistry)); }
     else { assert.equal(asset.feedAddress, null); assert.equal(asset.kind, 'stock'); }
   }
-  assert.equal(new Set(LAUNCH_QUOTE_ASSETS.map(asset => asset.address.toLowerCase())).size, 197);
+  assert.equal(new Set(LAUNCH_QUOTE_ASSETS.map(asset => asset.address.toLowerCase())).size, LAUNCH_QUOTE_ASSETS.length);
   for (const id of ['STOCKS', 'ETH', '0x1111111111111111111111111111111111111111', '<script>', 'qnt/../../bad']) assert.throws(() => getLaunchQuoteAsset(id), /supported/);
 });
 
@@ -100,6 +104,41 @@ test('WETH is independent of stock registries and issuer pricing is independent 
   const one = setup(); one.payload.robinhood.assets = []; one.payload.chainlink = one.payload.chainlink.filter(entry => entry.name === 'ETH / USD');
   assert.equal((await one.reader.readLaunchQuotePrice('weth')).asset.kind, 'weth'); assert(!one.calls.some(call => call.functionName === 'oraclePaused'));
   const two = setup(); two.payload.chainlink = []; assert.equal((await two.reader.readLaunchQuotePrice('qnt')).source, 'robinhood');
+});
+
+test('non-18-decimal crypto quotes use the live USD feed without a dollar peg assumption or stock multiplier', async () => {
+  const crypto = LAUNCH_QUOTE_ASSETS.filter(asset => asset.kind === 'usdg' || asset.kind === 'cbbtc');
+  assert(crypto.some(asset => asset.kind === 'usdg'));
+  for (const asset of crypto) {
+    const { reader, client, payload, calls } = setup(), read = client.readContract;
+    const answer = asset.kind === 'usdg' ? 98234567n : 6734567890123n;
+    payload.robinhood.assets = [];
+    payload.chainlink = payload.chainlink.filter(feed => feed.proxyAddress === asset.feedAddress);
+    client.readContract = async args => args.functionName === 'latestRoundData'
+      ? [7n, answer, BigInt(NOW - 62), BigInt(NOW - 60), 7n] : read(args);
+    const quote = await reader.readLaunchQuotePrice(asset.id);
+    assert.equal(quote.asset.decimals, asset.kind === 'usdg' ? 6 : 8);
+    assert.equal(quote.usdPriceE18, answer * 10n ** 10n);
+    assert.equal(quote.usdPrice, asset.kind === 'usdg' ? '0.98234567' : '67345.67890123');
+    assert(!calls.some(call => ['uid', 'oraclePaused', 'uiMultiplier'].includes(call.functionName as string)));
+  }
+});
+
+test('crypto quotes reject wrong token units, copied symbols, feed identities, stale prices and zero prices', async () => {
+  for (const asset of LAUNCH_QUOTE_ASSETS.filter(asset => asset.kind === 'usdg' || asset.kind === 'cbbtc')) {
+    for (const mutation of ['decimals', 'symbol', 'description', 'zero', 'stale', 'feed'] as const) {
+      const { reader, client, payload } = setup(), read = client.readContract;
+      if (mutation === 'feed') payload.chainlink.find(feed => feed.proxyAddress === asset.feedAddress)!.docs.baseAsset = 'UNVERIFIED';
+      client.readContract = async args => {
+        if (args.address === asset.address && args.functionName === 'decimals' && mutation === 'decimals') return 18;
+        if (args.address === asset.address && args.functionName === 'symbol' && mutation === 'symbol') return 'LOOKALIKE';
+        if (args.functionName === 'description' && mutation === 'description') return 'UNVERIFIED / USD';
+        if (args.functionName === 'latestRoundData' && ['zero', 'stale'].includes(mutation)) return [7n, mutation === 'zero' ? 0n : 100000000n, BigInt(NOW - 86402), BigInt(NOW - 86401), 7n];
+        return read(args);
+      };
+      await assert.rejects(reader.readLaunchQuotePrice(asset.id), /metadata|registry|stale|incomplete/);
+    }
+  }
 });
 
 test('issuer identity, status, decimals and exact published feed metadata mismatches fail closed', async () => {
@@ -161,8 +200,11 @@ test('proxy accepts catalog IDs only and fetches the minimum official sources wi
   for (const request of [{ method: 'POST' }, ...['?url=https://attacker.example', '?asset=qnt&asset=aapl', '?asset=https://attacker.example', '?asset=', '?asset=qnt/../../bad'].map(query => ({ method: 'GET', url: '/api/launch-quotes' + query }))]) { const response = output(); await handler(request, response); assert([400, 405].includes(response.statusCode)); assert.equal(calls.length, 0); }
   const response = output(); await handler({ method: 'GET', url: '/api/launch-quotes?asset=qnt' }, response); assert.equal(response.statusCode, 200); assert.equal(response.headers['Cache-Control'], 'no-store');
   assert.deepEqual(calls.sort(), ['https://api.robinhood.com/rhj/assets', 'https://api.robinhood.com/rhj/prices/QNT'].sort()); calls.length = 0;
-  await handler({ method: 'GET', url: '/api/launch-quotes?asset=weth' }, output()); assert.deepEqual(calls, ['https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json']); calls.length = 0;
-  await handler({ method: 'GET', url: '/api/launch-quotes?asset=rarefriends' }, output()); assert.deepEqual(calls, ['https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json']);
+  for (const id of ['weth', 'rarefriends', 'usdg', 'cbbtc']) {
+    const response = output(); await handler({ method: 'GET', url: `/api/launch-quotes?asset=${id}` }, response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(calls, ['https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json']); calls.length = 0;
+  }
 });
 test('proxy returns truthful retryable failure when a needed official source is unavailable or too large', async () => {
   for (const responseFactory of [() => new Response('', { status: 403 }), () => new Response('<html>'), () => jsonResponse({ large: 'x'.repeat(600001) })]) { const handler = createLaunchQuotesHandler(async () => responseFactory()), response = output(); await handler({ method: 'GET' }, response); assert.equal(response.statusCode, 503); assert.equal(response.headers['Cache-Control'], 'no-store'); assert.match(JSON.parse(response.body).error, /Retry/); }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DopplerSDK, airlockAbi, computePoolId, type PreparedMulticurveCreate } from '@whetstone-research/doppler-sdk/evm';
-import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, parseAbi, keccak256, stringToHex, zeroAddress, type Address, type Hex, type PublicClient, type TransactionReceipt } from 'viem';
+import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, formatUnits, parseAbi, parseUnits, keccak256, stringToHex, zeroAddress, type Address, type Hex, type PublicClient, type TransactionReceipt } from 'viem';
 import { buildRareLaunchParams, validateRareLaunchDraft, prepareRareLaunch, sendRareLaunch, confirmRareLaunch, readRareLaunchFees, claimRareLaunchFees,
   RARE_LAUNCH_DOPPLER as D, RARE_LAUNCH_ROUTER_ABI, RARE_LAUNCH_SUPPLY, type RareLaunchConfig, type RareLaunchDraft, type RareLaunchDependencies } from '../games/rare-pet/launch-doppler.ts';
 import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset, type LaunchQuoteAsset } from '../games/rare-pet/launch-quotes.ts';
@@ -30,7 +30,8 @@ const draft: RareLaunchDraft = { name: 'Rare Cat', symbol: 'RCAT', tokenURI: 'da
 const config: RareLaunchConfig = { router: ROUTER, treasury: TREASURY, protocol: PROTOCOL, totalSupply: RARE_LAUNCH_SUPPLY,
   friendShares: 850n * 10n ** 15n, treasuryShares: 100n * 10n ** 15n, protocolShares: 50n * 10n ** 15n,
   quoteTokens: LAUNCH_QUOTE_ASSETS.map(asset => asset.address), brain: 0n, lastLaunchAt: 0n, hasLaunched: false, readyAt: 0n, blockNumber: 20n, timestamp: BigInt(NOW / 1000) };
-function fixture() {
+function fixture(selectedDraft = draft, launchedAsset: Address = ASSET) {
+  const draft = selectedDraft, ASSET = launchedAsset, WETH = selectedDraft.quote.asset.address;
   const state = { revision: 4, status: 'connected', chainId: 4663, account: OWNER };
   const provider = {};
   const session = { getSnapshot: () => state, getProvider: () => provider } as unknown as PetWalletSession;
@@ -40,7 +41,8 @@ function fixture() {
     self: false, missingEvent: false, wrongAsset: false, txInput: undefined as Hex | undefined, blockHash: BLOCK, pending0: 10n, pending1: 20n, claimed: false };
   const writes: Record<string, unknown>[] = [], hashes: Hex[] = [];
   let call: Record<string, unknown>, prepared: PreparedMulticurveCreate<4663>;
-  const poolKey = { currency0: WETH, currency1: ASSET, fee: 3000, tickSpacing: 200, hooks: D.initializer };
+  const tokenIsCurrency0 = BigInt(ASSET) < BigInt(WETH);
+  const poolKey = { currency0: tokenIsCurrency0 ? ASSET : WETH, currency1: tokenIsCurrency0 ? WETH : ASSET, fee: 3000, tickSpacing: 200, hooks: D.initializer };
   const poolId = computePoolId(poolKey);
   const client = {
     async getChainId() { return changes.chain; }, async getBlockNumber() { return 20n; },
@@ -100,7 +102,7 @@ function fixture() {
       const { encodeFunctionData } = await import('viem');
       prepared = { chainId: 4663, account: ROUTER, airlock: D.airlock, createParams,
         transaction: { to: D.airlock, value: 0n, data: encodeFunctionData({ abi: airlockAbi, functionName: 'create', args: [createParams] }) }, gasEstimate: { status: 'estimated', gas: 1500000n },
-        prediction: { tokenAddress: ASSET, poolOrHookAddress: ASSET, governanceAddress: D.dead, timelockAddress: D.dead, migrationPoolAddress: D.migrationDead, poolKey, poolId, tokenIsCurrency0: false } };
+        prediction: { tokenAddress: ASSET, poolOrHookAddress: ASSET, governanceAddress: D.dead, timelockAddress: D.dead, migrationPoolAddress: D.migrationDead, poolKey, poolId, tokenIsCurrency0 } };
       changes.afterPrepare(); return prepared;
     },
   } as unknown as RareLaunchDependencies;
@@ -399,7 +401,8 @@ function draftForQuote(asset: LaunchQuoteAsset): RareLaunchDraft {
 }
 test('every catalog asset can build the same zero-allocation permanent-liquidity launch in both modes', async () => {
   const { buildRareSelfLaunchParams } = await import('../games/rare-pet/launch-doppler.ts');
-  assert.equal(LAUNCH_QUOTE_ASSETS.length, 197); assert.equal(LAUNCH_QUOTE_ASSETS.filter(a => a.kind === 'stock').length, 195);
+  assert.equal(LAUNCH_QUOTE_ASSETS.filter(a => a.kind === 'stock').length, 195);
+  assert.equal(getLaunchQuoteAsset('usdg').decimals, 6);
   assert.equal(getLaunchQuoteAsset('qnt').priceSource, 'robinhood');
   for (const asset of LAUNCH_QUOTE_ASSETS) {
     const selected = draftForQuote(asset);
@@ -523,4 +526,86 @@ test('RareFriends pool quotes bind canonical identity, depth and observations; m
   assert.throws(()=>verifyRareLaunchPriceRefresh(quote,{...quote,usdPriceE18:quote.usdPriceE18*101n/100n+1n}),/price changed/);
   assert.throws(()=>verifyRareLaunchPriceRefresh(quote,{...quote,usdPriceE18:quote.usdPriceE18*99n/100n-1n}),/price changed/);
   assert.throws(()=>verifyRareLaunchPriceRefresh(draft.quote,{...draft.quote,usdPriceE18:draft.quote.usdPriceE18+1n}),/price changed/);
+});
+
+
+test('quote decimals preserve the $10k curve and pool identity for either launched-token address order', async () => {
+  const quotes = LAUNCH_QUOTE_ASSETS.filter(asset => ['weth', 'usdg', 'cbbtc'].includes(asset.kind));
+  assert.deepEqual(quotes.map(asset => asset.decimals).sort((a, b) => a - b), [6, 8, 18]);
+  for (const quote of quotes) {
+    const usdPrice = quote.kind === 'usdg' ? '0.98234567' : quote.kind === 'cbbtc' ? '67345.67890123' : '2345.67890123';
+    const selected = draftForQuote(quote);
+    const selectedDraft = { ...selected, quote: { ...selected.quote, usdPrice, usdPriceE18: parseUnits(usdPrice, 18) } };
+    const built = buildRareLaunchParams({ pet, config, draft: selectedDraft, now: NOW });
+    const normalizedTick = Math.min(...built.params.pool.curves.map(curve => curve.tickLower));
+    const expectedUnroundedTick = Math.log(10_000 / (1e9 * Number(usdPrice)) * 10 ** (quote.decimals - 18)) / Math.log(1.0001);
+    assert.equal(normalizedTick, Math.ceil(expectedUnroundedTick / 200) * 200, quote.symbol);
+    assert(built.review.approximateStartMarketCapUSD >= 10_000 - 0.0001 && built.review.approximateStartMarketCapUSD < 10_000 * 1.0001 ** 200 + 0.0001, `${quote.symbol} FDV has incorrect units`);
+    for (const launchedAsset of ['0x0000000000000000000000000000000000000001', '0xffffffffffffffffffffffffffffffffffffffff'] as Address[]) {
+      const f = fixture(selectedDraft, launchedAsset);
+      const prepared = await prepareRareLaunch(f.options, f.deps);
+      const tokenIsCurrency0 = BigInt(launchedAsset) < BigInt(quote.address);
+      assert.equal(prepared.doppler.prediction.tokenIsCurrency0, tokenIsCurrency0);
+      assert.equal(prepared.doppler.prediction.poolKey[tokenIsCurrency0 ? 'currency1' : 'currency0'], quote.address);
+      assert.equal(prepared.doppler.prediction.poolKey[tokenIsCurrency0 ? 'currency0' : 'currency1'], launchedAsset);
+      assert.deepEqual(prepared.request.curves, built.request.curves);
+      // Doppler reverses the normalized quote/token tick when the launched token is currency1.
+      const poolTick = tokenIsCurrency0 ? normalizedTick : -normalizedTick;
+      const wholeQuotePerToken = (tokenIsCurrency0 ? 1.0001 ** poolTick : 1 / 1.0001 ** poolTick) * 10 ** (18 - quote.decimals);
+      assert(Math.abs(wholeQuotePerToken * 1e9 * Number(usdPrice) - built.review.approximateStartMarketCapUSD) < 0.00001);
+      assert.equal(f.writes.length, 0);
+    }
+  }
+});
+
+test('quote decimals cannot be changed in a verified draft even to another supported decimal count', () => {
+  for (const asset of LAUNCH_QUOTE_ASSETS.filter(asset => ['weth', 'usdg', 'cbbtc'].includes(asset.kind))) {
+    const selected = draftForQuote(asset);
+    for (const decimals of [6, 8, 18, 0, 255].filter(value => value !== asset.decimals)) {
+      assert.throws(() => validateRareLaunchDraft({ ...selected, quote: { ...selected.quote, asset: { ...asset, decimals } } } as RareLaunchDraft, NOW), /catalog|Refresh/);
+    }
+  }
+});
+
+test('fee accounting retains raw quote units for six/eight/eighteen decimals and both pool currency orders', async () => {
+  for (const quote of LAUNCH_QUOTE_ASSETS.filter(asset => ['weth', 'usdg', 'cbbtc'].includes(asset.kind))) {
+    const selected = draftForQuote(quote);
+    for (const launchedAsset of ['0x0000000000000000000000000000000000000001', '0xffffffffffffffffffffffffffffffffffffffff'] as Address[]) {
+      const f = fixture(selected, launchedAsset), quoteIsCurrency0 = BigInt(quote.address) < BigInt(launchedAsset);
+      const decimals0 = quoteIsCurrency0 ? quote.decimals : 18, decimals1 = quoteIsCurrency0 ? 18 : quote.decimals;
+      const cumulative = [parseUnits('10', decimals0), parseUnits('10', decimals1)];
+      const checkpoint = [parseUnits('7', decimals0), parseUnits('7', decimals1)];
+      f.changes.pending0 = parseUnits('1', decimals0); f.changes.pending1 = parseUnits('1', decimals1);
+      const read = f.deps.client.readContract;
+      f.deps.client.readContract = (async args => {
+        if (args.functionName === 'getCumulatedFees0') return cumulative[0];
+        if (args.functionName === 'getCumulatedFees1') return cumulative[1];
+        if (args.functionName === 'getLastCumulatedFees0') return checkpoint[0];
+        if (args.functionName === 'getLastCumulatedFees1') return checkpoint[1];
+        return read(args);
+      }) as typeof f.deps.client.readContract;
+      const fees = await readRareLaunchFees({ asset: launchedAsset, wallet: WALLET }, f.deps);
+      assert.equal(fees[quoteIsCurrency0 ? 'token0' : 'token1'], quote.address);
+      assert.equal(fees.amount0, parseUnits('3.4', decimals0));
+      assert.equal(fees.amount1, parseUnits('3.4', decimals1));
+      assert.equal(formatUnits(fees[quoteIsCurrency0 ? 'amount0' : 'amount1'], quote.decimals), '3.4');
+      assert.equal(formatUnits(fees[quoteIsCurrency0 ? 'amount1' : 'amount0'], 18), '3.4');
+      assert.equal(f.writes.length, 0);
+    }
+  }
+});
+
+
+test('preparation rejects reversed pool currencies or an inconsistent token-side prediction', async () => {
+  for (const mutation of ['order', 'flag']) {
+    const f = fixture(), originalPrepare = f.deps.prepare!;
+    f.deps.prepare = async (params, router) => {
+      const prepared = await originalPrepare(params, router), prediction = prepared.prediction;
+      if (mutation === 'flag') return { ...prepared, prediction: { ...prediction, tokenIsCurrency0: !prediction.tokenIsCurrency0 } };
+      const poolKey = { ...prediction.poolKey, currency0: prediction.poolKey.currency1, currency1: prediction.poolKey.currency0 };
+      return { ...prepared, prediction: { ...prediction, poolKey, poolId: computePoolId(poolKey) } };
+    };
+    await assert.rejects(prepareRareLaunch(f.options, f.deps), /currency order/);
+    assert.equal(f.writes.length, 0);
+  }
 });
