@@ -56,6 +56,7 @@ export function Icon({ name }: { name: string }) {
     play: 'M3 5h14v2h2v9h-4v-3H5v3H1V7h2zM6 7v5M4 9h4M13 8h1M16 10h1',
     launch: 'M10 1l5 5v6h-3v5l-2-2-2 2v-5H5V6zM4 9H2v5h3M16 9h2v5h-3M9 6h2v2H9z',
     poop: 'M10 2v3h3v3h2v3h2v2h2v4H1v-4h2v-2h2V8h3V5zM6 12h1M13 12h1',
+    wallet: 'M3 5V3h12v3M2 6h16v11H2zM18 9h-6v5h6M14 11h1',
     arrow: 'M4 10h12M11 5l5 5-5 5',
   };
   return <svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="miter" aria-hidden="true"><path d={paths[name] || paths.pet}/></svg>;

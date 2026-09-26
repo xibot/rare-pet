@@ -15,6 +15,7 @@ import { PlayDialog } from './PlayDialog';
 import { SpaceBackdrop } from './SpaceBackdrop';
 import { islandFlights } from './islandFlights';
 import { ShareDialog, XIcon } from './ShareDialog';
+import { RareWalletDialog } from './RareWalletDialog';
 import type { ShareAction } from './share-image';
 import '@rarefriends/friendsdk/frame.css';
 import '../rare-rush/fonts.css';
@@ -87,6 +88,7 @@ function App() {
   const [loadedCare, setLoadedCare] = useState(false), [reaction, setReaction] = useState<CareAction | ''>('');
   const [reactionSequence, setReactionSequence] = useState(0), [reactionVariant, setReactionVariant] = useState(0);
   const [sharing, setSharing] = useState(false), [shareAction, setShareAction] = useState<ShareAction>('pet');
+  const [rareWallet, setRareWallet] = useState(false);
   const reactionTimer = useRef<number | undefined>(undefined), reactionCounts = useRef({ pet: 0, feed: 0, poop: 0, play: 0 });
   const playCelebration = useRef(false);
   const op = useRef(0), selectionOp = useRef(0), lock = useRef(false), careRef = useRef(care);
@@ -110,7 +112,7 @@ function App() {
     return () => { clearInterval(clock); clearInterval(animation); clearTimeout(reactionTimer.current); session.dispose(); };
   }, [session]);
   useEffect(() => {
-    op.current++; selectionOp.current++; lock.current = false; setPending(''); setSelecting(false); setConfirmation(null); setPlaying(false); setSharing(false); playCelebration.current = false; setOwned([]); setDiscoveryError(''); clearReaction();
+    op.current++; selectionOp.current++; lock.current = false; setPending(''); setSelecting(false); setConfirmation(null); setPlaying(false); setSharing(false); setRareWallet(false); playCelebration.current = false; setOwned([]); setDiscoveryError(''); clearReaction();
     if (wallet.status !== 'connected' || !wallet.account) { setLoading(false); return; }
     const controller = new AbortController(); setLoading(true);
     listOwnedPets(wallet.account, controller.signal).then(pets => { if (!controller.signal.aborted) setOwned(pets); }).catch(cause => {
@@ -209,13 +211,13 @@ function App() {
       <section className="pet-shell" aria-label="RarePet dashboard">
         <div className="shell-bar"><span><span className="tiny-cross">✦</span> {preview ? 'PREVIEW HABITAT' : 'YOUR FRIEND’S HABITAT'}</span><span className="mode-tag">{preview ? 'PREVIEW MODE' : careContract ? 'ONCHAIN CARE' : 'CARE COMING ONCHAIN'}</span></div>
         <div className="care-layout">
-          <aside className="care-actions"><div className="actions-title"><span>DAILY CARE</span><span>01—05</span></div>{actions.map(a => {
+          <aside className="care-actions"><div className="actions-title"><span>DAILY CARE</span><span>01—06</span></div>{actions.map(a => {
             const availability = actionAvailability(state, a.id, now);
             const unavailableCare = !preview && a.id !== 'play' && (!careContract || !loadedCare);
             const disabled = a.id === 'launch' || !!pending || invalid || !availability.remaining || unavailableCare || (a.id === 'play' && !preview && !live?.rushEligible);
             const timer = a.id === 'launch' ? 'SOON' : invalid ? 'CHOOSE FRIEND' : !preview && a.id === 'play' && !careContract ? 'PRACTICE' : unavailableCare ? careContract ? 'LOADING' : 'COMING ONCHAIN' : availability.waitSeconds ? duration(availability.waitSeconds) : a.id === 'play' ? `${availability.remaining}/3 READY` : 'READY';
             return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id !== 'launch' && act(a.id)} aria-label={`${a.name}${a.id === 'launch' ? ' coming soon' : `, ${a.gain}`}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}{a.id === 'launch' && <em>SOON</em>}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && availability.remaining > 0 && availability.remaining < 3 && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
-          })}<div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
+          })}<button className="care-action rare-wallet-action" disabled={!!pending || invalid} onClick={() => setRareWallet(true)} aria-label="Rare Wallet"><span className="action-icon"><Icon name="wallet"/></span><span className="action-text"><strong>Rare Wallet</strong><small>YOUR FRIEND’S ASSETS</small></span><span className="action-timing"><b>OPEN WALLET ↗</b></span></button><div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
           <div className={`habitat ${reaction ? `reaction-${reaction}` : ''}`}>
             <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'WALLET CHANGED'}</span><h2>{label}</h2></div><span className="friend-status">{due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span></div>
             <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
@@ -234,6 +236,7 @@ function App() {
       <footer><div className="footer-brand"><span>RARE PET BY XIBOT</span><small>ROBINHOOD CHAIN</small></div><a className="footer-docs" href="/docs/">DOCS ↗</a><p>{preview ? 'Preview only · care stays on this device · no transactions.' : careContract ? 'Care lives onchain · original NFT traits stay unchanged.' : 'NFT ownership is live. Care transactions await contract deployment.'}</p><a href="https://rarefriends.com" target="_blank" rel="noreferrer">RARE FRIENDS ↗</a></footer><p className="credits"><a href="/credits.txt" target="_blank">Rare Friends artwork · Built with FriendSDK</a></p>
     </main>
     {sharing && (art ?? live) && <ShareDialog friend={(art ?? live)!} island={island} bodyId={bodyId} initialAction={shareAction} initialVariant={reactionVariant} close={() => setSharing(false)}/>}
+    {rareWallet && (art ?? live) && <RareWalletDialog key={`${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setRareWallet(false)} chooseFriend={() => { setRareWallet(false); openPicker('wallet'); }}/>}
     {picker && <Dialog title="Choose your Rare Friend" close={() => setPicker(false)}><div className="picker-content">
       <div className="picker-mode-switch" role="group" aria-label="Choose Friend source"><button aria-pressed={pickerMode === 'preview'} onClick={() => setPickerMode('preview')}>PREVIEW FRIENDS</button><button aria-pressed={pickerMode === 'wallet'} onClick={() => setPickerMode('wallet')}>MY WALLET</button></div>
       {pickerMode === 'preview' ? <>

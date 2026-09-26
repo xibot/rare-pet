@@ -20,6 +20,7 @@ This is the standalone RarePet repository. The app lives in `games/rare-pet`; th
 - Genesis portraits use the same 36 canonical Generations bodies as Rare Rush. Change Body selects a different body and carries it into the embedded game; the original portrait stays intact. Six canonical Worlds and five Classic floors are selectable. Background islands always match the main island, with smaller flybys for Classic. Separate sky and side corridors reserve space for the main pet, its speech and animations; narrow screens use one sky corridor. The island, chosen body and last preview Friend are remembered on this device. All showcase choices are cosmetic.
 - Three reactions each for Pet, Feed, Poop and completed Play, with hearts, different snacks, cleanup effects and XP celebrations. Reduced-motion preferences disable animation and decorative effects.
 - Connect an injected browser wallet through FriendSDK; switch to Robinhood Chain (4663); discover and select Genesis or Generations. Current ownership and original art are reverified before selection. Manual token verification remains available if transfer-history discovery is incomplete. Generation 0 can receive care; Rare Rush requires a Genesis or hardwired Generations Friend.
+- Rare Wallet opens the selected Friend’s canonical wallet with a copyable address, native ETH, ERC-20 and ERC-721/ERC-1155 holdings. Assets are discovered from recipient-filtered history and checked against one chain snapshot, with bounded continuation and manual asset lookup. Reviewed transfers execute from the Friend account; the connected owner pays gas. Preview cannot access real wallets.
 - Left-side actions and a large Friend stage; trait panel, per-action countdowns, bond deadline, seven-pet streak strip, documentation page, transaction status, collection selector, keyboard-accessible native dialogs, reduced-motion behavior.
 - Current Rare Rush gameplay embedded with the same selected NFT: connected suction shafts and free falls, continuously spinning Friends, occasional leftward exits, direction-aware keyboard/touch controls, flying 10× coins, growth, shields and magnets. Preview XP is granted only by an actual completed run, once per run, with three completion slots in a rolling 24-hour window. Each rewarded completion releases its slot 24 hours later. Closing a game does not earn XP.
 - Solidity care ledger in `contracts/rare-pet`. Every write checks current ownership. Each `(collection, tokenId)` has its own care state, which follows the NFT on transfer. Care cooldowns, rolling Play slots, decay, and rarity are enforced onchain, separately from original NFT metadata.
@@ -67,11 +68,23 @@ npm run build
 # With npm run dev active and Google Chrome installed:
 npm run test:browser
 npm run test:wallet
+npm run test:rare-wallet
+npm run test:rare-wallet:browser
 # With Foundry and solc 0.8.30 installed:
 cd contracts/rare-pet && forge test -vv
 ```
 
 The care-model tests cover independent cooldowns, duplicate rewards, exact/overdue bond boundaries, projected decay, streaks, and rolling Play slots. Canonical body tests verify 324 frames, connected geometry, portrait placement and body selection. Browser checks exercise desktop and 390px/320px mobile layouts, both preview collections, isolated care/reset, island and body persistence, varied action effects, reduced motion, real game completion and no XP on incomplete games. Wallet fixtures check fresh ownership, network/account changes and switching back to Preview without signing. Contract tests additionally cover transfers, identity separation, signatures, replay, and fuzzed decay. Live-chain deployment testing is still outstanding.
+
+## Rare Wallet execution
+
+Rare Wallet uses the FriendSDK 0.1.2 account interface from `src/chain.ts`: `execute(address,uint256,bytes,uint8)`, `owner()` and `token()`. Execution is restricted to CALL (operation 0), with zero outer ETH value. Supported calls are native ETH sends, ERC-20 `transfer`, and ERC-721/ERC-1155 `safeTransferFrom`. Ownership, canonical account binding, deployment, balances, network/provider identity and simulation are verified before asking the owner to sign. Receipt events and exact transaction calldata are checked before reporting confirmation.
+
+Read-only mainnet verification on 2026-09-25 checked Genesis #2 (wallet `0x460e849Bf2fC54983Cdbc60e6e13E49307e7D0dd`) and hardwired Generations #68356 (wallet `0xDe2fB641C01Fc91C7C5Bd8e99435C6ca0dFd9F6C`). Both use account implementation `0xed038886c002b285eb0f74971e967b02f6af8ea55a`; owner/token binding matched the canonical collections, owner execution simulated successfully, and outsider execution reverted. No real transfer was sent during development.
+
+Asset discovery uses public Robinhood RPC rather than depending on explorer availability. Standard incoming Transfer, TransferSingle and TransferBatch events identify candidates; current balances and NFT ownership are verified at a pinned block. Eventless/nonstandard assets may require manual lookup. Rate limits, partial history, missing metadata and failed balance checks remain explicit. A pending balance is never rendered as zero. `rare-wallet-holdings.ts` also provides a paginated Blockscout reader; the UI currently uses RPC discovery because the explorer can challenge browser access.
+
+`test:rare-wallet` checks exact amounts, history coverage, pagination, failed reads, canonical execution, session changes, duplicates and receipt verification. `test:rare-wallet:browser` mocks every blockchain and wallet request while exercising preview, holdings, review, transfers and responsive dialogs. No test submits a live transaction.
 
 ## Artwork and reuse
 

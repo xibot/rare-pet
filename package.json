@@ -17,6 +17,8 @@
     "test:browser": "node scripts/test-pet-browser.mjs",
     "test:wallet": "node scripts/test-pet-wallet.mjs",
     "test:share": "node scripts/test-pet-share.mjs",
+    "test:rare-wallet": "node --test tests/rare-wallet-*.test.ts",
+    "test:rare-wallet:browser": "node scripts/test-rare-wallet.mjs",
     "test:pet:browser": "npm run test:browser",
     "test:pet:wallet": "npm run test:wallet",
     "test:contracts": "cd contracts/rare-pet && forge test -vv",
