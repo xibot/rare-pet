@@ -113,9 +113,10 @@ async function chooseGenesis(page, state) {
   assert.equal(await page.locator('.pet-portrait image[data-genesis-art]').getAttribute('href'), portrait, 'Dashboard body keeps the original canonical Genesis portrait');
   assert.equal(await page.locator('.pet-portrait [data-genesis-body]').count(), 1, 'Verified Genesis has an approved runner body');
   assert.equal(await page.locator('.mode-tag').innerText(), 'CARE COMING ONCHAIN');
-  for (const name of ['Pet,', 'Feed,', 'Poop,', 'Launch coming soon']) {
+  for (const name of ['Pet,', 'Feed,', 'Poop,']) {
     assert.equal(await page.getByRole('button', { name: new RegExp(`^${name}`) }).isDisabled(), true, 'Undeployed care never enables a transaction');
   }
+  assert.equal(await page.getByRole('button', { name: /^Launch,/ }).isEnabled(), true, 'Launch preview is independent of the care contract');
   assert.equal(await page.getByRole('button', { name: /^Play,/ }).isEnabled(), true, 'Verified Genesis can open Rare Rush');
   assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).getAttribute('aria-pressed'), 'true');
   assert.equal(await page.getByRole('button', { name: /RESET PREVIEW/ }).count(), 0, 'Preview reset is unavailable for owned Friends');

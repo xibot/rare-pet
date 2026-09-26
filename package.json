@@ -22,22 +22,34 @@
     "test:pet:browser": "npm run test:browser",
     "test:pet:wallet": "npm run test:wallet",
     "test:contracts": "cd contracts/rare-pet && forge test -vv",
-    "test:twist": "node scripts/test-pet-rush-twist.mjs"
+    "test:twist": "node scripts/test-pet-rush-twist.mjs",
+    "typecheck:server": "tsc --noEmit -p tsconfig.rare-pet-server.json",
+    "test:launch": "node --test tests/launch*.test.ts",
+    "test:launch:browser": "node scripts/test-launchpad.mjs",
+    "test:launch:contracts": "forge test --root contracts/rare-launchpad -vv"
   },
   "dependencies": {
     "@rarefriends/friendsdk": "file:rarefriends-friendsdk-0.1.2.tgz",
+    "@vercel/blob": "2.8.0",
+    "@whetstone-research/doppler-sdk": "1.0.43",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "viem": "2.56.3"
   },
   "devDependencies": {
-    "esbuild": "0.28.2",
+    "@types/node": "22.20.4",
     "@types/react": "19.1.12",
     "@types/react-dom": "19.1.9",
-    "typescript": "6.0.3",
-    "playwright": "1.63.0"
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "typescript": "6.0.3"
   },
   "engines": {
     "node": "22.x"
+  },
+  "overrides": {
+    "@whetstone-research/doppler-sdk": {
+      "react": "$react"
+    }
   }
 }

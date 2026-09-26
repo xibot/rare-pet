@@ -6,3 +6,4 @@ artifacts/
 contracts/
 tests/
 .env*
+tools/

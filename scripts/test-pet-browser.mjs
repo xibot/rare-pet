@@ -107,7 +107,7 @@ try {
     await collectReactions(page, 'Poop', 3);
     assert.equal(await trait(page, 'Health'), '3');
     assert.equal(await careButton(page, 'Poop').isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: /Launch coming soon/ }).isDisabled(), true);
+    assert.equal(await careButton(page, 'Launch').isEnabled(), true, 'Launch opens its safe preview independently of undeployed care');
     assert.match(await page.locator('[data-countdown=poop]').innerText(), /^0[34]:/, 'Poop shows its own four-hour timer');
     assert.equal(await page.locator('.site-header').getByText('ROBINHOOD CHAIN', { exact: true }).count(), 0);
     assert.equal(await page.locator('.footer-brand small').innerText(), 'ROBINHOOD CHAIN');

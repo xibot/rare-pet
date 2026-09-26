@@ -1,0 +1,7 @@
+{
+  "chainId": 4663,
+  "deployer": "0xCa88efc94b567A5185FEA63599aD895c3e514FBc",
+  "treasury": "0xCa88efc94b567A5185FEA63599aD895c3e514FBc",
+  "friendFeeBps": 8500,
+  "totalSupply": "1000000000000000000000000000"
+}
