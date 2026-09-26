@@ -16,6 +16,7 @@
     "test:rush": "node --test tests/engine.test.ts tests/economy.test.ts tests/genesis-identity.test.ts tests/genesis-bodies.test.ts tests/arcade-twist.test.ts tests/arcade-presentation.test.ts",
     "test:browser": "node scripts/test-pet-browser.mjs",
     "test:wallet": "node scripts/test-pet-wallet.mjs",
+    "test:share": "node scripts/test-pet-share.mjs",
     "test:pet:browser": "npm run test:browser",
     "test:pet:wallet": "npm run test:wallet",
     "test:contracts": "cd contracts/rare-pet && forge test -vv",

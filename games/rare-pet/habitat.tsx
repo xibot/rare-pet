@@ -56,9 +56,9 @@ export function HabitatIsland({ island, stageWidth, children }: { island: Island
   </div>;
 }
 
-function Heart() { return <svg viewBox="0 0 12 12"><path d="M2 1H5V3H7V1H10V2H12V6H10V8H8V10H6V12H4V10H2V8H0V3H2Z" fill="currentColor"/></svg>; }
-function Spark() { return <svg viewBox="0 0 12 12"><path d="M5 0H7V4H9V5H12V7H8V9H7V12H5V8H3V7H0V5H4V3H5Z" fill="currentColor"/></svg>; }
-function Snack({ variant }: { variant: number }) {
+export function Heart() { return <svg viewBox="0 0 12 12"><path d="M2 1H5V3H7V1H10V2H12V6H10V8H8V10H6V12H4V10H2V8H0V3H2Z" fill="currentColor"/></svg>; }
+export function Spark() { return <svg viewBox="0 0 12 12"><path d="M5 0H7V4H9V5H12V7H8V9H7V12H5V8H3V7H0V5H4V3H5Z" fill="currentColor"/></svg>; }
+export function Snack({ variant }: { variant: number }) {
   return <svg viewBox="0 0 24 24" shapeRendering="crispEdges">{variant === 0 ? <>
     <path d="M7 2H18V5H20V8H22V21H4V5H7Z" fill="#362c1f"/><path d="M7 5H18V8H20V19H6V8H7Z" fill="#f3cc75"/><path d="M9 8H12V11H9ZM15 13H18V16H15ZM8 16H11V19H8Z" fill="#8b603d"/>
   </> : variant === 1 ? <>
