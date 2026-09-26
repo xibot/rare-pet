@@ -1,0 +1,14 @@
+{
+  "actions": [
+    { "points": 1, "secondaryPoints": 0, "cooldown": 86400, "dailyLimit": 1, "enabled": true },
+    { "points": 1, "secondaryPoints": 5, "cooldown": 14400, "dailyLimit": 6, "enabled": true },
+    { "points": 10, "secondaryPoints": 0, "cooldown": 0, "dailyLimit": 3, "enabled": true },
+    { "points": 1, "secondaryPoints": 0, "cooldown": 14400, "dailyLimit": 6, "enabled": true }
+  ],
+  "petGrace": 86400,
+  "decayInterval": 86400,
+  "decayPoints": 1,
+  "rarityEvery": 7,
+  "rarityPoints": 1,
+  "playSigner": "0x0000000000000000000000000000000000000000"
+}

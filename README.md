@@ -89,7 +89,7 @@ These are the initial shares of collected trading fees. Fees accrue when swaps h
 
 ## What comes next
 
-**Fully onchain care traits are planned after the Vibeathon test stage.** The care contract is implemented and locally tested, but not deployed. Live Experience also needs the verified game-completion service.
+**Fully onchain care traits are planned after the Vibeathon test stage.** The new care contract has configurable points, cooldowns and daily limits, with a 24-hour delay for rule changes. Lifetime points, action counts and per-action receipts stay permanently attached to each Friend. It is built for review and not deployed. Live Experience also needs the verified game-completion service. Pet remains locked at one action per 24 hours, and Launch at +1 Brain per 24 hours.
 
 After the mainnet care rollout comes the planned **rarity farming season**: the rarer your Friend becomes through daily care, the bigger their prize rewards. The season, eligibility and prize distribution are still to come. Preview points have no onchain value, and a progress carryover is not promised.
 

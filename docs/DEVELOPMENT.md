@@ -9,7 +9,7 @@ Implementation, activation boundaries, and validation notes for RarePet. Run the
 - **Care is in the Vibeathon test stage.** Pet, Feed, Poop and rewarded Rare Rush completions work in Preview. The separate care contract is implemented and locally tested, but remains undeployed; fully onchain care trait records are planned after this test stage. Preview care does not become onchain state.
 - **Ownership and Rare Wallet are live.** The app reads canonical ownership and supports owner-authorized execution from the selected Friend’s existing account.
 - **The separate launch router is deployed and configured.** Its recorded deployment and read-only runtime/configuration checks are detailed below. Router verification is not a security audit or an explorer source-verification badge.
-- **Live Experience is not activated.** It still needs a verified completion service and client claim integration. The care contract’s completion signer is immutable.
+- **Live Experience is not activated.** It still needs a verified completion service and client claim integration. The new care contract’s completion signer can be activated or rotated through its 24-hour rule timelock.
 - **Rarity farming is future work.** The product plan is for higher RarePet Rarity to earn larger prize rewards in a season after mainnet care deployment. This repository does not implement that prize season or establish a conversion of Preview progress into prizes.
 
 The user signed the router deployment. Development verification and test scripts did not broadcast a real asset transfer, token launch, or trading-fee claim.
@@ -42,7 +42,7 @@ This is the standalone RarePet repository. The app lives in `games/rare-pet`; th
 
 ## Care rules
 
-Each action has an independent timer; there is no shared midnight reset. The care rules below describe Preview and the undeployed care-contract implementation. The RF launch row is enforced by the separately deployed launch router.
+Each action has an independent timer; there is no shared midnight reset. The care rules below describe Preview and the initial configuration of the undeployed RarePetCare contract. Care reward amounts and Feed/Play/Poop cooldowns and daily caps can change through a 24-hour public timelock; Pet stays fixed at one action every 24 hours; the live client reads the active policy and authoritative availability at the same block as the ledger. The RF launch row is enforced by the separately deployed launch router.
 
 | Action | Cooldown | Result |
 | --- | --- | --- |
@@ -59,9 +59,15 @@ The `/docs/` page explains modes, collections, cosmetic choices, every action an
 
 Stamina currently accumulates as a care trait; it does not charge for play or regenerate on a separate schedule. Rarity is a RarePet streak score, not the original collection rarity. Brain comes from the separately deployed launch router’s confirmed launch records. It is independent of the still-undeployed Pet, Feed, Poop and Play care ledger; it is not evidence that the full care ledger or future rarity-farming rewards are live.
 
+## Permanent history and editable rules
+
+`RarePetCare.sol` has immutable code with delayed configurable parameters, not a proxy. The administrator cannot set points for an NFT, erase action records, import a replacement ledger or reset lifetime totals. `getLifetime` returns monotonically increasing earned totals/action counts and best streak; `actionRecord` returns each one-based receipt and the rule version used. Live bond decay remains separate. The dashboard displays a compact permanent record and recent receipts; policy changes never reprice old awards or clear rolling usage. Pet grace and cooldown deadlines and pending Rarity milestones retain their saved settings.
+
+The supplied deployment example proposes the existing treasury as admin, subject to review before signing. Rule changes require schedule then execution after 24 hours; authority transfers require nomination and delayed acceptance. The preparation tools only produce unsigned review files. Pet’s one-per-24h cooldown and cap are locked in. The Launch contract remains separate with +1 Brain and its 24-hour cooldown locked in. See the [care contract guide](../contracts/rare-pet/README.md) for interfaces, authority limits and review commands.
+
 ## Activation boundaries
 
-The wallet selector reads **real ownership**. The initial habitat is explicitly **Preview Mode**. Its state is namespaced `rarepet:preview:v2` and never becomes onchain state. Existing v1 saves are migrated once, preserving earned traits and assigning conservative cooldown timestamps where the old save did not track action times. Genesis samples have collection-prefixed keys to separate them from Generations with the same token number; existing Generations preview saves are preserved. Owned Friends do not receive simulated care points. The app never signs a message merely to imitate a blockchain write.
+The wallet selector reads **real ownership**. The initial habitat is explicitly **Preview Mode**. Its state is namespaced `rarepet:preview:v2` and never becomes onchain state. New preview actions track local lifetime totals; old saves without complete lifetime history are explicitly marked incomplete rather than inventing historical counts. Existing v1 saves are migrated once, preserving earned traits and assigning conservative cooldown timestamps where the old save did not track action times. Genesis samples have collection-prefixed keys to separate them from Generations with the same token number; existing Generations preview saves are preserved. Owned Friends do not receive simulated care points. The app never signs a message merely to imitate a blockchain write.
 
 To enable live Pet/Feed/Poop after deployment, build with the trusted deployment address:
 
@@ -69,9 +75,9 @@ To enable live Pet/Feed/Poop after deployment, build with the trusted deployment
 RAREPET_CONTRACT_ADDRESS=0xYourDeployedRarePetAddress npm run build
 ```
 
-The address is set at build time, not from a URL or local storage. Only public configuration is included. No private key or wallet authority belongs in this app. The contract has no RF fee, NFT custody, approvals, token minting, or transaction value; the owner's wallet pays network gas.
+The address is set at build time, not from a URL or local storage. Only public configuration is included. No private key or wallet authority belongs in this app. Use the new `RarePetCare` deployment, not the older fixed-rule `RarePet` prototype: reads fail closed if the required policy/ledger ABI is missing. The contract has no RF fee, NFT custody, approvals, token minting, or transaction value; the owner's wallet pays network gas.
 
-**Live Experience still needs a verified completion service and client claim integration.** The contract already accepts owner-bound EIP-712 completions with replay protection, but browser callbacks are not trusted evidence. The current live UI opens Rare Rush while explaining that XP receipts are not connected. The Solidity signer is immutable: deploying with a zero signer permanently disables Play rewards for that instance. Set the final completion signer before a deployment intended to support live XP; otherwise a new contract/migration will be necessary later. See the [care contract README](../contracts/rare-pet/README.md) for the signing format and trust model. Launch activation uses its own contract and configuration, described below.
+**Live Experience still needs a verified completion service and client claim integration.** The contract already accepts owner-bound EIP-712 completions with replay protection, but browser callbacks are not trusted evidence. The current live UI opens Rare Rush while explaining that XP receipts are not connected. Deploy RarePetCare with the zero signer while no completion service exists. A reviewed service can later activate its signer through delayed rules without replacing the ledger. Receipts bind the active rule version, so changing rules invalidates old outstanding receipts; globally consumed run IDs never reset. See the [care contract README](../contracts/rare-pet/README.md) for the signing format and trust model. Launch activation uses its own contract and configuration, described below.
 
 ## Validation
 

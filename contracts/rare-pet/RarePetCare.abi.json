@@ -1,0 +1,1642 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "admin_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "playSigner_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "CHAIN_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "DAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "GENERATIONS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "GENESIS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_COOLDOWN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_DAILY_LIMIT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_DECAY_INTERVAL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PET_GRACE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_POINTS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PLAY_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "RULE_DELAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "acceptAdmin",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "actionAvailability",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "action",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "remaining",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "readyAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "enabled",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "actionCount",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "actionRecord",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "sequence",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.CareRecord",
+        "components": [
+          {
+            "name": "action",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "timestamp",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "owner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "ruleVersion",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "points",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "secondaryPoints",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "admin",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "adminTransferReadyAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "cancelAdminTransfer",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "cancelRules",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "currentRuleVersion",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "currentRules",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.RuleSet",
+        "components": [
+          {
+            "name": "actions",
+            "type": "tuple[4]",
+            "internalType": "struct RarePetCare.ActionRule[4]",
+            "components": [
+              {
+                "name": "points",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "secondaryPoints",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "cooldown",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "dailyLimit",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "petGrace",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rarityEvery",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "playSigner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "executeRules",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "feed",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "feed",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expectedVersion",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getLifetime",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.Lifetime",
+        "components": [
+          {
+            "name": "kinship",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "strength",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "stamina",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "health",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "experience",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "rarity",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "bestStreak",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "actionCounts",
+            "type": "uint256[4]",
+            "internalType": "uint256[4]"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPet",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "care",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.Pet",
+        "components": [
+          {
+            "name": "kinship",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "strength",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "stamina",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "health",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "experience",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "brain",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "streak",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "rarity",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lastPetAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lastFeedAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lastPoopAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lastLaunchAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "playTimes",
+            "type": "uint256[]",
+            "internalType": "uint256[]"
+          },
+          {
+            "name": "playCount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "decayApplied",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "hasPet",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "hasFed",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "hasPooped",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "hasLaunched",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPetSchedule",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "schedule",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.BondSchedule",
+        "components": [
+          {
+            "name": "nextAvailableAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "graceDeadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "nextRarityAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "nextRarityPoints",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingAdmin",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingRules",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "ruleSet",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.RuleSet",
+        "components": [
+          {
+            "name": "actions",
+            "type": "tuple[4]",
+            "internalType": "struct RarePetCare.ActionRule[4]",
+            "components": [
+              {
+                "name": "points",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "secondaryPoints",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "cooldown",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "dailyLimit",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "petGrace",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rarityEvery",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "playSigner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      },
+      {
+        "name": "executeAfter",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "predecessorVersion",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pet",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "pet",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expectedVersion",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "play",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "runId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "deadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "signature",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "playDigest",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "runId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "deadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "ruleVersion",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "poop",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expectedVersion",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "poop",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "rules",
+    "inputs": [
+      {
+        "name": "version",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.RuleSet",
+        "components": [
+          {
+            "name": "actions",
+            "type": "tuple[4]",
+            "internalType": "struct RarePetCare.ActionRule[4]",
+            "components": [
+              {
+                "name": "points",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "secondaryPoints",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "cooldown",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "dailyLimit",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "petGrace",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rarityEvery",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "playSigner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "scheduleAdmin",
+    "inputs": [
+      {
+        "name": "nominee",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "scheduleRules",
+    "inputs": [
+      {
+        "name": "next",
+        "type": "tuple",
+        "internalType": "struct RarePetCare.RuleSet",
+        "components": [
+          {
+            "name": "actions",
+            "type": "tuple[4]",
+            "internalType": "struct RarePetCare.ActionRule[4]",
+            "components": [
+              {
+                "name": "points",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "secondaryPoints",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "cooldown",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "dailyLimit",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "petGrace",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rarityEvery",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "playSigner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "usedRuns",
+    "inputs": [
+      {
+        "name": "runId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "ActionRecorded",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sequence",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "action",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "ruleVersion",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "points",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "secondaryPoints",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "rarityPoints",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AdminTransferCancelled",
+    "inputs": [
+      {
+        "name": "nominee",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AdminTransferScheduled",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "nominee",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "readyAt",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AdminTransferred",
+    "inputs": [
+      {
+        "name": "previousAdmin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newAdmin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CaredFor",
+    "inputs": [
+      {
+        "name": "collection",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "action",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum RarePetCare.Action"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PlayClaimed",
+    "inputs": [
+      {
+        "name": "runId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "collection",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RulesActivated",
+    "inputs": [
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "ruleSet",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct RarePetCare.RuleSet",
+        "components": [
+          {
+            "name": "actions",
+            "type": "tuple[4]",
+            "internalType": "struct RarePetCare.ActionRule[4]",
+            "components": [
+              {
+                "name": "points",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "secondaryPoints",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "cooldown",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "dailyLimit",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "petGrace",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rarityEvery",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "playSigner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RulesCancelled",
+    "inputs": [
+      {
+        "name": "predecessorVersion",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RulesScheduled",
+    "inputs": [
+      {
+        "name": "predecessorVersion",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "executeAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "ruleSet",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct RarePetCare.RuleSet",
+        "components": [
+          {
+            "name": "actions",
+            "type": "tuple[4]",
+            "internalType": "struct RarePetCare.ActionRule[4]",
+            "components": [
+              {
+                "name": "points",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "secondaryPoints",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "cooldown",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "dailyLimit",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "petGrace",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "decayPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rarityEvery",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "rarityPoints",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "playSigner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "ActionDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ActionNotReady",
+    "inputs": [
+      {
+        "name": "readyAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "DelayNotElapsed",
+    "inputs": [
+      {
+        "name": "readyAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ExpiredPlay",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAction",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAdmin",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRecord",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRuleVersion",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRules",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidSignature",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPendingRules",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotAdmin",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PendingRulesExist",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PlayDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RunAlreadyUsed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnsupportedCollection",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "WrongChain",
+    "inputs": []
+  }
+]

@@ -7,8 +7,9 @@ solc_version = "0.8.30"
 auto_detect_solc = false
 optimizer = true
 optimizer_runs = 200
+via_ir = true
 evm_version = "cancun"
-bytecode_hash = "none"
+bytecode_hash = "ipfs"
 
 [fuzz]
 runs = 256

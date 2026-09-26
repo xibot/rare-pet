@@ -5,6 +5,7 @@ import {RarePet} from "../src/RarePet.sol";
 
 interface Vm {
     function warp(uint256) external;
+    function getBlockTimestamp() external view returns (uint256);
     function chainId(uint256) external;
     function etch(address, bytes calldata) external;
     function prank(address) external;
@@ -69,7 +70,7 @@ contract RarePetTest {
 
     function testPetCooldownDoesNotRefreshUntilExactly24Hours() public {
         _pet(genesis, 1);
-        uint256 first = block.timestamp;
+        uint256 first = vm.getBlockTimestamp();
         vm.warp(first + DAY - 1);
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(RarePet.ActionNotReady.selector, first + DAY));
@@ -115,7 +116,7 @@ contract RarePetTest {
 
     function testExactGraceDeadlinePreservesStreak() public {
         _pet(genesis, 1);
-        vm.warp(block.timestamp + DAY + game.PET_GRACE());
+        vm.warp(vm.getBlockTimestamp() + DAY + game.PET_GRACE());
         _eq(game.getPet(genesis, 1).streak, 1);
         _pet(genesis, 1);
         _eq(game.getPet(genesis, 1).streak, 2);
@@ -123,7 +124,7 @@ contract RarePetTest {
 
     function testOneSecondAfterGraceDecaysAndResetsBeforeNextPet() public {
         _pet(genesis, 1);
-        vm.warp(block.timestamp + DAY + game.PET_GRACE() + 1);
+        vm.warp(vm.getBlockTimestamp() + DAY + game.PET_GRACE() + 1);
         _eq(game.getPet(genesis, 1).kinship, 0);
         _eq(game.getPet(genesis, 1).streak, 0);
         _pet(genesis, 1);
@@ -133,7 +134,7 @@ contract RarePetTest {
 
     function testDecayPersistsOnceAcrossOtherActionsAndKeepsAccruing() public {
         _buildStreak(5);
-        uint256 deadline = block.timestamp + DAY + game.PET_GRACE();
+        uint256 deadline = vm.getBlockTimestamp() + DAY + game.PET_GRACE();
         vm.warp(deadline + 1);
         vm.prank(OWNER);
         game.feed(genesis, 1);
@@ -152,7 +153,7 @@ contract RarePetTest {
 
     function testLongAbsenceClampsKinshipToZero() public {
         _pet(genesis, 1);
-        vm.warp(block.timestamp + 36500 * DAY);
+        vm.warp(vm.getBlockTimestamp() + 36500 * DAY);
         _eq(game.getPet(genesis, 1).kinship, 0);
         vm.prank(OWNER);
         game.poop(genesis, 1);
@@ -164,7 +165,7 @@ contract RarePetTest {
     function testRarityEverySevenStreakDaysAndFallsWhenBroken() public {
         _buildStreak(14);
         _eq(game.getPet(genesis, 1).rarity, 2);
-        vm.warp(block.timestamp + DAY + game.PET_GRACE() + 1);
+        vm.warp(vm.getBlockTimestamp() + DAY + game.PET_GRACE() + 1);
         _eq(game.getPet(genesis, 1).rarity, 0);
         _pet(genesis, 1);
         _eq(game.getPet(genesis, 1).rarity, 0);
@@ -173,7 +174,7 @@ contract RarePetTest {
 
     function testFeedAndPoopHaveIndependentFourHourCooldowns() public {
         vm.warp(21 * DAY - 60);
-        uint256 first = block.timestamp;
+        uint256 first = vm.getBlockTimestamp();
         vm.prank(OWNER);
         game.feed(genesis, 1);
         vm.prank(OWNER);
@@ -224,7 +225,7 @@ contract RarePetTest {
         game.poop(genesis, 1);
         vm.prank(OWNER);
         vm.expectRevert(RarePet.NotOwner.selector);
-        game.play(genesis, 1, bytes32(0), block.timestamp, "");
+        game.play(genesis, 1, bytes32(0), vm.getBlockTimestamp(), "");
         vm.prank(BUYER);
         game.feed(genesis, 1);
         _eq(game.getPet(genesis, 1).kinship, 1);
@@ -234,14 +235,14 @@ contract RarePetTest {
     function testPlayNeedsAttestationAndRejectsMalformedSignature() public {
         vm.prank(OWNER);
         vm.expectRevert(RarePet.InvalidSignature.selector);
-        game.play(genesis, 1, bytes32(uint256(1)), block.timestamp, "");
+        game.play(genesis, 1, bytes32(uint256(1)), vm.getBlockTimestamp(), "");
         _eq(game.getPet(genesis, 1).experience, 0);
         _play(bytes32(uint256(1)));
         _eq(game.getPet(genesis, 1).experience, 10);
     }
 
     function testPlaySlotsExpireIndividuallyAfterRolling24Hours() public {
-        uint256 first = block.timestamp;
+        uint256 first = vm.getBlockTimestamp();
         _play(bytes32(uint256(1)));
         vm.warp(first + 3600);
         _play(bytes32(uint256(2)));
@@ -285,22 +286,22 @@ contract RarePetTest {
         bytes32 runId = bytes32(uint256(42));
         _play(runId);
         vm.warp(21 * DAY);
-        bytes memory sig = _signature(game, OWNER, generations, 1, runId, block.timestamp);
+        bytes memory sig = _signature(game, OWNER, generations, 1, runId, vm.getBlockTimestamp());
         vm.prank(OWNER);
         vm.expectRevert(RarePet.RunAlreadyUsed.selector);
-        game.play(generations, 1, runId, block.timestamp, sig);
-        sig = _signature(game, OWNER, genesis, 2, runId, block.timestamp);
+        game.play(generations, 1, runId, vm.getBlockTimestamp(), sig);
+        sig = _signature(game, OWNER, genesis, 2, runId, vm.getBlockTimestamp());
         vm.prank(OWNER);
         vm.expectRevert(RarePet.RunAlreadyUsed.selector);
-        game.play(genesis, 2, runId, block.timestamp, sig);
-        sig = _signature(game, OWNER, genesis, 1, runId, block.timestamp);
+        game.play(genesis, 2, runId, vm.getBlockTimestamp(), sig);
+        sig = _signature(game, OWNER, genesis, 1, runId, vm.getBlockTimestamp());
         vm.prank(OWNER);
         vm.expectRevert(RarePet.RunAlreadyUsed.selector);
-        game.play(genesis, 1, runId, block.timestamp, sig);
+        game.play(genesis, 1, runId, vm.getBlockTimestamp(), sig);
     }
 
     function testExpiredAttestationRejectedButExactDeadlineAllowed() public {
-        uint256 deadline = block.timestamp;
+        uint256 deadline = vm.getBlockTimestamp();
         bytes memory sig = _signature(game, OWNER, genesis, 1, bytes32(uint256(1)), deadline);
         vm.warp(deadline + 1);
         vm.prank(OWNER);
@@ -311,7 +312,7 @@ contract RarePetTest {
 
     function testSignatureBindsOwnerCollectionTokenRunAndDeadline() public {
         bytes32 runId = bytes32(uint256(7));
-        uint256 deadline = block.timestamp + DAY;
+        uint256 deadline = vm.getBlockTimestamp() + DAY;
         bytes memory sig = _signature(game, OWNER, genesis, 1, runId, deadline);
         vm.prank(OWNER);
         vm.expectRevert(RarePet.InvalidSignature.selector);
@@ -333,31 +334,31 @@ contract RarePetTest {
 
     function testSignatureBindsDeploymentAndChain() public {
         bytes32 runId = bytes32(uint256(1));
-        bytes memory sig = _signature(game, OWNER, genesis, 1, runId, block.timestamp);
+        bytes memory sig = _signature(game, OWNER, genesis, 1, runId, vm.getBlockTimestamp());
         RarePet other = new RarePet(vm.addr(SIGNER_KEY));
         vm.prank(OWNER);
         vm.expectRevert(RarePet.InvalidSignature.selector);
-        other.play(genesis, 1, runId, block.timestamp, sig);
+        other.play(genesis, 1, runId, vm.getBlockTimestamp(), sig);
         vm.chainId(4664);
         vm.prank(OWNER);
         vm.expectRevert(RarePet.InvalidSignature.selector);
-        game.play(genesis, 1, runId, block.timestamp, sig);
+        game.play(genesis, 1, runId, vm.getBlockTimestamp(), sig);
     }
 
     function testWrongSignerAndMalleableSignatureRejected() public {
         bytes32 runId = bytes32(uint256(1));
-        bytes32 digest = game.playDigest(OWNER, genesis, 1, runId, block.timestamp);
+        bytes32 digest = game.playDigest(OWNER, genesis, 1, runId, vm.getBlockTimestamp());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xBAD, digest);
         vm.prank(OWNER);
         vm.expectRevert(RarePet.InvalidSignature.selector);
-        game.play(genesis, 1, runId, block.timestamp, abi.encodePacked(r, s, v));
+        game.play(genesis, 1, runId, vm.getBlockTimestamp(), abi.encodePacked(r, s, v));
         (v, r, s) = vm.sign(SIGNER_KEY, digest);
         uint256 curveN = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141;
         bytes32 highS = bytes32(curveN - uint256(s));
         vm.prank(OWNER);
         vm.expectRevert(RarePet.InvalidSignature.selector);
         game.play(
-            genesis, 1, runId, block.timestamp, abi.encodePacked(r, highS, v == 27 ? uint8(28) : uint8(27))
+            genesis, 1, runId, vm.getBlockTimestamp(), abi.encodePacked(r, highS, v == 27 ? uint8(28) : uint8(27))
         );
     }
 
@@ -365,13 +366,13 @@ contract RarePetTest {
         RarePet disabled = new RarePet(address(0));
         vm.prank(OWNER);
         vm.expectRevert(RarePet.PlayDisabled.selector);
-        disabled.play(genesis, 1, bytes32(0), block.timestamp, "");
+        disabled.play(genesis, 1, bytes32(0), vm.getBlockTimestamp(), "");
         _eq(disabled.getPet(genesis, 1).brain, 0);
     }
 
     function testFuzzDecayDoesNotUnderflowOrApplyTwice(uint32 absence) public {
         _buildStreak(7);
-        uint256 lastPet = block.timestamp;
+        uint256 lastPet = vm.getBlockTimestamp();
         vm.warp(lastPet + uint256(absence));
         uint256 graceDeadline = DAY + game.PET_GRACE();
         uint256 missed = absence > graceDeadline ? (uint256(absence) - graceDeadline - 1) / DAY + 1 : 0;
@@ -391,15 +392,15 @@ contract RarePetTest {
 
     function _buildStreak(uint256 count) private {
         for (uint256 i; i < count; ++i) {
-            if (i > 0) vm.warp(block.timestamp + DAY);
+            if (i > 0) vm.warp(vm.getBlockTimestamp() + DAY);
             _pet(genesis, 1);
         }
     }
 
     function _play(bytes32 runId) private {
-        bytes memory sig = _signature(game, OWNER, genesis, 1, runId, block.timestamp);
+        bytes memory sig = _signature(game, OWNER, genesis, 1, runId, vm.getBlockTimestamp());
         vm.prank(OWNER);
-        game.play(genesis, 1, runId, block.timestamp, sig);
+        game.play(genesis, 1, runId, vm.getBlockTimestamp(), sig);
     }
 
     function _signature(

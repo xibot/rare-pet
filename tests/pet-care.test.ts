@@ -181,3 +181,69 @@ test('corrupt caches and unavailable storage cannot crash care or resurrect a re
     assert.doesNotThrow(() => savePreview('1', blankCare()));
   } finally { mock.restore(); }
 });
+
+test('lifetime earned rewards survive missed-care decay and never rewrite old action records', () => {
+  let state = buildStreak(7);
+  state = applyCare(state, 'feed', state.lastPetAt);
+  const oldRecords = structuredClone(state.history);
+  const deadline = state.lastPetAt + DAY + PET_GRACE;
+  const decayed = projectCare(state, deadline + DAY * 100);
+  assert.equal(decayed.kinship, 0);
+  assert.equal(decayed.rarity, 0);
+  assert.equal(decayed.lifetime!.kinship, 7);
+  assert.equal(decayed.lifetime!.rarity, 1);
+  assert.equal(decayed.lifetime!.strength, 1);
+  assert.equal(decayed.lifetime!.stamina, 5);
+  assert.deepEqual(decayed.history, oldRecords);
+  const restarted = applyCare(decayed, 'pet', deadline + DAY * 100);
+  assert.equal(restarted.lifetime!.kinship, 8);
+  assert.equal(restarted.lifetime!.rarity, 1);
+  assert.equal(restarted.lifetime!.bestStreak, 7);
+  assert.equal(restarted.lifetime!.actionCounts.pet, 8);
+  assert.equal(state.lifetime!.actionCounts.pet, 7, 'new rewards never mutate prior state');
+});
+
+test('old v2 preview saves retain traits without inventing lost lifetime totals', () => {
+  const mock = storage();
+  try {
+    const legacy = { ...blankCare(), kinship: 9, experience: 80, rarity: 2, lifetime: undefined, history: undefined, actionCount: undefined };
+    mock.values.set('rarepet:preview:v2:old', JSON.stringify(legacy));
+    const state = readPreview('old', START);
+    assert.equal(state.kinship, 9); assert.equal(state.experience, 80);
+    assert.equal(state.lifetime!.complete, false);
+    assert.equal(state.lifetime!.kinship, 0);
+    assert.equal(state.lifetime!.experience, 0);
+    const next = applyCare(state, 'play', START);
+    assert.equal(next.experience, 90);
+    assert.equal(next.lifetime!.experience, 10);
+    assert.equal(next.lifetime!.actionCounts.play, 1);
+    savePreview('old', next);
+    assert.deepEqual(readPreview('old', START), next);
+  } finally { mock.restore(); }
+});
+
+test('preview records preserve each reward and keep only recent history without truncating totals', () => {
+  let state = blankCare();
+  for (let i = 0; i < 20; i++) state = applyCare(state, 'feed', START + i * FOUR_HOURS);
+  assert.equal(state.history!.length, 12);
+  assert.equal(state.history![0].sequence, 9);
+  assert.equal(state.history!.at(-1)!.sequence, 20);
+  assert.equal(state.actionCount, 20);
+  assert.equal(state.lifetime!.strength, 20);
+  assert.equal(state.lifetime!.stamina, 100);
+  assert.equal(state.history!.at(-1)!.points, 1);
+  assert.equal(state.history!.at(-1)!.secondaryPoints, 5);
+});
+
+test('corrupt out-of-range preview history timestamps cannot crash the record display', () => {
+  const mock = storage();
+  try {
+    const state = applyCare(blankCare(), 'feed', START);
+    state.history![0].timestamp = Number.MAX_SAFE_INTEGER;
+    mock.values.set('rarepet:preview:v2:bad-date', JSON.stringify(state));
+    const next = readPreview('bad-date', START);
+    assert.equal(next.strength, 1);
+    assert.equal(next.lifetime!.complete, false);
+    assert.deepEqual(next.history, []);
+  } finally { mock.restore(); }
+});

@@ -9,6 +9,7 @@ import { getIsland, restoreIsland, type Island } from './islands';
 import { createPetWalletSession, listOwnedPets, verifyPet, PetDiscoveryError, type PetCollection, type PetIdentity } from './wallet';
 import { applyCare, blankCare, DAY, PET_GRACE, actionAvailability, duration, projectCare, readPreview, savePreview, type CareAction, type CareState } from './care';
 import { readCare, writeCare } from './chain';
+import { CARE_ACTIONS, DEFAULT_CARE_RULES, actionGain, actionSchedule, shortInterval } from './care-policy';
 import { careContract, launchpadContract } from './config';
 import { LaunchDialog } from './LaunchDialog';
 import { readRareLaunchConfig, type RareLaunchConfig } from './launch-doppler';
@@ -26,6 +27,7 @@ import './navigation.css';
 import './habitat.css';
 import './preview.css';
 import './action-timers.css';
+import './care-ledger.css';
 
 type Selected = { kind: 'preview'; index: number } | { kind: 'owned'; pet: PetIdentity; revision: number };
 const previewKey = (friend: PreviewFriend) => friend.collection === 'genesis' ? `genesis:${friend.tokenId}` : friend.tokenId;
@@ -104,10 +106,19 @@ function App() {
   const isGenesis = (art?.collection ?? live?.collection) === 'genesis';
   const label = art?.label ?? live?.label ?? 'Choose your Friend';
   const state = invalid ? blankCare() : preview ? projectCare(care, now) : care;
+  const activeRules = state.policy?.rules ?? DEFAULT_CARE_RULES;
+  const careKnown = preview || (!!state.policy && loadedCare);
+  const careActions = actions.map(action => action.id === 'launch' ? action : { ...action,
+    gain: careKnown ? actionGain(action.id, activeRules) : 'Onchain reward policy',
+    schedule: careKnown ? actionSchedule(action.id, activeRules) : 'AWAITING POLICY' });
   const hasPet = state.lastPetAt >= 0;
   const petReady = actionAvailability(state, 'pet', now);
   const nextPlayAt = Math.min(...state.playTimes.filter(time => time + DAY > now).map(time => time + DAY));
-  const due = hasPet ? Math.max(0, state.lastPetAt + DAY + PET_GRACE - now) : 0;
+  const graceDeadline = state.policy?.petSchedule.graceDeadline ?? (hasPet ? state.lastPetAt + DAY + PET_GRACE : 0);
+  const due = hasPet ? Math.max(0, graceDeadline - now) : 0;
+  const nextRarityAt = state.policy?.petSchedule.nextRarityAt || (Math.floor(state.streak / activeRules.rarityEvery) + 1) * activeRules.rarityEvery;
+  const nextRarityPoints = state.policy?.petSchedule.nextRarityAt ? state.policy.petSchedule.nextRarityPoints : activeRules.rarityPoints;
+  const rarityRemaining = Math.max(0, nextRarityAt - state.streak);
   const rushClient = useMemo(() => createGamePreview(parseChanceGame(rushDefinition), { friendId: BigInt(art?.tokenId ?? live?.tokenId ?? '1'), rfBalance: 100n * 10n ** 18n, stake: 1000n * 10n ** 18n }).client, [art?.tokenId, live?.tokenId, playing]);
 
   useEffect(() => {
@@ -129,16 +140,22 @@ function App() {
   }, [wallet.revision, wallet.status, wallet.account, refresh]);
   useEffect(() => {
     if (!live || !careContract || pending) { setLoadedCare(false); return; }
-    let active = true, fetching = false; setLoadedCare(false);
+    let active = true, fetching = false, deadlineTimer: number | undefined; setLoadedCare(false);
     const load = async () => {
       if (fetching) return;
       fetching = true;
-      try { const value = await readCare(live); if (active) { setCare(value); setLoadedCare(true); } }
+      try { const value = await readCare(live); if (active) {
+        setCare(value); setLoadedCare(true); clearTimeout(deadlineTimer);
+        const policy = value.policy!;
+        const deadlines = [...Object.values(policy.availability).filter(item => item.enabled && !item.remaining).map(item => item.readyAt), policy.petSchedule.graceDeadline + 1]
+          .filter(time => time > policy.blockTimestamp);
+        if (deadlines.length) deadlineTimer = window.setTimeout(() => void load(), Math.min(30_000, Math.max(1_000, (Math.min(...deadlines) - Date.now() / 1000) * 1000)));
+      } }
       catch (cause) { if (active) { setError(cause instanceof Error ? cause.message : 'Care could not be loaded. Please retry.'); setLoadedCare(false); } }
       finally { fetching = false; }
     };
     void load(); const timer = window.setInterval(load, 30_000);
-    return () => { active = false; clearInterval(timer); };
+    return () => { active = false; clearInterval(timer); clearTimeout(deadlineTimer); };
   }, [live, pending]);
 
   useEffect(() => {
@@ -210,14 +227,14 @@ function App() {
     if (!confirmation || !live || lock.current) return;
     const action = confirmation, task = ++op.current; lock.current = true; setConfirmation(null); setPending('Confirm in your wallet…'); setError('');
     try {
-      const result = await writeCare(session, live, action, wallet.revision, hash => { if (task === op.current) { setTx(hash); setPending('Waiting for onchain confirmation…'); } }, () => { if (task !== op.current) throw new Error('Your Friend selection changed. Choose an action again.'); });
+      const result = await writeCare(session, live, action, wallet.revision, hash => { if (task === op.current) { setTx(hash); setPending('Waiting for onchain confirmation…'); } }, () => { if (task !== op.current) throw new Error('Your Friend selection changed. Choose an action again.'); }, care.policy?.version);
       if (task !== op.current) return;
       setCare(result.care); setNotice(`${actions.find(a => a.id === action)!.name} confirmed onchain. Your Friend’s traits are updated.`); animate(action);
     } catch (cause) { if (task === op.current) setError(cause instanceof Error ? cause.message : 'The transaction could not complete.'); }
     finally { if (task === op.current) { setPending(''); lock.current = false; } }
   }
   async function beforeRun() {
-    if (!actionAvailability(careRef.current, 'play', Math.floor(Date.now() / 1000)).remaining) throw new Error('All three Play slots are used. A slot returns 24 hours after its completed run.');
+    if (preview && !actionAvailability(careRef.current, 'play', Math.floor(Date.now() / 1000)).remaining) throw new Error('All three preview Play slots are used. A slot returns 24 hours after its completed run.');
     if (preview) return;
     if (!live || !session.getSnapshot().account || session.getSnapshot().revision !== selected.revision) throw new Error('Select your Friend again.');
     const check = await verifyPet(live.collection, live.tokenId, live.owner);
@@ -232,22 +249,34 @@ function App() {
       <section className="pet-shell" aria-label="RarePet dashboard">
         <div className="shell-bar"><span><span className="tiny-cross">✦</span> {preview ? 'PREVIEW HABITAT' : 'YOUR FRIEND’S HABITAT'}</span><span className="mode-tag">{preview ? 'PREVIEW MODE' : careContract ? 'ONCHAIN CARE' : 'CARE COMING ONCHAIN'}</span></div>
         <div className="care-layout">
-          <aside className="care-actions"><div className="actions-title"><span>DAILY CARE</span><span>01—06</span></div>{actions.map(a => {
+          <aside className="care-actions"><div className="actions-title"><span>DAILY CARE</span><span>01—06</span></div>{careActions.map(a => {
             const availability = actionAvailability(state, a.id, now);
+            const practice = a.id === 'play' && !preview;
+            const paused = a.id !== 'launch' && !practice && !preview && careKnown && !state.policy!.availability[a.id].enabled;
             const unavailableCare = !preview && a.id !== 'play' && a.id !== 'launch' && (!careContract || !loadedCare);
-            const disabled = !!pending || invalid || (a.id !== 'launch' && !availability.remaining) || unavailableCare || (a.id === 'play' && !preview && !live?.rushEligible);
-            const timer = a.id === 'launch' ? preview || !launchpadContract ? 'PREVIEW' : launchConfig ? launchConfig.readyAt > BigInt(now) ? duration(Number(launchConfig.readyAt) - now) : 'READY' : 'OPEN LAUNCH' : invalid ? 'CHOOSE FRIEND' : !preview && a.id === 'play' && !careContract ? 'PRACTICE' : unavailableCare ? careContract ? 'LOADING' : 'COMING ONCHAIN' : availability.waitSeconds ? duration(availability.waitSeconds) : a.id === 'play' ? `${availability.remaining}/3 READY` : 'READY';
-            return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id === 'launch' ? setLaunching(true) : act(a.id)} aria-label={`${a.name}, ${a.gain}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && availability.remaining > 0 && availability.remaining < 3 && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
+            const disabled = !!pending || invalid || (a.id !== 'launch' && !practice && !availability.remaining) || unavailableCare || paused || (practice && !live?.rushEligible);
+            const timer = a.id === 'launch' ? preview || !launchpadContract ? 'PREVIEW' : launchConfig ? launchConfig.readyAt > BigInt(now) ? duration(Number(launchConfig.readyAt) - now) : 'READY' : 'OPEN LAUNCH' : invalid ? 'CHOOSE FRIEND' : practice ? 'PRACTICE · NO XP' : unavailableCare ? careContract ? 'LOADING' : 'COMING ONCHAIN' : paused ? 'PAUSED' : availability.waitSeconds ? duration(availability.waitSeconds) : !availability.remaining ? 'REFRESHING' : a.id === 'play' ? `${availability.remaining}/${activeRules.actions.play.dailyLimit} READY` : 'READY';
+            return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id === 'launch' ? setLaunching(true) : act(a.id)} aria-label={`${a.name}, ${practice ? 'practice only, no onchain XP' : a.gain}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{practice ? 'XP VERIFIER COMING SOON' : a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && !practice && availability.remaining > 0 && availability.remaining < activeRules.actions.play.dailyLimit && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
           })}<button className="care-action rare-wallet-action" disabled={!!pending || invalid} onClick={() => setRareWallet(true)} aria-label="Rare Wallet"><span className="action-icon"><Icon name="wallet"/></span><span className="action-text"><strong>Rare Wallet</strong><small>YOUR FRIEND’S ASSETS</small></span><span className="action-timing"><b>OPEN WALLET ↗</b></span></button><div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
           <div className={`habitat ${reaction ? `reaction-${reaction}` : ''}`}>
             <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'WALLET CHANGED'}</span><h2>{label}</h2></div><div className="friend-status-actions"><span className="friend-status">{due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span><button className="habitat-share-button" disabled={invalid || !!pending} onClick={() => setSharing(true)} aria-label="Share your Rare Friend on X">SHARE TO <XIcon/></button></div></div>
             <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
             <div className="habitat-customize"><IslandPicker value={island} onChange={chooseIsland}/>{isGenesis && <button className="change-body" onClick={changeBody} title="Try one of 36 Rare Rush bodies">CHANGE BODY <span aria-hidden="true">↻</span><small>36 RARE RUSH BODIES</small></button>}</div>
-            <div className="bond-status"><span className="bond-heart">♡</span><div><b>{due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. Then you have 24 hours to keep the streak.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{due > 0 ? duration(due) : 'PET ME'}</span></div>
+            <div className="bond-status"><span className="bond-heart">♡</span><div><b>{due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. This streak’s grace deadline: ${new Date(graceDeadline * 1000).toLocaleString()}.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{due > 0 ? duration(due) : 'PET ME'}</span></div>
           </div>
         </div>
         <div className="trait-grid" aria-label="Pet traits">{statNames.map((name, i) => <div className={`trait ${name === 'Rarity' ? 'rarity-trait' : ''}`} key={name}><span>{name}</span><strong>{invalid ? '—' : name === 'Brain' && !preview ? launchpadContract ? launchConfig?.brain.toLocaleString() ?? '—' : '0' : state[name.toLowerCase() as TraitKey].toLocaleString()}{name === 'Experience' && <small>XP</small>}</strong><div className="trait-meter" aria-hidden="true">{Array.from({ length: 10 }, (_, j) => <i key={j} className={j < ((name === 'Brain' && !preview ? Number(launchConfig?.brain ?? 0n) : state[name.toLowerCase() as TraitKey]) === 0 ? 0 : Math.max(1, Math.min(10, (name === 'Brain' && !preview ? Number(launchConfig?.brain ?? 0n) : state[name.toLowerCase() as TraitKey]) / (i === 3 ? 10 : 2)))) ? 'filled' : ''}/>)}</div></div>)}</div>
-        <div className="streak-row"><div className="streak-heading"><span>✦</span><div><strong>{state.streak} PET{state.streak !== 1 ? 'S' : ''} IN A ROW</strong><small>Keep the bond. Grow your rarity.</small></div></div><div className="streak-days" aria-label={`${state.streak % 7} of 7 pets toward the next rarity point`}>{Array.from({ length: 7 }, (_, i) => <span key={i} className={i < state.streak % 7 ? 'complete' : ''}>{i === 6 ? '✦' : String(i + 1).padStart(2, '0')}</span>)}</div><span className="streak-prize">7 PETS <b>+1 RARITY</b></span></div>
+        <div className="streak-row"><div className="streak-heading"><span>✦</span><div><strong>{state.streak} PET{state.streak !== 1 ? 'S' : ''} IN A ROW</strong><small>Keep the bond. Grow your rarity.</small></div></div><div className="streak-days" aria-label={`${rarityRemaining} more pets toward the next rarity reward`}>{Array.from({ length: Math.min(7, nextRarityAt) }, (_, i) => <span key={i} className={i < Math.max(0, Math.min(7, nextRarityAt) - rarityRemaining) ? 'complete' : ''}>{i === Math.min(7, nextRarityAt) - 1 ? '✦' : String(i + 1).padStart(2, '0')}</span>)}</div><span className="streak-prize">{careKnown ? `${rarityRemaining} MORE PET${rarityRemaining === 1 ? '' : 'S'}` : 'AWAITING POLICY'} <b>{careKnown ? `+${nextRarityPoints} RARITY` : '—'}</b></span></div>
+        <details className="care-ledger"><summary>{preview ? 'PREVIEW CARE HISTORY' : 'PERMANENT CARE RECORD'} <span>{preview ? 'THIS DEVICE' : state.policy ? `RULES V${state.policy.version}` : 'ONCHAIN'}</span></summary>
+          {careKnown && state.lifetime ? <div className="care-ledger-content"><p>{preview ? 'Practice totals saved on this device. Reset Preview clears them; they are not onchain.' : 'Lifetime earned points and action records stay with this Friend. Missed care can reduce current kinship and reset streak rarity; it never erases earned totals.'}</p>
+            {!state.lifetime.complete && <p className="care-ledger-note">Your older preview traits are preserved. Totals below track new actions since this history feature was added; older lifetime totals are unknown.</p>}
+            <dl className="care-ledger-totals">{(['kinship', 'strength', 'stamina', 'health', 'experience', 'rarity', 'bestStreak'] as const).map(key => <div key={key}><dt>{key === 'bestStreak' ? 'BEST STREAK' : key.toUpperCase()}</dt><dd>{state.lifetime![key].toLocaleString()}</dd></div>)}</dl>
+            <p className="care-ledger-counts">{CARE_ACTIONS.map(action => `${action.toUpperCase()} ${state.lifetime!.actionCounts[action].toLocaleString()}`).join(' · ')}</p>
+            <p className="care-ledger-note">Launch stays fixed: +1 Brain per confirmed launch, once every 24 hours, in the separate launchpad ledger.</p>
+            {!!state.history?.length ? <ol className="care-ledger-history">{[...state.history].reverse().map(record => <li key={record.sequence}><b>{record.action.toUpperCase()}</b><span>{actionGain(record.action, { ...activeRules, actions: { ...activeRules.actions, [record.action]: { ...activeRules.actions[record.action], points: record.points, secondaryPoints: record.secondaryPoints } } })}{record.rarityPoints ? ` · +${record.rarityPoints} rarity` : ''}</span><time dateTime={new Date(record.timestamp * 1000).toISOString()}>{new Date(record.timestamp * 1000).toLocaleString()}</time><small>{preview ? 'PREVIEW' : `RULES V${record.ruleVersion}`}</small></li>)}</ol> : <p>No care actions recorded yet.</p>}
+            {!preview && state.policy && <a href={`https://robinhoodchain.blockscout.com/address/${careContract}?tab=read_contract`} target="_blank" rel="noreferrer">READ THE FULL ONCHAIN RECORD ↗</a>}
+          </div> : <div className="care-ledger-content"><p>{careContract ? 'Select a Friend and load its verified care record.' : 'Permanent care records will begin after the care contract is deployed. Preview totals stay on this device.'}</p></div>}
+        </details>
       </section>
       <div className="activity-line"><span className="activity-label">{pending ? 'PENDING' : error ? 'NOTICE' : 'PET LOG'}</span><p role={error ? 'alert' : 'status'}>{pending || error || (invalid ? 'Your wallet changed. Choose your Friend again.' : notice)}</p><a className="activity-docs" href="/docs/">DOCS ↗</a></div>
       {tx && <p className="transaction-link"><a href={`https://robinhoodchain.blockscout.com/tx/${tx}`} target="_blank" rel="noreferrer">View care transaction ↗</a></p>}
@@ -281,8 +310,8 @@ function App() {
         {error && <p className="inline-error" role="alert">{error}</p>}
       </>}
     </div></Dialog>}
-    {rules && <Dialog title="A little care. Every day." close={() => setRules(false)}><div className="rules-content"><p>Every Genesis and Generations Rare Friend can have a RarePet life.</p>{actions.map(a => <div className="rule" key={a.id}><Icon name={a.id}/><div><b>{a.name}</b><p>{a.hint} {a.gain}. {a.schedule}.</p></div></div>)}<p><b>Your daily bond.</b> Pet once every 24 hours. When it unlocks, you have a 24-hour grace window to pet again and keep the streak. Missing that window breaks the streak and starts kinship decay.</p><p><b>Stay rare.</b> Every 7 pets in an unbroken streak adds 1 rarity. Breaking the streak resets this streak-based rarity. Feed and Poop each unlock 4 hours after use. Play has 3 slots; each slot returns 24 hours after a completed run.</p><p><b>Play to learn.</b> Preview XP arrives after a finished Rare Rush run, up to 3 in any 24 hours. Live XP requires a trusted completion receipt; that service is not connected yet. Launch opens Rare Launchpad. Preview the token form now; confirmed launches earn +1 Brain when the launch contract is enabled.</p><p><a href="/docs/">READ THE FULL DOCS ↗</a></p><p className="inline-note">RarePet adds care stats without changing your original NFT traits. Live care requires the new contract to be deployed. Preview care is stored on this device and has no onchain value.</p></div></Dialog>}
-    {confirmation && live && <Dialog title={`Confirm ${confirmation}`} close={() => setConfirmation(null)}><div className="rules-content"><p>{actions.find(a => a.id === confirmation)!.gain} for <b>{live.label}</b>.</p><p>This sends a transaction on Robinhood Chain. Your wallet shows the network fee before you approve. No token approval or NFT transfer is needed.</p><p className="contract-address">Care contract: {careContract}</p><button className="solid-button" onClick={() => void confirm()}>CONTINUE TO WALLET</button></div></Dialog>}
+    {rules && <Dialog title="A little care. Every day." close={() => setRules(false)}><div className="rules-content"><p>Every Genesis and Generations Rare Friend can have a RarePet life.</p>{careActions.map(a => <div className="rule" key={a.id}><Icon name={a.id}/><div><b>{a.name}</b><p>{a.hint} {a.gain}. {a.schedule}.</p></div></div>)}<p><b>Your bond.</b> {careKnown ? `New pets use a ${shortInterval(activeRules.actions.pet.cooldown)} cooldown and ${shortInterval(activeRules.petGrace)} grace window. Existing pet deadlines keep the rules they started with.` : 'Your Friend’s active onchain rules load with its care record.'} Missing the grace window breaks the streak and starts kinship decay.</p><p><b>Stay rare.</b> {careKnown ? `New milestones award ${activeRules.rarityPoints} rarity every ${activeRules.rarityEvery} consecutive pets. Your next milestone needs ${rarityRemaining} more pets and awards ${nextRarityPoints} rarity.` : 'Current rules determine the next rarity milestone.'} Breaking the streak resets current streak rarity. Lifetime earned rarity remains recorded.</p><p><b>Play to learn.</b> Preview XP arrives after a finished Rare Rush run, up to 3 in any 24 hours. Wallet mode is practice only until the trusted completion service is connected. Launch stays fixed at +1 Brain per confirmed launch, once every 24 hours, in its own ledger.</p><p><b>Rules can evolve. History stays.</b> Reward points can change for future actions. Feed, Play and Poop timers and rolling caps can evolve; Pet stays once every 24 hours. Every confirmed action records the rules and rewards it used.</p><p><a href="/docs/">READ THE FULL DOCS ↗</a></p><p className="inline-note">RarePet adds care stats without changing your original NFT traits. Live care requires the new contract to be deployed. Preview care is stored on this device and has no onchain value.</p></div></Dialog>}
+    {confirmation && live && <Dialog title={`Confirm ${confirmation}`} close={() => setConfirmation(null)}><div className="rules-content"><p>{careActions.find(a => a.id === confirmation)!.gain} for <b>{live.label}</b>.</p><p>Rules V{state.policy?.version ?? '—'} apply to the confirmed action. Earned points and its rule version remain in your Friend’s permanent history.</p><p>This sends a transaction on Robinhood Chain. Your wallet shows the network fee before you approve. No token approval or NFT transfer is needed.</p><p className="contract-address">Care contract: {careContract}</p><button className="solid-button" onClick={() => void confirm()}>CONTINUE TO WALLET</button></div></Dialog>}
     {playing && !invalid && <PlayDialog title={`Rare Rush / ${label}`} close={closePlay} summary={preview ? '+10 preview XP per completed run · 3 runs / 24h' : 'Practice with your Friend · onchain XP coming soon'}>{isGenesis ? <GenesisRush enableRunSaving={false} friendId={BigInt((art ?? live)!.tokenId)} portraitUrl={(art ?? live)!.image} bodyId={bodyId} paused={false} beforeRun={beforeRun} onRunComplete={() => { if (preview) reward('play'); }} onNavigate={closePlay}/> : <RareRush enableRunSaving={false} friendId={BigInt(art?.tokenId ?? live!.tokenId)} client={rushClient} paused={false} beforeRun={beforeRun} previewSprites={art?.collection === 'generations' ? art.sprites : undefined} onRunComplete={() => { if (preview) reward('play'); }} onNavigate={closePlay}/>}</PlayDialog>}
   </div>;
 }

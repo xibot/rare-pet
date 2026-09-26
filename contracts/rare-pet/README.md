@@ -1,71 +1,85 @@
-# RarePet care contract
+# RarePet permanent care ledger
 
-**Implemented and locally tested; not deployed or audited.** This is a separate NFT-bound care ledger. It does not change Rare Friends metadata, take custody, charge RF, mint tokens, or accept payments. Transaction gas is paid by the caller. No deployment or wallet transaction is performed by the tests.
+**Built for review; not deployed or independently audited.** `RarePetCare` adds configurable care rules and permanent NFT-bound records. No deployment, care action or admin transaction has been sent by this build. The earlier fixed-rule `RarePet.sol` prototype remains for reference and regression tests; the client targets the new `RarePetCare` ABI only.
 
-The only eligible collections are the [published Rare Friends contracts](https://rarefriends.com/docs/contracts) on Robinhood Chain **4663**:
+Care belongs to `(collection, tokenId)` on Robinhood Chain **4663**. Every write checks the current NFT owner. Records, points, cooldowns and daily usage follow the NFT when it transfers. The only collections are Genesis `0x116EaA62241751E0c98dA43d458600c6C17cD361` and Generations `0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D`.
 
-| Collection | Contract |
-| --- | --- |
-| Genesis | `0x116EaA62241751E0c98dA43d458600c6C17cD361` |
-| Generations | `0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D` |
+## What stays permanent
 
-Addresses were checked against the official documentation and the project's pinned FriendSDK / Genesis identity code on September 25, 2026. The contract verifies current `ownerOf` on **every write**. Approved operators, delegates, and previous owners cannot act as the owner. Care belongs to `(collection, tokenId)` and follows the NFT when transferred, including active cooldowns and play slots. Reads return a projected ledger, so an empty `getPet` response is not proof that a token exists or is owned.
+The contract has immutable code and storage ownership. It has no proxy, delegatecall, generic executor, arbitrary writer, import, reset, point setter, withdrawal or upgrade function. It does not hold tokens, change original NFT metadata or take custody of NFTs. The owner pays transaction gas.
 
-## Rules implemented
+- **Lifetime earned traits:** Kinship, Strength, Stamina, Health, Experience and Rarity only accumulate through accepted actions.
+- **Lifetime action counts:** Pet, Feed, Play and Poop counts never reset. Best streak never decreases.
+- **Action receipts:** Each NFT has a sequential, append-only record containing its owner, action, timestamp, rule version and exact awarded points, secondary points and Rarity points.
+- **Rule history:** Activated rules remain available by version. Every receipt identifies the version applied; future point changes do not reprice past rewards.
 
-These point amounts are explicit initial product rules; they do not affect original NFT rarity or metadata.
+Current Kinship, streak and streak-based Rarity remain separate live care state. Missing the Pet grace window can reduce those live values without deleting lifetime achievements. Projected decay is persisted on the next accepted action and cannot be charged twice. Future gamification can read permanent totals and action records directly, or index their public events. This contract does not distribute prizes or promise future rewards.
 
-| Action | Availability | Change |
-| --- | --- | --- |
-| Pet | Once every 24 hours | +1 Kinship and +1 streak step |
-| Feed | Once every 4 hours | +1 Strength, +5 Stamina per meal |
-| Play | 3 accepted completion claims per rolling 24 hours | +10 Experience per verified run |
-| Poop | Once every 4 hours | +1 Health per action |
-| Launch | Unavailable; future 24-hour cooldown | Brain stays zero; no launch function |
+Changing **rules** is supported. Replacing arbitrary Solidity code is deliberately outside this contract's authority: an unrestricted implementation upgrade could defeat the guarantee that history cannot be rewritten. A future game can read this same permanent ledger without migrating or resetting it.
 
-Every action has its own clock. Pet, Feed and Poop reject early attempts without refreshing any timer. UTC midnight does not reset availability. Each Play claim consumes one slot until exactly 24 hours after that claim; staggered claims release staggered slots.
+## Initial action rules
 
-First pet starts streak 1. A pet unlocks 24 hours after the previous pet, then has a **24-hour grace window**. The exact 48-hour deadline is still on time. One second later, the streak and Rarity reset, and Kinship loses one point. Each further 24 hours overdue loses one additional Kinship point, clamped to zero. Petting after a miss starts a new streak at 1. Rarity equals `floor(current streak / 7)` and resets when the streak breaks. Feeding, playing and pooping never refresh this bond deadline.
+| Action | Initial reward | Cooldown | Maximum accepted actions per rolling 24h |
+| --- | --- | --- | --- |
+| Pet | +1 Kinship (reward adjustable) | 24h; locked in | 1; locked in |
+| Feed | +1 Strength, +5 Stamina | 4h | 6 |
+| Play | +10 Experience per valid completion receipt | 0h between receipts | 3 |
+| Poop | +1 Health | 4h | 6 |
+| Launch — separate deployed router | +1 Brain | 24h | 1; locked in |
 
-`getPet` immediately projects overdue decay and expired play slots from chain time. The next successful action persists that projection without charging decay twice. No keeper or scheduled transaction is required. Explicit action flags distinguish a valid timestamp zero from an unused action.
+Pet’s 24-hour cooldown and limit of one per rolling 24 hours are enforced as constants of the rule validation and cannot be changed by an administrator. The Feed/Poop caps reflect the existing once-every-four-hours rule. UTC midnight does not reset usage. Each accepted action occupies its own rolling 24-hour slot. Changing rules does not clear recent action history. A lower cap waits for enough prior actions to expire; a higher cap grants only additional slots, subject to the existing cooldown.
 
-## Preview cache upgrade
+Each successful action saves its next unlock using the rules applied to that action. A later cooldown change affects the next accepted action, preserving an already-running timer. Pet saves its own grace, decay interval and decay points, so a later edit cannot shorten an existing bond deadline. A pending Rarity milestone keeps its saved target and award; subsequent milestones use new settings.
 
-The client stores previews under `rarepet:preview:v2:<friend-key>`. Existing v1 points and streaks migrate without awarding new points, and the old Genesis/Generations key separation remains intact. The old cache did not record meal, poop or run timestamps: migration conservatively uses the latest possible time within each recorded UTC day (or the migration time for the current day). Previous-day activity may therefore temporarily occupy cooldowns or play slots; those expire normally. Migration is persisted once, so repeated page loads do not restart the clocks. A v2 reset takes precedence over any remaining v1 record. Previously applied decay is retained to avoid charging it again.
+Initially, the first Pet starts streak 1. Pet unlocks after 24h and has another 24h of grace. The exact 48h deadline is still on time. One second later, current streak and Rarity reset and one current Kinship is lost; each further overdue 24h loses another, down to zero. Every seven uninterrupted Pets awards one Rarity. Lifetime earned points remain intact.
 
-## Client API
+## Community adjustments and authority
 
-- `pet(address collection, uint256 tokenId)`
-- `feed(address collection, uint256 tokenId)`
-- `poop(address collection, uint256 tokenId)`
-- `play(address collection, uint256 tokenId, bytes32 runId, uint256 deadline, bytes signature)`
-- `getPet(address collection, uint256 tokenId)` returns one tuple: eight `uint256` traits (`kinship, strength, stamina, health, experience, brain, streak, rarity`), four `uint256` timestamps (`lastPetAt, lastFeedAt, lastPoopAt, lastLaunchAt`), `uint256[3] playTimes`, `uint256 playCount`, `uint256 decayApplied`, then four booleans (`hasPet, hasFed, hasPooped, hasLaunched`). Only the first `playCount` slots are active; timestamp zero can be a valid slot. The client normalizes unused action timestamps to `-1` and retains only active play timestamps.
-- `usedRuns(bytes32 runId)` returns whether a run was claimed anywhere in this contract.
-- `playSigner()` returns the immutable completion authority; zero means rewards are disabled.
+The constructor accepts a nonzero initial admin. The supplied example uses the existing RarePet treasury `0xCa88efc94b567A5185FEA63599aD895c3e514FBc`; review this authority before deployment. It can propose the complete rule set: action points, Feed's secondary Stamina points, Feed/Play/Poop cooldowns and rolling daily caps, enabled flags, Pet grace/decay, future Rarity milestones and the Play receipt signer.
 
-The compiler-generated ABI is [`RarePet.abi.json`](RarePet.abi.json). `CaredFor` records the action timestamp and identifies action values `0 = pet`, `1 = feed`, `2 = play`, `3 = poop`. Confirm a successful receipt from the configured chain and contract before presenting an action as saved; then reread `getPet`. All methods are nonpayable; do not add transaction value or token approvals.
+A proposal waits **24 hours** onchain before anyone can execute the exact stored version. Proposals can be cancelled. Admin transfer also requires nomination, a 24-hour delay and acceptance by the nominee. Acceptance clears any unexecuted rule proposal. The delay is fixed and cannot be reduced.
 
-## Rare Rush completion trust boundary
+Config bounds limit daily caps to 32 actions and points to 1,000,000 per award. Cooldowns and grace are bounded to 30 days. Invalid combinations revert onchain. Administrators can influence future earning rates or disable actions, but cannot award an arbitrary NFT points or edit its previous records. Disabling Pet may prevent continuing a live streak even though the saved bond deadline itself is unchanged; the permanent earned record is preserved. Review these effects during the public delay. Public logs expose rule proposals, cancellations, activations and authority changes.
 
-Opening Rare Rush is not proof of playing. An actual verified-run service is **not implemented** here. Until one exists, use `address(0)` as the constructor's `playSigner`, and keep the client reward claim unavailable. A nonzero signer is an immutable trusted EOA: compromising it allows fabricated play completions, bounded by per-NFT quotas. There is no signer rotation, admin, pause, proxy, or upgrade mechanism.
+Launch is intentionally excluded from these editable rules. Pet is also fixed at one action every 24 hours. The already deployed Doppler V1 router keeps **+1 Brain and its 24-hour cooldown locked in**, as confirmed by the product owner. It remains the authoritative Brain ledger; no care transaction duplicates or imports its rewards.
 
-For an integrated verifier, use EIP-712 domain `{name: "RarePet", version: "1", chainId: 4663, verifyingContract: deployedAddress}` and primary type:
+## Play receipts
 
-```text
-Play(address owner,address collection,uint256 tokenId,bytes32 runId,uint256 deadline)
-```
+Live Play rewards remain disabled until a genuine run-completion service is connected. Use the zero address as the initial signer. A later reviewed signer can be activated through the rule delay, without redeploying the ledger.
 
-The service must validate completed gameplay, the selected NFT, and its current owner; assign a globally unique `runId`; and issue a short-lived deadline. The contract's `playDigest(...)` exposes the exact digest. Supply a 65-byte `r || s || v` signature with canonical low `s` and `v` 27 or 28. The owner submits the transaction. Claims bind the owner, collection, token ID, run ID, deadline, chain, and deployed contract. Every accepted `runId` is consumed globally, so transferring the NFT, switching collections, or waiting for a new day cannot replay it. The three-slot rolling window applies to **accepted claim time**. The unchanged receipt interface does not include a signed completion timestamp. The attestor is responsible for completion-time and run-freshness policy; the wallet-free preview uses the actual local run completion timestamp.
+The signature binds the current owner, collection, token ID, unique run ID, deadline, chain, contract and active rule version. Changing rules invalidates outstanding receipts from earlier versions. Used run IDs remain consumed across policy changes and ownership transfers. The trusted signer can attest fabricated runs if compromised, but cannot bypass owner authorization, global run replay protection or per-NFT action limits.
 
-## Local validation
+See [PLAY_VERIFIER.md](PLAY_VERIFIER.md) for the implementation boundary, reusable engine code and service acceptance requirements. A browser `onRunComplete` callback is never accepted as onchain evidence.
 
-Because the signer is immutable, deploying with `address(0)` permanently disables live XP on that instance. Establish the completion service and its final signer before deploying an instance intended to support Play rewards; adding XP later to a zero-signer instance requires a new deployment and a separate care-state migration design.
+## Build, inspect and review
 
-Requires Foundry and Solidity 0.8.30; there are no Solidity library dependencies.
+Requires Foundry and Solidity `0.8.30+commit.73712a01`, optimizer 200, via-IR, Cancun and IPFS metadata hashing. There are no Solidity library dependencies. The compiled ABI is `RarePetCare.abi.json`.
 
 ```sh
-cd contracts/rare-pet
-forge test -vv
+forge test --root contracts/rare-pet -vv
+node --test contracts/rare-pet/test/deployment-policy.test.mjs
+npm run typecheck
+npm run test:pet
 ```
 
-Coverage includes exact cooldown boundaries, the inclusive 48-hour grace deadline, epoch-zero timestamps, staggered and simultaneous rolling play slots, seven-step Rarity milestones, transfer ownership, collection/token isolation, persisted decay, disabled Play rewards, EIP-712 field/domain binding, invalid/expired/malleable signatures, and replay prevention. Fuzz tests check decay underflow and duplicate charging over 256 cases. Tests use local mocks at the canonical collection addresses; no live network is contacted. A live-chain integration test and independent contract review remain outstanding.
+Read methods include `currentRuleVersion`, `currentRules`, `rules(version)`, `pendingRules`, `getPet`, `getPetSchedule`, `actionAvailability`, `getLifetime`, `actionCount` and `actionRecord`. The client uses `pet`, `feed` and `poop` with `(collection, tokenId, expectedVersion)`, pinning the rule version reviewed before signing. These overloads revert if another rule version activates before execution. The two-argument `(collection, tokenId)` overloads remain available and deliberately use whichever rules are active when executed. `play` additionally needs its signed receipt, which binds the active rule version. `CaredFor` preserves the action event used by wallet receipt checks; detailed records carry the immutable award history.
+
+An unsigned deployment review can be generated with the example copied to an explicitly reviewed configuration:
+
+```sh
+node contracts/rare-pet/script/prepare-deployment.mjs \
+  contracts/rare-pet/deployment-config.example.json \
+  artifacts/rarepet-care-deployment-review.json
+```
+
+The tool checks chain/collection code, current deployer nonce, exact source/compiler settings, constructor execution and gas. It writes the expected runtime hash and unsigned zero-value transaction, never loads a key or broadcasts, and refuses to overwrite a review. Do not infer deployment approval from an example configuration. After wallet deployment, verify the receipt/runtime/admin/rules and explorer source before configuring `RAREPET_CONTRACT_ADDRESS`.
+
+The rule helper creates a reviewable, simulated, unsigned admin transaction:
+
+```sh
+node contracts/rare-pet/script/prepare-rule-change.mjs \
+  <deployed-care-address> <admin-address> schedule \
+  artifacts/rarepet-care-rule-review.json contracts/rare-pet/rules.example.json
+```
+
+Other modes are `cancel`, `execute`, `nominate-admin`, `cancel-admin` and `accept-admin`. Execution is a separate transaction after the onchain delay; the script cannot bypass it. Review all four action rules together, including the signer and Rarity/decay fields, before signing a proposal.
