@@ -1330,11 +1330,19 @@
     "selfLaunches": 0
   },
   "sourceVerification": {
-    "status": "pending \u2014 explorer API returned a non-JSON Cloudflare challenge; no verification badge claimed",
+    "status": "verified",
     "explorer": "https://robinhoodchain.blockscout.com/address/0xc6a4b2D4D369747B26e4Ff805a79A57da2505dC3?tab=contract",
     "independentSourceAndRuntimeMatch": true,
     "publicSource": "https://github.com/xibot/rare-pet/blob/main/contracts/rare-launchpad/src/RarePetLaunchRouter.sol",
-    "publicSourceSha256": "c2b3498c9b8fd7ffa8919834e9a4a0a561889191785713bbde9a7c25e67bd652"
+    "publicSourceSha256": "c2b3498c9b8fd7ffa8919834e9a4a0a561889191785713bbde9a7c25e67bd652",
+    "matchType": "partial",
+    "explorerLabel": "Contract source code verified (partial match)",
+    "method": "Solidity (Standard JSON input)",
+    "license": "MIT",
+    "confirmedAt": "2026-09-26T23:15:31.921Z",
+    "explorerDisplayedVerifiedAt": "Sep 26, 2026 18:14:12",
+    "standardInputSha256": "e0b747a82a324d74605b4bafeb00a693d94e7a8b31b73b73c37e7f15603c8d9b",
+    "confirmation": "Observed on Blockscout contract Code tab after browser form submission; source code, compiler settings, constructor arguments and ABI published. No onchain transaction sent."
   },
   "scope": "Read-only post-deployment verification. No launch or fee-claim transaction was sent. Verification is not an audit of local or upstream contracts.",
   "activationChecks": {
