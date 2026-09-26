@@ -66,7 +66,7 @@ export function ShareDialog({ friend, island, bodyId, initialAction, initialVari
       <div className="share-image-meta"><span>{size} × {size} {format.toUpperCase()}{format === 'gif' ? ' · 2.4s LOOP' : ''}</span><button onClick={() => setVariant(value => (value + 1) % 3)}>ANOTHER POSE <span aria-hidden="true">↻</span></button></div>
       {error && <div className="share-error" role="alert"><p>{error}</p><button onClick={() => setRetry(value => value + 1)}>TRY AGAIN</button></div>}
       <label className="share-caption">YOUR POST<textarea value={post} onChange={event => setPost(event.target.value)} maxLength={230} rows={3}/></label>
-      <div className="share-buttons"><button className="share-download" disabled={!ready} onClick={download}>DOWNLOAD {format.toUpperCase()} <span aria-hidden="true">↓</span></button>{ready ? <a href={intent} target="_blank" rel="noopener noreferrer" className="share-x" onClick={download}><XIcon/> DOWNLOAD + SHARE ON X</a> : <button className="share-x" disabled><XIcon/> DOWNLOAD + SHARE ON X</button>}</div>
+      <div className="share-buttons"><button className="share-download" disabled={!ready} onClick={download}>DOWNLOAD {format.toUpperCase()} <span aria-hidden="true">↓</span></button>{ready ? <a href={intent} target="_blank" rel="noopener noreferrer" className="share-x" aria-label="DOWNLOAD + SHARE ON X" onClick={download}><span>DOWNLOAD + SHARE ON</span><XIcon/></a> : <button className="share-x" aria-label="DOWNLOAD + SHARE ON X" disabled><span>DOWNLOAD + SHARE ON</span><XIcon/></button>}</div>
       <p className="share-hint" role="status">{status || 'Pick a moment. Download the image, then attach it to your post on X.'}</p>
     </div>
   </dialog>;
