@@ -211,6 +211,41 @@ contract RarePetLaunchRouterTest {
         MockCollection(GENERATIONS).set(42, OWNER, address(second));
     }
 
+    function testFullIssuerCatalogStoresEveryQuoteAndRejectsExtras() public {
+        address[] memory quotes = new address[](196);
+        for (uint256 i; i < quotes.length; ++i) {
+            quotes[i] = address(uint160(0x10000 + i));
+            vm.etch(quotes[i], hex"00");
+        }
+        RarePetLaunchRouter catalogRouter = new RarePetLaunchRouter(TREASURY, SUPPLY, 8500, quotes);
+        address[] memory stored = catalogRouter.quoteTokens();
+        require(stored.length == quotes.length, "catalog truncated");
+        for (uint256 i; i < quotes.length; ++i) {
+            require(stored[i] == quotes[i] && catalogRouter.allowedQuote(quotes[i]), "quote missing");
+        }
+        require(!catalogRouter.allowedQuote(QUOTE), "unlisted quote allowed");
+        RarePetLaunchRouter.LaunchRequest memory request = _request();
+        request.quote = quotes[quotes.length - 1];
+        vm.prank(OWNER);
+        require(catalogRouter.launchAsSelf(request) != address(0), "last quote cannot launch");
+        request.quote = QUOTE;
+        vm.prank(OWNER);
+        vm.expectRevert(RarePetLaunchRouter.InvalidLaunch.selector);
+        catalogRouter.launchAsSelf(request);
+    }
+
+    function testQuoteCatalogBoundsAndDuplicatesFailClosed() public {
+        address[] memory tooMany = new address[](257);
+        vm.expectRevert(RarePetLaunchRouter.InvalidConfiguration.selector);
+        new RarePetLaunchRouter(TREASURY, SUPPLY, 8500, tooMany);
+        address[] memory duplicate = new address[](196);
+        for (uint256 i; i < duplicate.length; ++i) {
+            duplicate[i] = QUOTE;
+        }
+        vm.expectRevert(RarePetLaunchRouter.InvalidConfiguration.selector);
+        new RarePetLaunchRouter(TREASURY, SUPPLY, 8500, duplicate);
+    }
+
     function _quotes() private pure returns (address[] memory quotes) {
         quotes = new address[](1);
         quotes[0] = QUOTE;

@@ -3,7 +3,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { createPublicClient, encodeDeployData, formatEther, getAddress, http, isAddress, keccak256, parseAbi, zeroAddress } from 'viem';
+import { createPublicClient, encodeDeployData, formatEther, getAddress, http, isAddress, keccak256, parseAbi, getContractAddress, zeroAddress } from 'viem';
+
+import { readDeploymentCatalog, rehearsalMatches } from './deployment-policy.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
@@ -14,13 +16,9 @@ const MODULES = Object.freeze([
   ['initializer', '0x4e3468951d49f2eea976ed0d6e75ffcb44a9a544', 3],
   ['migrator', '0xba2f330edb16cd8056f5988d8ce19bbc63475a0e', 4],
 ]);
-export const QUOTES = Object.freeze([
-  ['WETH', '0x0bd7d308f8e1639fab988df18a8011f41eacad73'],
-  ['NVDA', '0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec'],
-  ['AAPL', '0xaf3d76f1834a1d425780943c99ea8a608f8a93f9'],
-  ['TSLA', '0x322f0929c4625ed5bad873c95208d54e1c003b2d'],
-  ['SPY', '0x117cc2133c37b721f49de2a7a74833232b3b4c0c'],
-].map(([symbol, address]) => Object.freeze({ symbol, address: getAddress(address) })));
+const catalogSnapshot = readDeploymentCatalog();
+export const QUOTES = catalogSnapshot.quotes;
+export const CATALOG_HASH = catalogSnapshot.catalogHash;
 const ABI = parseAbi(['function owner() view returns (address)', 'function getModuleState(address) view returns (uint8)', 'function decimals() view returns (uint8)']);
 
 export function validateDeploymentConfig(input) {
@@ -40,13 +38,17 @@ async function prepare(configPath, outputPath) {
   if (artifact.metadata?.sources?.['src/RarePetLaunchRouter.sol']?.keccak256 !== sourceHash) throw new Error('Compiled bytecode does not match the current source. Run forge build again.');
   const settings = artifact.metadata?.settings;
   if (artifact.metadata?.compiler?.version !== '0.8.30+commit.73712a01' || settings?.viaIR !== true || settings?.evmVersion !== 'cancun' || settings?.optimizer?.enabled !== true || settings?.optimizer?.runs !== 200 || settings?.metadata?.bytecodeHash !== 'none') throw new Error('Compiler settings differ from the reviewed configuration.');
-  const client = createPublicClient({ transport: http(RPC, { timeout: 12000, retryCount: 0 }) });
+  const client = createPublicClient({ transport: http(RPC, { batch: { batchSize: 30, wait: 20 }, timeout: 20000, retryCount: 2, retryDelay: 2000 }) });
   if (await client.getChainId() !== 4663) throw new Error('RPC did not report Robinhood mainnet.');
   const block = await client.getBlock(); if (!block.hash) throw new Error('Could not pin the verification block.');
   const blockNumber = block.number;
-  const [treasuryCode, treasuryBalance] = await Promise.all([
-    client.getCode({ address: config.treasury, blockNumber }), client.getBalance({ address: config.treasury, blockNumber }),
+  const [treasuryCode, treasuryBalance, deployerNonce] = await Promise.all([
+    client.getCode({ address: config.treasury, blockNumber }), client.getBalance({ address: config.treasury, blockNumber }), client.getTransactionCount({ address: config.deployer, blockNumber }),
   ]);
+  const prospectiveRouter = getContractAddress({ from: config.deployer, nonce: BigInt(deployerNonce) });
+  const oldProspectiveRouter = getAddress('0x8c46baA63079B8648b1cd5689058E0AAB33DF063');
+  const [prospectiveCode, oldProspectiveCode] = await Promise.all([client.getCode({ address: prospectiveRouter, blockNumber }), client.getCode({ address: oldProspectiveRouter, blockNumber })]);
+  if ((prospectiveCode && prospectiveCode !== '0x') || (oldProspectiveCode && oldProspectiveCode !== '0x')) throw new Error('A prospective router has already deployed. Review existing deployment before preparing another.');
   const codeAt = async address => {
     const code = await client.getCode({ address, blockNumber }); if (!code || code === '0x') throw new Error(`Missing contract at ${address}`);
     return keccak256(code);
@@ -62,22 +64,27 @@ async function prepare(configPath, outputPath) {
     modules.push({ name, address, codeHash, state });
   }
   const quotes = [];
-  for (const quote of QUOTES) {
-    const codeHash = await codeAt(quote.address);
-    const decimals = await client.readContract({ address: quote.address, abi: ABI, functionName: 'decimals', blockNumber });
-    if (decimals !== 18) throw new Error(`${quote.symbol} changed decimals; review the pool model.`);
-    quotes.push({ ...quote, codeHash, decimals });
+  for (let offset = 0; offset < QUOTES.length; offset += 8) {
+    const rows = await Promise.all(QUOTES.slice(offset, offset + 8).map(async quote => {
+      const [codeHash, decimals] = await Promise.all([
+        codeAt(quote.address), client.readContract({ address: quote.address, abi: ABI, functionName: 'decimals', blockNumber }),
+      ]);
+      if (decimals !== 18) throw new Error(`${quote.symbol} changed decimals; review the pool model.`);
+      return { ...quote, codeHash, decimals };
+    }));
+    quotes.push(...rows);
+    if (quotes.length % 40 === 0 || quotes.length === QUOTES.length) console.log(`Verified ${quotes.length}/${QUOTES.length} quote contracts at block ${blockNumber}.`);
   }
   const args = [config.treasury, BigInt(config.totalSupply), config.friendFeeBps, QUOTES.map(quote => quote.address)];
   const data = encodeDeployData({ abi: artifact.abi, bytecode: artifact.bytecode.object, args });
+  const deploymentDataHash = keccak256(data);
   const gas = await client.estimateGas({ account: config.deployer, data, value: 0n, blockNumber });
   const gasPrice = await client.getGasPrice();
   let validation = { fullRouterSimulation: 'not yet recorded', method: 'eth_call stateOverride' };
   try {
     const raw = await readFile(resolve(root, 'state-override-review.json'), 'utf8'), rehearsal = JSON.parse(raw);
-    if (rehearsal.status === 'READ-ONLY eth_call PASSED — no contracts deployed or transactions sent'
-      && rehearsal.creationBytecodeHash === keccak256(artifact.bytecode.object)) validation = {
-      fullRouterSimulation: 'passed', method: 'eth_call stateOverride', blockNumber: rehearsal.blockNumber, blockHash: rehearsal.blockHash,
+    if (rehearsalMatches(rehearsal, { config, quotes, creationBytecodeHash: keccak256(artifact.bytecode.object), deploymentDataHash, catalogHash: CATALOG_HASH, unsignedTransaction: { data } })) validation = {
+      fullRouterSimulation: 'passed', deploymentDataHash, catalogHash: CATALOG_HASH, method: 'eth_call stateOverride', blockNumber: rehearsal.blockNumber, blockHash: rehearsal.blockHash,
       artifactPath: 'contracts/rare-launchpad/state-override-review.json', artifactSha256: createHash('sha256').update(raw).digest('hex'),
       limitation: 'Real Friend and self launch routes simulated against mainnet. No state persisted and no transaction was sent.',
     };
@@ -91,7 +98,9 @@ async function prepare(configPath, outputPath) {
     protocolBeneficiary, airlock: { address: AIRLOCK, codeHash: airlockCodeHash }, modules, quotes,
     supplyPolicy: '100% assigned to the pool; zero vesting or insider allocations. Pool rounding dust follows canonical Doppler NoOp governance burn.',
     compiler: { version: '0.8.30', optimizerRuns: 200, viaIR: true, evmVersion: 'cancun' },
-    sourceHash, creationBytecodeHash: keccak256(artifact.bytecode.object),
+    sourceHash, creationBytecodeHash: keccak256(artifact.bytecode.object), deploymentDataHash, catalogHash: CATALOG_HASH,
+    quoteCatalog: { path: 'games/rare-pet/launch-quote-catalog.json', count: quotes.length, activeStocks: catalogSnapshot.catalog.coverage.activeStocks, generatedAt: catalogSnapshot.catalog.generatedAt },
+    deploymentAddressRead: { prospectiveRouter, deployerNonce, code: prospectiveCode ?? '0x', previousProspectiveRouter: oldProspectiveRouter, previousCode: oldProspectiveCode ?? '0x' },
     validation,
     networkFeeEstimate: { gasPriceWei: String(gasPrice), estimatedWei: String(gas * gasPrice), estimatedETH: formatEther(gas * gasPrice), caveat: 'Current RPC estimate only. Wallet/network pricing and the final gas used determine the actual fee.' },
     treasuryRead: { address: config.treasury, code: treasuryCode ?? '0x', balanceWei: String(treasuryBalance), ownership: 'User-supplied address; no ownership claim inferred from this public read.' },

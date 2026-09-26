@@ -9,7 +9,7 @@ import {
 } from 'viem';
 import type { PetIdentity, PetWalletSession } from './wallet';
 import { launchTreasury } from './config.ts';
-import { getLaunchQuoteAsset, readLaunchQuotePrice, type LaunchQuotePrice, type LaunchQuoteId } from './launch-quotes.ts';
+import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset, readLaunchQuotePrice, type LaunchQuotePrice, type LaunchQuoteId } from './launch-quotes.ts';
 import { RARE_WALLET_ABI } from './rare-wallet-transfer.ts';
 
 /** Official Doppler bda077cf deployment, independently read on Robinhood block 72704138. */
@@ -103,7 +103,7 @@ export function createRareLaunchSalt(): Hex {
   const bytes = new Uint8Array(32); crypto.getRandomValues(bytes);
   return `0x${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`;
 }
-export function validateRareLaunchDraft(draft: RareLaunchDraft, now = Date.now()) {
+function validateLaunchDraft(draft: RareLaunchDraft, now = Date.now(), currentCatalog = true) {
   const bytes = new TextEncoder();
   if (draft.name !== draft.name.trim() || bytes.encode(draft.name).length < 1 || bytes.encode(draft.name).length > 64 || /[\u0000-\u001f\u007f]/u.test(draft.name)) throw new Error('Use a token name of 1–64 bytes without control characters.');
   if (!/^[A-Z0-9]{1,12}$/.test(draft.symbol)) throw new Error('Use 1–12 uppercase letters or digits for the ticker.');
@@ -111,18 +111,44 @@ export function validateRareLaunchDraft(draft: RareLaunchDraft, now = Date.now()
   if (!RARE_LAUNCH_FEES.includes(draft.fee)) throw new Error('Choose one of the supported trading fees.');
   if (!/^0x[0-9a-fA-F]{64}$/.test(draft.salt)) throw new Error('The launch salt must be exactly 32 bytes.');
   const quote = draft.quote;
-  if (quote.source !== 'chainlink' || quote.asset.chainId !== 4663 || quote.asset.decimals !== 18 || !Number.isSafeInteger(quote.expiresAt) || quote.expiresAt * 1000 <= now || quote.readAt * 1000 > now + 30000 || quote.usdPriceE18 <= 0n) throw new Error('Refresh the pair’s verified USD quote before launching.');
-  const trusted = getLaunchQuoteAsset(quote.asset.id);
-  if (!equal(trusted.address, quote.asset.address) || !equal(trusted.feedAddress, quote.feedAddress) || !equal(quote.asset.feedAddress, quote.feedAddress) || !/^(0|[1-9][0-9]*)(\.[0-9]{1,18})?$/.test(quote.usdPrice) || parseUnits(quote.usdPrice, 18) !== quote.usdPriceE18) throw new Error('The quoted pair or oracle price is invalid.');
-  address(quote.asset.address, 'quote token'); address(quote.feedAddress, 'price feed');
+  if (!['chainlink', 'robinhood'].includes(quote.source) || quote.asset.chainId !== 4663 || quote.asset.decimals !== 18
+    || ![quote.expiresAt, quote.readAt, quote.updatedAt, quote.heartbeatSeconds].every(Number.isSafeInteger)
+    || quote.heartbeatSeconds <= 0 || quote.heartbeatSeconds > 86400 || quote.readAt <= 0 || quote.updatedAt <= 0
+    || quote.expiresAt * 1000 <= now || quote.readAt * 1000 > now + 30000 || quote.updatedAt > quote.readAt + 30
+    || quote.expiresAt > quote.readAt + 120 || quote.expiresAt > quote.updatedAt + quote.heartbeatSeconds
+    || typeof quote.blockNumber !== 'bigint' || quote.blockNumber < 0n || typeof quote.usdPriceE18 !== 'bigint' || quote.usdPriceE18 <= 0n) throw new Error('Refresh the pair’s verified USD quote before launching.');
+  address(quote.asset.address, 'quote token');
+  if (quote.source === 'chainlink') {
+    address(quote.feedAddress, 'price feed'); address(quote.asset.feedAddress, 'asset price feed');
+    if (!equal(quote.feedAddress, quote.asset.feedAddress)) throw new Error('The quoted pair does not match its price feed.');
+  } else if (quote.feedAddress !== null || quote.asset.feedAddress !== null || quote.asset.kind !== 'stock') throw new Error('The issuer quote must identify an official stock without a Chainlink feed.');
+  if (currentCatalog) {
+    const trusted = getLaunchQuoteAsset(quote.asset.id);
+    const sameFeed = trusted.feedAddress === null ? quote.feedAddress === null : quote.feedAddress !== null && equal(trusted.feedAddress, quote.feedAddress);
+    if (!equal(trusted.address, quote.asset.address) || !sameFeed || trusted.priceSource !== quote.source || trusted.priceSource !== quote.asset.priceSource
+      || trusted.assetId !== quote.asset.assetId || trusted.symbol !== quote.asset.symbol || trusted.name !== quote.asset.name || trusted.kind !== quote.asset.kind) throw new Error('The quoted pair does not match the supported catalog.');
+  }
+  if (!/^(0|[1-9][0-9]*)(\.[0-9]{1,18})?$/.test(quote.usdPrice) || parseUnits(quote.usdPrice, 18) !== quote.usdPriceE18) throw new Error('The quoted oracle price is invalid.');
   const price = Number(quote.usdPrice);
   if (!Number.isFinite(price) || price <= 0 || price > 1e12) throw new Error('The pair’s USD quote is outside the supported range.');
 }
 
+export function validateRareLaunchDraft(draft: RareLaunchDraft, now = Date.now()) { validateLaunchDraft(draft, now, true); }
+
+/** One shared catalog is the expected immutable router policy; history limits are unrelated. */
+export function verifyRareLaunchQuoteCatalog(quoteTokens: readonly Address[], currentCatalog = true) {
+  if (!Array.isArray(quoteTokens) || quoteTokens.length === 0 || quoteTokens.length > 2048) throw new Error('The router quote catalog is invalid.');
+  const unique = new Set<string>();
+  for (const token of quoteTokens) { address(token, 'quote token'); unique.add(token.toLowerCase()); }
+  if (unique.size !== quoteTokens.length) throw new Error('The router quote catalog contains duplicate tokens.');
+  if (currentCatalog && (unique.size !== LAUNCH_QUOTE_ASSETS.length || LAUNCH_QUOTE_ASSETS.some(asset => !unique.has(asset.address.toLowerCase())))) throw new Error('The launch router does not support the complete verified quote catalog.');
+}
+
 /** Pure preparation: no deploy, approval, premint, signer or hidden developer buy. */
-function buildParticipantParams(input: { pet: Pick<PetIdentity, 'walletAddress' | 'contract' | 'tokenId'>; config: RareLaunchConfig; draft: RareLaunchDraft; now?: number }) {
+function buildParticipantParams(input: { pet: Pick<PetIdentity, 'walletAddress' | 'contract' | 'tokenId'>; config: RareLaunchConfig; draft: RareLaunchDraft; now?: number }, currentCatalog = true) {
   const { pet, config, draft } = input;
-  validateRareLaunchDraft(draft, input.now);
+  validateLaunchDraft(draft, input.now, currentCatalog);
+  verifyRareLaunchQuoteCatalog(config.quoteTokens, currentCatalog);
   address(pet.walletAddress, 'Rare Wallet'); address(config.router, 'launch router'); address(config.treasury, 'treasury'); address(config.protocol, 'Doppler protocol');
   if (!equal(config.treasury, launchTreasury)) throw new Error('The launch router does not use the confirmed RarePet treasury.');
   if (config.totalSupply !== RARE_LAUNCH_SUPPLY || config.protocolShares !== PROTOCOL_SHARES || ![850n * 10n ** 15n].includes(config.friendShares) || config.friendShares + config.treasuryShares + config.protocolShares !== WAD) throw new Error('The deployed router does not match the reviewed launch policy.');
@@ -192,6 +218,7 @@ async function readLaunchConfig(router: Address, identity: { account: Address; p
     return actual === expected;
   }));
   if (states.some(value => !value)) throw new Error('A required Doppler module is no longer enabled.');
+  verifyRareLaunchQuoteCatalog(quoteTokens);
   address(treasury, 'treasury'); address(protocol, 'Doppler protocol');
   if (!equal(treasury, launchTreasury)) throw new Error('The launch router does not use the confirmed RarePet treasury.');
   if (totalSupply !== RARE_LAUNCH_SUPPLY || ![850n * 10n ** 15n].includes(friendShares) || friendShares + treasuryShares + PROTOCOL_SHARES !== WAD) throw new Error('The launch router has an unsupported supply or fee split.');
@@ -453,7 +480,8 @@ export function validateStoredRareLaunch(wallet: Address, value: unknown): Prepa
   const expectedCollection = p.pet.collection === 'genesis' ? '0x116EaA62241751E0c98dA43d458600c6C17cD361' : '0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D';
   if (!equal(p.pet.contract, expectedCollection) || p.pet.collection === 'generations' && !(p.pet.generation && p.pet.generation > 0)) throw new Error('Stored collection binding is invalid.');
   if (typeof p.config?.brain !== 'bigint' || p.config.brain < 0n || typeof p.config.lastLaunchAt !== 'bigint' || p.config.lastLaunchAt < 0n) throw new Error('Stored launch ledger is invalid.');
-  const built = buildRareLaunchParams({ pet: p.pet, config: p.config, draft: p.draft, now: p.preparedAt });
+  // Old catalog snapshots are valid recovery evidence, but sendRareLaunch always uses today's catalog.
+  const built = buildParticipantParams({ pet: p.pet, config: p.config, draft: p.draft, now: p.preparedAt }, false);
   const expected = launchCall(wallet, p.config.router, built.request);
   if (!equal(expected.data, p.data) || !equal(launchCall(wallet, p.config.router, p.request).data, expected.data)) throw new Error('Stored launch calldata was altered.');
   // Encoding is pure; this SDK client is never used for a network call here.
@@ -607,7 +635,7 @@ export function validateStoredRareSelfLaunch(account: Address, value: unknown): 
   const p = value as PreparedRareSelfLaunch; address(account, 'creator'); address(p.account, 'stored creator');
   if (p.mode !== 'self' || !equal(account, p.account) || !Number.isSafeInteger(p.revision) || !Number.isSafeInteger(p.preparedAt)
     || typeof p.config?.brain !== 'bigint' || p.config.brain < 0n || p.config.hasLaunched || p.config.lastLaunchAt !== 0n || p.config.readyAt !== 0n) throw new Error('Stored creator identity is invalid.');
-  const built = buildRareSelfLaunchParams({ account, config: p.config, draft: p.draft, now: p.preparedAt });
+  const built = buildParticipantParams({ pet: { walletAddress: account, contract: zeroAddress, tokenId: '0' }, config: p.config, draft: p.draft, now: p.preparedAt }, false);
   if (!equal(selfLaunchCall(p.config.router, built.request).data, p.data) || !equal(selfLaunchCall(p.config.router, p.request).data, p.data)) throw new Error('Stored creator calldata changed.');
   verifyPreparedDoppler(p.doppler, built.params, p.config.router, {} as ReadClient);
   return immutable({ ...p, request: built.request, review: built.review });

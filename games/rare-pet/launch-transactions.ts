@@ -45,7 +45,10 @@ export function createRareLaunchTransactionStore(options: Options = {}) {
       const target = storage(); if (!target) return;
       if (!records.size) { target.removeItem(KEY); return; }
       const payload = JSON.stringify({ version: 1, chainId: 4663, records: [...records].map(([wallet, record]) => ({ wallet, ...record,
-        prepared: record.prepared.mode === 'self' ? record.prepared : { ...record.prepared, pet: { ...record.prepared.pet, image: '', sprites: undefined } },
+        // The strict restore boundary reconstructs this derived review from the exact draft/config.
+        // Avoid duplicating metadata and quote details so all 32 full-catalog records fit the bound.
+        prepared: record.prepared.mode === 'self' ? { ...record.prepared, review: undefined }
+          : { ...record.prepared, review: undefined, pet: { ...record.prepared.pet, image: '', sprites: undefined } },
       })) }, (_key, value) => typeof value === 'bigint' ? { $bigint: value.toString() } : value);
       if (payload.length <= MAX_JSON) target.setItem(KEY, payload);
     } catch { /* The current tab still retains its pending transaction if storage is unavailable. */ }

@@ -13,7 +13,7 @@ const key = `rarepet:router-deployment:${keccak256(review.unsignedTransaction.da
 const wrongOwner = '0x1111111111111111111111111111111111111111';
 const deployed = '0x2222222222222222222222222222222222222222';
 const hash = `0x${'12'.repeat(32)}`, blockHash = `0x${'ab'.repeat(32)}`;
-const gasEstimate = 3359886n;
+const gasEstimate = BigInt(review.unsignedTransaction.gasEstimate);
 const abi = parseAbi(['function treasury() view returns(address)', 'function friendShares() view returns(uint96)', 'function treasuryShares() view returns(uint96)', 'function totalSupply() view returns(uint256)', 'function CHAIN_ID() view returns(uint256)', 'function quoteTokens() view returns(address[])', 'function getModuleState(address) view returns(uint8)']);
 const equal = (a, b) => a.toLowerCase() === b.toLowerCase();
 const screenshots = 'artifacts/launch-deploy';
@@ -36,7 +36,7 @@ async function fixture(options = {}) {
   const page = await context.newPage(); page.setDefaultTimeout(12000);
   const state = { errors: [], unexpected: [], failures: [], rpc: [], wallet: [], attempts: 0, sends: 0,
     reject: false, unknownError: false, holdReceipt: false, rpcChain: '0x1237', changedModule: false,
-    wrongTransaction: false, wrongTreasury: false, balance: 1000000000000000000n, pendingStorageFailure: !!options.pendingStorageFailure };
+    wrongTransaction: false, wrongTreasury: false, staleReview: false, unavailableReview: false, balance: 1000000000000000000n, pendingStorageFailure: !!options.pendingStorageFailure };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.exposeFunction('mockWalletMethod', method => { state.wallet.push(method); });
   await page.exposeFunction('validateMockDeployment', ({ payload, storage }) => {
@@ -113,7 +113,11 @@ async function fixture(options = {}) {
   }
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (url.origin === origin) return route.continue();
+    if (url.origin === origin) {
+      if (url.pathname === '/review.json' && state.unavailableReview) return route.fulfill({status:409,body:'Review changed.'});
+      if (url.pathname === '/review.json' && state.staleReview) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...review,catalogHash:'obsolete-catalog'})});
+      return route.continue();
+    }
     if (url.origin === rpc && url.pathname === '/') {
       try {
         assert.equal(route.request().method(), 'POST');
@@ -158,6 +162,13 @@ try {
     await t.page.evaluate(owner => window.testWallet.change(owner), wrongOwner);
     await t.page.locator('#deploy').click(); await t.status(/Use the reviewed deployer/);
     assert.equal(t.state.attempts, 0); await t.checked();
+  });
+  await scenario('stale or unavailable local review blocks an already-ready page before wallet submission', async () => {
+    for (const kind of ['staleReview', 'unavailableReview']) {
+      const t = await fixture(); await t.ready(); t.state[kind] = true;
+      await t.page.locator('#deploy').click(); await t.status(kind === 'staleReview' ? /outdated deployment or quote list/ : /review changed or is unavailable/);
+      assert.equal(t.state.attempts, 0); assert.equal(t.state.sends, 0); await t.checked();
+    }
   });
   await scenario('wrong connected owner cannot estimate or submit', async () => {
     const t = await fixture({ account: wrongOwner }); await t.page.locator('#connect').click(); await t.status(/Select 0x/);

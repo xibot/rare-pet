@@ -4,6 +4,7 @@ import { DopplerSDK, airlockAbi, computePoolId, type PreparedMulticurveCreate } 
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, parseAbi, keccak256, stringToHex, zeroAddress, type Address, type Hex, type PublicClient, type TransactionReceipt } from 'viem';
 import { buildRareLaunchParams, validateRareLaunchDraft, prepareRareLaunch, sendRareLaunch, confirmRareLaunch, readRareLaunchFees, claimRareLaunchFees,
   RARE_LAUNCH_DOPPLER as D, RARE_LAUNCH_ROUTER_ABI, RARE_LAUNCH_SUPPLY, type RareLaunchConfig, type RareLaunchDraft, type RareLaunchDependencies } from '../games/rare-pet/launch-doppler.ts';
+import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset, type LaunchQuoteAsset } from '../games/rare-pet/launch-quotes.ts';
 import { RARE_WALLET_ABI } from '../games/rare-pet/rare-wallet-transfer.ts';
 import type { PetIdentity, PetWalletSession } from '../games/rare-pet/wallet.ts';
 const OWNER = '0x1111111111111111111111111111111111111111' as Address;
@@ -18,13 +19,12 @@ const HASH = `0x${'a'.repeat(64)}` as Hex, BLOCK = `0x${'b'.repeat(64)}` as Hex,
 const NOW = 1_800_000_000_000;
 const pet: PetIdentity = { collection: 'genesis', chainId: 4663, contract: COLLECTION, tokenId: '2', label: 'Genesis #2', image: '', owner: OWNER, walletAddress: WALLET, blockNumber: '20', generation: null, rushEligible: true };
 const draft: RareLaunchDraft = { name: 'Rare Cat', symbol: 'RCAT', tokenURI: 'data:application/json;base64,e30=', fee: 3000, salt: SALT,
-  quote: { asset: { id: 'weth', chainId: 4663, address: WETH, symbol: 'WETH', name: 'Wrapped Ether', kind: 'weth', decimals: 18,
-      feedAddress: '0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9', feedDescription: 'ETH / USD', feedName: 'ETH / USD' },
+  quote: { asset: getLaunchQuoteAsset('weth'),
     usdPrice: '2000', usdPriceE18: 2000n * 10n ** 18n, blockNumber: 20n, updatedAt: NOW / 1000 - 300, readAt: NOW / 1000,
     expiresAt: NOW / 1000 + 120, heartbeatSeconds: 86400, source: 'chainlink', feedAddress: '0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9', sequencerVerified: false } };
 const config: RareLaunchConfig = { router: ROUTER, treasury: TREASURY, protocol: PROTOCOL, totalSupply: RARE_LAUNCH_SUPPLY,
   friendShares: 850n * 10n ** 15n, treasuryShares: 100n * 10n ** 15n, protocolShares: 50n * 10n ** 15n,
-  quoteTokens: [WETH], brain: 0n, lastLaunchAt: 0n, hasLaunched: false, readyAt: 0n, blockNumber: 20n, timestamp: BigInt(NOW / 1000) };
+  quoteTokens: LAUNCH_QUOTE_ASSETS.map(asset => asset.address), brain: 0n, lastLaunchAt: 0n, hasLaunched: false, readyAt: 0n, blockNumber: 20n, timestamp: BigInt(NOW / 1000) };
 function fixture() {
   const state = { revision: 4, status: 'connected', chainId: 4663, account: OWNER };
   const provider = {};
@@ -351,4 +351,94 @@ test('both creator modes require the user-confirmed treasury even with an otherw
   assert.throws(() => buildRareLaunchParams({ pet, config: f.changes.config, draft, now: NOW }), /confirmed RarePet treasury/);
   assert.throws(() => buildRareSelfLaunchParams({ account: OWNER, config: f.changes.config, draft, now: NOW }), /confirmed RarePet treasury/);
   assert.equal(f.writes.length, 0);
+});
+
+test('fresh launch policy requires the exact complete quote catalog independent of history limits', async () => {
+  const { readRareLaunchConfig, readRareSelfLaunchConfig, verifyRareLaunchQuoteCatalog } = await import('../games/rare-pet/launch-doppler.ts');
+  assert.doesNotThrow(() => verifyRareLaunchQuoteCatalog([...config.quoteTokens].reverse()));
+  for (const quoteTokens of [config.quoteTokens.slice(1), [...config.quoteTokens, OWNER], [...config.quoteTokens, config.quoteTokens[0]]]) {
+    const f = fixture(); f.changes.config.quoteTokens = quoteTokens;
+    assert.throws(() => buildRareLaunchParams({ pet, config: f.changes.config, draft, now: NOW }), /quote catalog/);
+    await assert.rejects(readRareLaunchConfig(ROUTER, pet, f.deps), /quote catalog/);
+    await assert.rejects(readRareSelfLaunchConfig(ROUTER, OWNER, f.deps), /quote catalog/);
+    assert.equal(f.writes.length, 0);
+  }
+});
+test('unlisted quote IDs, swapped token addresses, feeds and symbols never enter a new launch', () => {
+  for (const asset of [
+    { ...draft.quote.asset, id: 'not-a-listed-asset' }, { ...draft.quote.asset, address: OWNER },
+    { ...draft.quote.asset, feedAddress: OWNER }, { ...draft.quote.asset, symbol: 'SPOOF' },
+  ]) assert.throws(() => buildRareLaunchParams({ pet, config, draft: { ...draft, quote: { ...draft.quote, asset } } as RareLaunchDraft, now: NOW }));
+});
+test('catalog changes do not discard pending recovery proof from an older catalog snapshot', async () => {
+  const { validateStoredRareLaunch } = await import('../games/rare-pet/launch-doppler.ts');
+  const { createRareLaunchTransactionStore } = await import('../games/rare-pet/launch-transactions.ts');
+  const f = fixture(), prepared = await prepareRareLaunch(f.options, f.deps);
+  const historical = structuredClone(prepared);
+  historical.config = { ...historical.config, quoteTokens: [WETH] };
+  historical.draft = { ...historical.draft, quote: { ...historical.draft.quote, asset: { ...historical.draft.quote.asset, id: 'retired-catalog-id' } } } as RareLaunchDraft;
+  assert.equal(validateStoredRareLaunch(WALLET, historical).data, prepared.data);
+  let raw = ''; const storage = { getItem: () => raw, setItem: (_key: string, value: string) => { raw = value; }, removeItem: () => { raw = ''; } };
+  createRareLaunchTransactionStore({ storage }).setRareLaunchTransaction(WALLET, { hash: HASH, status: 'pending', prepared: historical });
+  assert.equal(createRareLaunchTransactionStore({ storage }).getRareLaunchTransaction(WALLET)?.hash, HASH);
+  await assert.rejects(sendRareLaunch({ ...f.options, prepared: historical }, f.deps), /supported/);
+  assert.equal(f.writes.length, 0);
+});
+
+function draftForQuote(asset: LaunchQuoteAsset): RareLaunchDraft {
+  return { ...draft, quote: { ...draft.quote, asset, source: asset.priceSource, feedAddress: asset.feedAddress,
+    updatedAt: NOW / 1000, heartbeatSeconds: asset.priceSource === 'robinhood' ? 90 : 86400,
+    expiresAt: NOW / 1000 + (asset.priceSource === 'robinhood' ? 90 : 120) } };
+}
+test('every issuer catalog asset can build the same zero-allocation permanent-liquidity launch in both modes', async () => {
+  const { buildRareSelfLaunchParams } = await import('../games/rare-pet/launch-doppler.ts');
+  assert.equal(LAUNCH_QUOTE_ASSETS.length, 196); assert.equal(LAUNCH_QUOTE_ASSETS.filter(a => a.kind === 'stock').length, 195);
+  assert.equal(getLaunchQuoteAsset('qnt').priceSource, 'robinhood');
+  for (const asset of LAUNCH_QUOTE_ASSETS) {
+    const selected = draftForQuote(asset);
+    const friend = buildRareLaunchParams({ pet, config, draft: selected, now: NOW });
+    const self = buildRareSelfLaunchParams({ account: OWNER, config, draft: selected, now: NOW });
+    for (const built of [friend, self]) {
+      assert.equal(built.params.sale.numeraire, asset.address, asset.symbol);
+      assert.equal(built.params.sale.numTokensToSell, RARE_LAUNCH_SUPPLY);
+      assert.equal(built.request.curves.reduce((sum, curve) => sum + curve.shares, 0n), 10n ** 18n);
+      assert.equal(built.params.devBuy, undefined); assert.equal(built.params.vesting, undefined);
+    }
+  }
+});
+test('issuer pricing cannot replace a pinned Chainlink feed or smuggle an unlisted stock identity', () => {
+  const qnt = draftForQuote(getLaunchQuoteAsset('qnt'));
+  assert.doesNotThrow(() => validateRareLaunchDraft(qnt, NOW));
+  for (const quote of [
+    { ...qnt.quote, feedAddress: draft.quote.feedAddress },
+    { ...qnt.quote, source: 'chainlink' },
+    { ...qnt.quote, asset: { ...qnt.quote.asset, assetId: `0x${'0'.repeat(64)}` } },
+    { ...qnt.quote, asset: { ...qnt.quote.asset, priceSource: 'chainlink' } },
+    { ...qnt.quote, asset: { ...qnt.quote.asset, name: 'Another issuer' } },
+    { ...draft.quote, source: 'robinhood', feedAddress: null, asset: { ...draft.quote.asset, feedAddress: null, priceSource: 'robinhood' } },
+  ]) assert.throws(() => validateRareLaunchDraft({ ...draft, quote } as RareLaunchDraft, NOW));
+});
+test('legacy Chainlink recovery survives the added issuer pricing fields', async () => {
+  const { validateStoredRareLaunch } = await import('../games/rare-pet/launch-doppler.ts');
+  const f = fixture(), prepared = await prepareRareLaunch(f.options, f.deps);
+  const historical = structuredClone(prepared);
+  const asset = historical.draft.quote.asset as unknown as Record<string, unknown>;
+  delete asset.priceSource; delete asset.assetId; delete asset.feedRegistry;
+  assert.equal(validateStoredRareLaunch(WALLET, historical).data, prepared.data);
+  assert.throws(() => validateRareLaunchDraft(historical.draft, NOW), /catalog/);
+});
+test('the supported pending-record capacity persists full-catalog reviews with maximum metadata', async () => {
+  const { createRareLaunchTransactionStore } = await import('../games/rare-pet/launch-transactions.ts');
+  let raw = ''; const storage = { getItem: () => raw, setItem: (_key: string, value: string) => { raw = value; }, removeItem: () => { raw = ''; } };
+  const store = createRareLaunchTransactionStore({ storage });
+  const wallets: Address[] = [];
+  for (let i = 0; i < 32; i++) {
+    const wallet = `0x${BigInt(i + 100).toString(16).padStart(40, '0')}` as Address;
+    const f = fixture(), friend = { ...pet, walletAddress: wallet };
+    f.changes.fresh = friend;
+    const prepared = await prepareRareLaunch({ ...f.options, pet: friend, draft: { ...draft, name: 'N'.repeat(64), symbol: 'T'.repeat(12), tokenURI: `data:application/json;base64,${'A'.repeat(4064)}` } }, f.deps);
+    store.setRareLaunchTransaction(wallet, { hash: HASH, status: 'pending', prepared }); wallets.push(wallet);
+  }
+  const restored = createRareLaunchTransactionStore({ storage });
+  for (const wallet of wallets) assert.equal(restored.getRareLaunchTransaction(wallet)?.hash, HASH, `lost pending record ${wallet}; stored bytes=${raw.length}`);
 });

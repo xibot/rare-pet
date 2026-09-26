@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -9,6 +9,8 @@ import { buildPetSite, createPetServer } from './pet-site.mjs';
 // Isolated build/server, synthetic raster fixtures, no wallet extension and no external/API requests.
 const outdir = await mkdtemp(path.join(tmpdir(), 'rarepet-launch-preview-'));
 const artifact = path.resolve('artifacts/launchpad');
+const catalog = JSON.parse(await readFile(new URL('../games/rare-pet/launch-quote-catalog.json', import.meta.url), 'utf8'));
+const stockIds = catalog.assets.filter(asset => asset.kind === 'stock').sort((a, b) => a.symbol.localeCompare(b.symbol)).map(asset => asset.id);
 await mkdir(artifact, { recursive: true });
 const previous = Object.fromEntries(['RAREPET_LAUNCHPAD_ADDRESS', 'BLOB_READ_WRITE_TOKEN'].map(key => [key, process.env[key]]));
 process.env.RAREPET_LAUNCHPAD_ADDRESS = '0x7777777777777777777777777777777777777777';
@@ -137,8 +139,28 @@ try {
     await fits(page, root, `${width} self form`);
     if (width === 1440) await invalidInputs(root); else await fillDraft(root);
     await root.getByRole('button', { name: /STOCKS/ }).click();
-    assert.deepEqual(await root.locator('#launch-stock option').evaluateAll(options => options.map(option => option.value)), ['nvda','aapl','tsla','spy']);
-    for (const stock of ['nvda', 'tsla', 'spy', 'aapl']) { await root.locator('#launch-stock').selectOption(stock); assert.equal(await root.locator('#launch-stock').inputValue(), stock); }
+    assert.deepEqual(await root.locator('#launch-stock option').evaluateAll(options => options.map(option => option.value)), stockIds, 'every stock in the shared deployment catalog is selectable');
+    assert.equal(await root.locator('#launch-stock-count').innerText(), `${stockIds.length} stock & ETF tokens`);
+    for (const stock of ['nvda', 'qnt', 'crm', 'gld', 'qqq', 'tsla', 'spy', 'aapl']) { await root.locator('#launch-stock').selectOption(stock); assert.equal(await root.locator('#launch-stock').inputValue(), stock); }
+    const search = root.getByLabel('FIND A STOCK OR ETF', { exact: true });
+    await search.fill('salesforce');
+    assert.equal(await root.locator('#launch-stock-count').innerText(), '1 match');
+    assert.equal(await root.locator('#launch-stock').inputValue(), 'aapl', 'filtering never silently changes the selected pair');
+    await search.press('Enter');
+    assert.equal(await root.locator('.launch-review').count(), 0, 'Enter in stock search does not submit the form');
+    assert.equal(await root.locator('#launch-stock').evaluate(element => element === document.activeElement), true);
+    await root.locator('#launch-stock').selectOption('crm');
+    await search.fill('qnt'); await root.locator('#launch-stock').selectOption('qnt');
+    assert.equal(await root.locator('#launch-stock').inputValue(), 'qnt', 'issuer-only token absent from Bankr remains selectable');
+    await search.fill('no-such-stock');
+    assert.equal(await root.locator('#launch-stock-count').innerText(), '0 matches');
+    assert.equal(await root.locator('#launch-stock').inputValue(), 'qnt');
+    assert.match(await root.locator('.launch-stock-picker').innerText(), /No matches.*selected pair stays QNT/);
+    await fits(page, root, `${width} empty stock search`);
+    await root.getByRole('button', { name: 'CLEAR SEARCH ×', exact: true }).click();
+    assert.equal(await search.inputValue(), '');
+    assert.equal(await root.locator('#launch-stock option').count(), stockIds.length);
+    await root.locator('#launch-stock').selectOption('aapl');
     await root.getByRole('button', { name: '2%', exact: true }).click();
     assert.equal(await root.getByRole('button', { name: '2%', exact: true }).getAttribute('aria-pressed'), 'true');
     await fits(page, root, `${width} stock form`);
