@@ -4,6 +4,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { createPublicClient, getAddress, http, parseAbi } from 'viem';
 export const CATALOG_SOURCES = Object.freeze({ robinhood: 'https://api.robinhood.com/rhj/assets', chainlink: 'https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json', bankr: 'https://api.bankr.bot/token-launches/quote-tokens?chain=robinhood' });
+export const RAREFRIENDS = '0x0779369854d3EcdEA927206718FFD7730C67B71f';
 export const WETH = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73';
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
 const abi = parseAbi(['function decimals() view returns(uint8)', 'function symbol() view returns(string)', 'function description() view returns(string)', 'function uid() view returns(bytes32)']);
@@ -22,7 +23,7 @@ export function catalogCandidates(robinhood, chainlink) {
   }
   const ether = chainlink.filter(feed => feed.name === 'ETH / USD' && feed.docs?.baseAsset === 'ETH' && feed.docs?.blockchainName === 'Robinhood');
   if (ether.length !== 1) fail('Canonical ETH feed is missing or ambiguous.');
-  const assets = [{ id: 'weth', chainId: 4663, address: WETH, symbol: 'WETH', name: 'Wrapped Ether', kind: 'weth', decimals: 18, assetId: null, feed: ether[0] }];
+  const assets = [{ id: 'weth', chainId: 4663, address: WETH, symbol: 'WETH', name: 'Wrapped Ether', kind: 'weth', decimals: 18, assetId: null, feed: ether[0] }, { id: 'rarefriends', chainId: 4663, address: RAREFRIENDS, symbol: 'RAREFRIENDS', name: 'RareFriends', kind: 'rarefriends', decimals: 18, assetId: null, feed: ether[0] }];
   const stocks = robinhood.assets.filter(asset => asset.status === 'ASSET_STATUS_ACTIVE' && asset.deployments?.some(deployment => deployment.chainId === 4663));
   if (!stocks.length) fail('No active Robinhood stock deployments.');
   stocks.sort((a, b) => a.tokenSymbol.localeCompare(b.tokenSymbol, 'en'));
@@ -64,7 +65,7 @@ export async function generateCatalog({ fetcher = fetch, client, outputPath = fi
         if (!code || code === '0x' || decimals !== 8 || typeof description !== 'string' || !description.includes('USD')) fail(`Onchain feed metadata mismatch for ${asset.symbol}`);
         feedDescription = description;
       }
-      assets[index] = { ...asset, priceSource: feed ? 'chainlink' : 'robinhood', feedAddress, feedName: feed?.name ?? null, feedDescription, feedRegistry: feed ? feedRegistry(feed) : null };
+      assets[index] = { ...asset, priceSource: asset.kind === 'rarefriends' ? 'rarefriends-pool' : feed ? 'chainlink' : 'robinhood', feedAddress, feedName: feed?.name ?? null, feedDescription, feedRegistry: feed ? feedRegistry(feed) : null };
     }
   }));
   if (await reader.getChainId() !== 4663 || (await reader.getBlock({ blockNumber: block.number })).hash !== block.hash) fail('Verification block changed.');
@@ -72,8 +73,9 @@ export async function generateCatalog({ fetcher = fetch, client, outputPath = fi
   if (bankr.chain !== 'robinhood' || bankr.provider !== 'doppler' || !Array.isArray(bankr.quoteTokens)) fail('Unexpected Bankr comparison registry.');
   const omittedByBankr = assets.filter(asset => asset.kind === 'stock' && !bankr.quoteTokens.some(token => token.address?.toLowerCase() === asset.address.toLowerCase())).map(asset => asset.symbol);
   const catalog = { version: 1, chainId: 4663, generatedAt: now().toISOString(), verifiedBlockNumber: String(block.number), verifiedBlockHash: block.hash,
+    rarefriendsVerification: { verifiedBlockNumber: String(block.number), source: 'https://rarefriends.com/docs/contracts', priceSource: 'Canonical RF/WETH 30-minute arithmetic TWAP reconstructed from onchain Swap events, converted using Chainlink ETH/USD.' },
     sources: Object.fromEntries(Object.entries(CATALOG_SOURCES).map(([key, url]) => [key, { url, sha256: snapshots[key].sha256 }])),
-    coverage: { activeStocks: assets.length - 1, chainlinkStocks: assets.filter(asset => asset.kind === 'stock' && asset.priceSource === 'chainlink').length, issuerPricedStocks: assets.filter(asset => asset.priceSource === 'robinhood').length, omittedByBankr }, assets };
+    coverage: { activeStocks: assets.filter(asset => asset.kind === 'stock').length, chainlinkStocks: assets.filter(asset => asset.kind === 'stock' && asset.priceSource === 'chainlink').length, issuerPricedStocks: assets.filter(asset => asset.priceSource === 'robinhood').length, omittedByBankr }, assets };
   await writeFile(outputPath, JSON.stringify(catalog, null, 2) + '\n');
   console.log(`Verified ${assets.length} quotes at block ${block.number}: ${JSON.stringify(catalog.coverage)}`);
   return catalog;

@@ -5,13 +5,14 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createPublicClient, decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getAddress, getContractAddress, http, keccak256, encodeDeployData, parseAbi, toHex } from 'viem';
 
-import { readDeploymentCatalog } from './deployment-policy.mjs';
+import { readDeploymentCatalog, RAREFRIENDS_QUOTE, reviewedDeploymentAddress } from './deployment-policy.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const reviewPath = resolve(process.argv[2] || resolve(root, 'deployment-review.json'));
 const outputPath = resolve(process.argv[3] || resolve(root, 'state-override-review.json'));
 const reviewRaw = await readFile(reviewPath, 'utf8');
 const review = JSON.parse(reviewRaw);
+const reviewedRouter = reviewedDeploymentAddress(review);
 const artifact = JSON.parse(await readFile(resolve(root, 'out/RarePetLaunchRouter.sol/RarePetLaunchRouter.json'), 'utf8'));
 const snapshot = readDeploymentCatalog();
 const data = encodeDeployData({ abi: artifact.abi, bytecode: artifact.bytecode.object, args: [review.config.treasury, BigInt(review.config.totalSupply), review.config.friendFeeBps, snapshot.quotes.map(quote => quote.address)] });
@@ -22,6 +23,7 @@ const block = await client.getBlock();
 const blockNumber = block.number;
 const nonce = await client.getTransactionCount({ address: review.config.deployer, blockNumber });
 const router = getContractAddress({ from: review.config.deployer, nonce: BigInt(nonce) });
+if (router.toLowerCase() !== reviewedRouter.toLowerCase() || nonce !== review.deploymentAddressRead.deployerNonce) throw new Error('The deployer nonce changed. Prepare a fresh review before rehearsal.');
 const currentCode = await client.getCode({ address: router, blockNumber });
 if (currentCode && currentCode !== '0x') throw new Error('The prospective deployment address already has code.');
 // EVM CREATE eth_call returns constructor-produced runtime, including the exact immutable values.
@@ -64,11 +66,26 @@ const selfResult = await client.call({ account: review.config.deployer, to: rout
 if (!selfResult.data) throw new Error('Self launch returned no result.');
 const [selfAsset] = decodeAbiParameters([{ type: 'address' }], selfResult.data);
 if (friendAsset.toLowerCase() === selfAsset.toLowerCase()) throw new Error('Self and Friend salt namespaces collided.');
-const stockQuote = review.quotes.at(-1);
+const stockAddress = snapshot.catalog.assets.filter(asset => asset.kind === 'stock').at(-1)?.address;
+const stockQuote = review.quotes.find(quote => quote.address.toLowerCase() === stockAddress?.toLowerCase());
+if (!stockQuote) throw new Error('The reviewed catalog has no tail stock.');
 const stockRequest = { ...request, quote: stockQuote.address, symbol: 'RFSTOCK', salt: toHex(43n, { size: 32 }) };
 const stockResult = await client.call({ account: review.config.deployer, to: router, data: encodeFunctionData({ abi: artifact.abi, functionName: 'launchAsSelf', args: [stockRequest] }), value: 0n, blockNumber, stateOverride });
 if (!stockResult.data) throw new Error('Tail stock launch returned no result.');
 const [stockAsset] = decodeAbiParameters([{ type: 'address' }], stockResult.data);
+const rfQuote = review.quotes.find(quote => quote.address.toLowerCase() === RAREFRIENDS_QUOTE.toLowerCase());
+if (!rfQuote) throw new Error('The reviewed catalog is missing canonical RAREFRIENDS.');
+const rfRequest = { ...request, quote: rfQuote.address, symbol: 'RFPAIR', salt: toHex(44n, { size: 32 }) };
+const rfFriendData = encodeFunctionData({ abi: artifact.abi, functionName: 'launch', args: [rfRequest] });
+const rfOuter = encodeFunctionData({ abi: accountABI, functionName: 'execute', args: [router, 0n, rfFriendData, 0] });
+const rfFriendResult = await client.call({ account: owner, to: wallet, data: rfOuter, value: 0n, blockNumber, stateOverride });
+if (!rfFriendResult.data) throw new Error('RAREFRIENDS paired RF launch returned no result.');
+const [rfNested] = decodeAbiParameters([{ type: 'bytes' }], rfFriendResult.data);
+const [rfFriendAsset] = decodeAbiParameters([{ type: 'address' }], rfNested);
+const rfSelfResult = await client.call({ account: review.config.deployer, to: router, data: encodeFunctionData({ abi: artifact.abi, functionName: 'launchAsSelf', args: [rfRequest] }), value: 0n, blockNumber, stateOverride });
+if (!rfSelfResult.data) throw new Error('RAREFRIENDS paired self launch returned no result.');
+const [rfSelfAsset] = decodeAbiParameters([{ type: 'address' }], rfSelfResult.data);
+if (rfFriendAsset.toLowerCase() === rfSelfAsset.toLowerCase()) throw new Error('RAREFRIENDS paired salt namespaces collided.');
 const again = await client.getBlock({ blockNumber });
 if (again.hash !== block.hash || await client.getChainId() !== 4663) throw new Error('The rehearsal block changed.');
 const result = {
@@ -79,6 +96,7 @@ const result = {
   friend: { collection: genesis, tokenId: '2', owner, wallet, simulatedAsset: friendAsset },
   self: { creator: review.config.deployer, simulatedAsset: selfAsset, creatorEqualsTreasury: review.config.deployer.toLowerCase() === review.config.treasury.toLowerCase() },
   tailStock: { symbol: stockQuote.symbol, quote: stockQuote.address, simulatedAsset: stockAsset },
+  rarefriends: { symbol: rfQuote.symbol, quote: rfQuote.address, friendAsset: rfFriendAsset, selfAsset: rfSelfAsset },
   limitations: 'This is an eth_call state-override rehearsal, not deployment or proof of persisted storage. Constructor execution was separately simulated; local tests cover cooldown and Brain persistence.',
 };
 if (await readFile(reviewPath, 'utf8') !== reviewRaw || readDeploymentCatalog().catalogHash !== review.catalogHash) throw new Error('Review or catalog changed during rehearsal. Prepare a fresh review.');
@@ -88,7 +106,7 @@ review.validation = {
   fullRouterSimulation: 'passed', method: 'eth_call stateOverride', deploymentDataHash: review.deploymentDataHash, catalogHash: review.catalogHash,
   blockNumber: result.blockNumber, blockHash: result.blockHash, artifactPath: relative(resolve(root, '../..'), outputPath),
   artifactSha256: createHash('sha256').update(proofRaw).digest('hex'),
-  limitation: 'Exact constructor plus real RF and self routes and the final catalog stock simulated against mainnet. No state persisted or transaction was sent.',
+  limitation: 'Exact constructor plus real RF and self routes with WETH and RAREFRIENDS, and the final catalog stock, simulated against mainnet. No state persisted or transaction was sent.',
 };
 const temporary = `${reviewPath}.tmp`;
 await writeFile(temporary, `${JSON.stringify(review, null, 2)}\n`, { flag: 'wx' });

@@ -2,25 +2,28 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPublicClient, http, keccak256, getAddress, formatEther, parseAbi, zeroAddress } from 'viem';
-import { readDeploymentCatalog, rehearsalMatches } from './deployment-policy.mjs';
+import { createHash } from 'node:crypto';
+import { createPublicClient, http, keccak256, formatEther, parseAbi, zeroAddress } from 'viem';
+import { readDeploymentCatalog, rehearsalMatches, reviewedDeploymentAddress, PREVIOUS_ROUTER } from './deployment-policy.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = process.argv[2];
 if (!/^0x[0-9a-f]{64}$/i.test(hash ?? '')) throw new Error('Provide the public deployment transaction hash.');
-const address = getAddress('0x8c46baA63079B8648b1cd5689058E0AAB33DF063');
-const review = JSON.parse(await readFile(resolve(root, 'deployment-review.json'), 'utf8'));
-const proof = JSON.parse(await readFile(resolve(root, 'state-override-review.json'), 'utf8'));
+const reviewPath = resolve(process.argv[3] || resolve(root, 'deployment-review.json'));
+const review = JSON.parse(await readFile(reviewPath, 'utf8'));
+const address = reviewedDeploymentAddress(review);
+const proofPath = resolve(process.argv[4] || (review.validation?.artifactPath ? resolve(root, '../..', review.validation.artifactPath) : resolve(root, 'state-override-review.json')));
+const proofRaw = await readFile(proofPath, 'utf8'), proof = JSON.parse(proofRaw);
 const artifact = JSON.parse(await readFile(resolve(root, 'out/RarePetLaunchRouter.sol/RarePetLaunchRouter.json'), 'utf8'));
 const snapshot = readDeploymentCatalog();
 const sourceHash = keccak256(new Uint8Array(await readFile(resolve(root, 'src/RarePetLaunchRouter.sol'))));
-if (!rehearsalMatches(proof, review) || snapshot.catalogHash !== review.catalogHash || sourceHash !== review.sourceHash || artifact.metadata.sources['src/RarePetLaunchRouter.sol'].keccak256 !== sourceHash) throw new Error('Source, catalog or review binding mismatch.');
+if (!rehearsalMatches(proof, review) || review.validation?.artifactSha256 !== createHash('sha256').update(proofRaw).digest('hex') || snapshot.catalogHash !== review.catalogHash || sourceHash !== review.sourceHash || artifact.metadata.sources['src/RarePetLaunchRouter.sol'].keccak256 !== sourceHash) throw new Error('Source, catalog or review binding mismatch.');
 const client = createPublicClient({ transport: http('https://rpc.mainnet.chain.robinhood.com', { batch: { batchSize: 30, wait: 20 }, timeout: 20000, retryCount: 1 }), cacheTime: 0 });
 if (await client.getChainId() !== 4663) throw new Error('Wrong chain.');
 const block = await client.getBlock(); const blockNumber = block.number;
 const [tx, receipt, code] = await Promise.all([client.getTransaction({ hash }), client.getTransactionReceipt({ hash }), client.getCode({ address, blockNumber })]);
 const equal = (a, b) => a.toLowerCase() === b.toLowerCase();
-if (receipt.status !== 'success' || !receipt.contractAddress || !equal(receipt.contractAddress, address) || !equal(tx.from, review.config.deployer) || tx.to !== null || tx.nonce !== 0 || tx.value !== 0n || tx.chainId !== 4663 || tx.blockHash !== receipt.blockHash || tx.input !== review.unsignedTransaction.data || keccak256(tx.input) !== review.deploymentDataHash) throw new Error('Deployment transaction or receipt does not match the reviewed exact constructor.');
+if (receipt.status !== 'success' || !receipt.contractAddress || !equal(receipt.contractAddress, address) || !equal(tx.from, review.config.deployer) || tx.to !== null || tx.nonce !== review.deploymentAddressRead.deployerNonce || tx.value !== 0n || tx.chainId !== 4663 || tx.blockHash !== receipt.blockHash || tx.input !== review.unsignedTransaction.data || keccak256(tx.input) !== review.deploymentDataHash) throw new Error('Deployment transaction or receipt does not match the reviewed exact constructor, address and nonce.');
 if (!code || code === '0x' || keccak256(code) !== proof.runtimeCodeHash) throw new Error('Runtime differs from the exact reviewed constructor-produced runtime.');
 // Independently compare every non-immutable byte with the local compiler output.
 let normalized = code.slice(2);
@@ -61,6 +64,17 @@ const beneficiaries = await read('feeBeneficiaries', [sampleCreator]);
 const desired = new Map([[sampleCreator.toLowerCase(),850000000000000000n],[review.config.treasury.toLowerCase(),100000000000000000n],[protocol.toLowerCase(),50000000000000000n]]);
 if (beneficiaries.length !== 3 || beneficiaries.some(b=>desired.get(b.beneficiary.toLowerCase()) !== b.shares)) throw new Error('Fee beneficiaries mismatch.');
 const canonical = await client.getBlock({ blockNumber: receipt.blockNumber });
+let previousActivityAtActivation = null;
+if (review.previousDeployment) {
+  if (!equal(review.previousDeployment.address, PREVIOUS_ROUTER)) throw new Error('Unknown previous router in replacement review.');
+  const previousCode = await client.getCode({ address: PREVIOUS_ROUTER, blockNumber });
+  if (!previousCode || keccak256(previousCode) !== review.previousDeployment.runtimeCodeHash) throw new Error('The previous router runtime changed before activation.');
+  const previousEvents = await client.getLogs({ address: PREVIOUS_ROUTER, events: artifact.abi.filter(item => item.type === 'event' && ['LaunchRecorded', 'SelfLaunchRecorded'].includes(item.name)), fromBlock: 72744001n, toBlock: blockNumber, strict: true });
+  const friendLaunches = previousEvents.filter(log => log.eventName === 'LaunchRecorded').length;
+  const selfLaunches = previousEvents.filter(log => log.eventName === 'SelfLaunchRecorded').length;
+  if (friendLaunches > 0) throw new Error('The previous router acquired RF launches. Do not activate this replacement until Brain and cooldown migration is reviewed.');
+  previousActivityAtActivation = { blockNumber: String(blockNumber), blockHash: block.hash, friendLaunches, selfLaunches };
+}
 const again = await client.getBlock({ blockNumber });
 if (canonical.hash !== receipt.blockHash || again.hash !== block.hash || await client.getChainId() !== 4663) throw new Error('Verification chain or block changed.');
 const manifest = {
@@ -71,9 +85,12 @@ const manifest = {
   source: { path: 'src/RarePetLaunchRouter.sol', contract: 'RarePetLaunchRouter', sourceHash, compiler: artifact.metadata.compiler, settings: artifact.metadata.settings },
   integrity: { deploymentDataHash: review.deploymentDataHash, creationBytecodeHash: review.creationBytecodeHash, runtimeCodeHash: keccak256(code), compiledRuntimeMatchesAfterImmutableNormalization: true, exactReviewedConstructorRuntimeMatches: true, catalogSha256: snapshot.catalogHash },
   configuration: { treasury: review.config.treasury, totalSupply: review.config.totalSupply, feePercent: { creator: 85, treasury: 10, protocol: 5 }, getters, protocolBeneficiaryAtVerification: protocol, modules, quoteCount: quotes.length, quotes: snapshot.quotes },
+  deploymentReview: { path: reviewPath, deployerNonce: tx.nonce, proofPath },
+  previousDeployment: review.previousDeployment ?? null,
+  previousActivityAtActivation,
   sourceVerification: { status: 'pending', explorer: `https://robinhoodchain.blockscout.com/address/${address}?tab=contract` },
   scope: 'Read-only post-deployment verification. No launch or fee-claim transaction was sent. Verification is not an audit of local or upstream contracts.',
 };
-const output = resolve(root, 'deployments/4663.json'); await mkdir(dirname(output), {recursive:true});
+const output = resolve(process.argv[5] || resolve(root, `deployments/4663-${address.toLowerCase()}.json`)); await mkdir(dirname(output), {recursive:true});
 await writeFile(output, `${JSON.stringify(manifest,null,2)}\n`, {flag:'wx'});
 console.log(JSON.stringify({address,transactionHash:hash,deployedAt:manifest.deployedAt,verifiedAt:manifest.verifiedAt,quotes:quotes.length,fee:manifest.receipt.networkFeeETH,output},null,2));

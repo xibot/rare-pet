@@ -1,13 +1,14 @@
 import { formatUnits, parseAbi, parseUnits, type Address } from 'viem';
 import type { createPetPublicClient } from './wallet';
 import catalog from './launch-quote-catalog.json' with { type: 'json' };
+import { readRareFriendsPoolPrice, RARE_FRIENDS_POOL, type RareFriendsPoolPrice } from './launch-rarefriends-price.ts';
 
 /** Generated from the issuer registry; Bankr's smaller menu never limits canonical stock support.
  * See scripts/generate-launch-quote-catalog.mjs and the source hashes in the shared catalog.
  */
 export type LaunchQuoteAsset = Readonly<{
-  id: string; chainId: 4663; address: Address; symbol: string; name: string; kind: 'weth' | 'stock'; decimals: 18;
-  assetId: string | null; priceSource: 'chainlink' | 'robinhood'; feedAddress: Address | null;
+  id: string; chainId: 4663; address: Address; symbol: string; name: string; kind: 'weth' | 'stock' | 'rarefriends'; decimals: 18;
+  assetId: string | null; priceSource: 'chainlink' | 'robinhood' | 'rarefriends-pool'; feedAddress: Address | null;
   feedDescription: string | null; feedName: string | null; feedRegistry: Readonly<Record<string, string | null>> | null;
 }>;
 export const LAUNCH_QUOTE_ASSETS: readonly LaunchQuoteAsset[] = Object.freeze(catalog.assets.map(asset => Object.freeze({ ...asset, feedRegistry: asset.feedRegistry ? Object.freeze({ ...asset.feedRegistry }) : null })) as LaunchQuoteAsset[]);
@@ -15,7 +16,9 @@ export type LaunchQuoteId = LaunchQuoteAsset['id'];
 export type LaunchQuotePrice = Readonly<{
   asset: LaunchQuoteAsset; usdPrice: string; usdPriceE18: bigint; blockNumber: bigint;
   updatedAt: number; readAt: number; expiresAt: number; heartbeatSeconds: number;
-  source: 'chainlink' | 'robinhood'; feedAddress: Address | null;
+  source: 'chainlink' | 'robinhood' | 'rarefriends-pool'; feedAddress: Address | null;
+  /** RF uses a 30-minute pool-derived price converted with the ETH/USD feed. */
+  pool?: RareFriendsPoolPrice;
   /** No canonical Robinhood sequencer uptime address is published in Chainlink's registry. */
   sequencerVerified: false;
 }>;
@@ -26,7 +29,7 @@ const QUOTE_ABI = parseAbi([
   'function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)',
 ]);
 const MAX_JSON_BYTES = 2_000_000, MAX_HEARTBEAT_SECONDS = 86_400, MAX_REVIEW_AGE_SECONDS = 120, ISSUER_MAX_AGE_SECONDS = 90;
-type QuoteClient = Pick<ReturnType<typeof createPetPublicClient>, 'getChainId' | 'getBlock' | 'getCode' | 'readContract'>;
+type QuoteClient = Pick<ReturnType<typeof createPetPublicClient>, 'getChainId' | 'getBlock' | 'getCode' | 'readContract' | 'getLogs'>;
 type Dependencies = { clientFactory?: (signal?: AbortSignal) => QuoteClient | Promise<QuoteClient>; fetcher?: typeof fetch; now?: () => number; timeoutMs?: number };
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const same = (a: unknown, b: string | null) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
@@ -39,7 +42,7 @@ const exactDecimal = (value: unknown) => {
 /** Resolves only reviewed IDs, never an arbitrary contract supplied by a form. */
 export function getLaunchQuoteAsset(id: string): LaunchQuoteAsset {
   const asset = LAUNCH_QUOTE_ASSETS.find(item => item.id === id);
-  if (!asset) throw new Error('Choose a supported WETH or stock pair.');
+  if (!asset) throw new Error('Choose a supported WETH, RAREFRIENDS or stock pair.');
   return asset;
 }
 function verifyDirectory(value: unknown, asset: LaunchQuoteAsset) {
@@ -107,8 +110,8 @@ export function createLaunchQuoteReader(dependencies: Dependencies = {}) {
       if (!hasCode(tokenCode)) throw new Error('The selected quote token has no deployed code.');
       if (decimals !== asset.decimals || symbol !== asset.symbol || (asset.kind === 'stock' && !same(uid, asset.assetId))) throw new Error('Onchain quote metadata does not match the verified pair.');
       if (paused !== false) throw new Error('This stock oracle is paused for a corporate action. Choose another pair or retry later.');
-      let usdPriceE18: bigint, updatedAt: number, effectiveExpiry = Number.MAX_SAFE_INTEGER;
-      if (asset.priceSource === 'chainlink') {
+      let usdPriceE18: bigint, updatedAt: number, effectiveExpiry = Number.MAX_SAFE_INTEGER, pool: RareFriendsPoolPrice | undefined;
+      if (asset.priceSource === 'chainlink' || asset.priceSource === 'rarefriends-pool') {
         if (!asset.feedAddress) throw new Error('Missing verified Chainlink feed.');
         const feedRead = (functionName: 'decimals' | 'description' | 'latestRoundData') => client.readContract({ address: asset.feedAddress!, abi: QUOTE_ABI, functionName, blockNumber });
         const [feedCode, feedDecimals, description, round] = await Promise.all([client.getCode({ address: asset.feedAddress, blockNumber }), feedRead('decimals'), feedRead('description'), feedRead('latestRoundData')]);
@@ -120,6 +123,12 @@ export function createLaunchQuoteReader(dependencies: Dependencies = {}) {
         if (roundId <= 0n || answeredInRound < roundId || answer <= 0n || answer >= 1n << 255n || startedAt <= 0n || startedAt > updated
           || updated <= 0n || updated > BigInt(checkedAt + 30) || updated > block.timestamp || updated < BigInt(checkedAt - heartbeatSeconds)) throw new Error('USD oracle is stale or its round is incomplete. Retry when a fresh price is available.');
         usdPriceE18 = answer * 10n ** 10n; updatedAt = Number(updated);
+        if (asset.priceSource === 'rarefriends-pool') {
+          pool = await readRareFriendsPoolPrice(client, { number: blockNumber, timestamp: block.timestamp, hash: block.hash }, signal);
+          usdPriceE18 = usdPriceE18 * pool.wethPerTokenE18 / 10n ** 18n;
+          if (usdPriceE18 <= 0n) throw new Error('The RAREFRIENDS pool-derived USD price is invalid.');
+          effectiveExpiry = pool.lastSwapAt + RARE_FRIENDS_POOL.maxSwapAgeSeconds;
+        }
       } else {
         const quotes = list(object(object(directory).price).quotes).map(object).filter(row => row.tokenSymbol === asset.symbol);
         const quote = quotes[0], deployments = list(quote?.deployments).map(object).filter(row => row.chainId === 4663);
@@ -143,7 +152,7 @@ export function createLaunchQuoteReader(dependencies: Dependencies = {}) {
       if (checkedBlock.hash !== block.hash) throw new Error('Quote verification block changed. Retry for a fresh quote.');
       signal.throwIfAborted(); const checkedAt = Math.floor(now() / 1000), expiresAt = Math.min(checkedAt + MAX_REVIEW_AGE_SECONDS, updatedAt + heartbeatSeconds, effectiveExpiry);
       if (expiresAt <= checkedAt) throw new Error('Quote expired during verification. Retry for a fresh quote.');
-      return Object.freeze({ asset, usdPrice: formatUnits(usdPriceE18, 18), usdPriceE18, blockNumber, updatedAt, readAt: checkedAt, expiresAt, heartbeatSeconds, source: asset.priceSource, feedAddress: asset.feedAddress, sequencerVerified: false });
+      return Object.freeze({ asset, usdPrice: formatUnits(usdPriceE18, 18), usdPriceE18, blockNumber, updatedAt, readAt: checkedAt, expiresAt, heartbeatSeconds, source: asset.priceSource, feedAddress: asset.feedAddress, ...(pool ? { pool } : {}), sequencerVerified: false });
     } finally { clearTimeout(timer); callerSignal?.removeEventListener('abort', abort); }
   }
   return { readLaunchQuotePrice };

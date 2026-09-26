@@ -2,7 +2,7 @@
 import { build } from 'esbuild';
 import { encodeDeployData, keccak256 } from 'viem';
 import { validateDeploymentConfig, QUOTES } from '../../contracts/rare-launchpad/script/prepare-deployment.mjs';
-import { readDeploymentCatalog, rehearsalMatches } from '../../contracts/rare-launchpad/script/deployment-policy.mjs';
+import { readDeploymentCatalog, rehearsalMatches, reviewedDeploymentAddress, validatePreviousManifest } from '../../contracts/rare-launchpad/script/deployment-policy.mjs';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -15,22 +15,45 @@ const review = JSON.parse(reviewRaw);
 if (review.status !== 'UNSIGNED — no transaction sent' || review.config.chainId !== 4663 || review.config.friendFeeBps !== 8500 || !review.unsignedTransaction?.data?.startsWith('0x')) throw new Error('Use the generated, reviewed RarePet deployment file.');
 const config = validateDeploymentConfig(review.config);
 const contractRoot = resolve(directory,'../../contracts/rare-launchpad');
+const repoRoot = resolve(contractRoot, '../..');
+reviewedDeploymentAddress(review);
 const artifact = JSON.parse(await readFile(resolve(contractRoot,'out/RarePetLaunchRouter.sol/RarePetLaunchRouter.json'),'utf8'));
 const sourceHash = keccak256(new Uint8Array(await readFile(resolve(contractRoot,'src/RarePetLaunchRouter.sol'))));
 const data = encodeDeployData({ abi:artifact.abi, bytecode:artifact.bytecode.object, args:[config.treasury,BigInt(config.totalSupply),config.friendFeeBps,QUOTES.map(quote=>quote.address)] });
 if (review.sourceHash !== sourceHash || artifact.metadata?.sources?.['src/RarePetLaunchRouter.sol']?.keccak256 !== sourceHash || review.creationBytecodeHash !== keccak256(artifact.bytecode.object) || review.unsignedTransaction.data !== data || review.unsignedTransaction.from !== config.deployer || review.unsignedTransaction.chainId !== 4663 || review.unsignedTransaction.value !== '0x0' || JSON.stringify(review.quotes.map(({symbol,address})=>({symbol,address}))) !== JSON.stringify(QUOTES)) throw new Error('The displayed review does not match current source, bytecode or constructor configuration. Regenerate it before signing.');
 const catalogHash = readDeploymentCatalog().catalogHash;
-const proofRaw = await readFile(resolve(contractRoot, 'state-override-review.json'), 'utf8');
+function reviewArtifact(path) {
+  if (typeof path !== 'string' || !path.endsWith('.json')) throw new Error('The review must name a JSON evidence artifact.');
+  const absolute = resolve(repoRoot, path);
+  if (!absolute.startsWith(`${contractRoot}/`)) throw new Error('Deployment evidence must remain inside contracts/rare-launchpad.');
+  return absolute;
+}
+const proofPath = reviewArtifact(review.validation?.artifactPath);
+const proofRaw = await readFile(proofPath, 'utf8');
 const proof = JSON.parse(proofRaw);
 if (review.deploymentDataHash !== keccak256(data) || review.catalogHash !== catalogHash || !rehearsalMatches(proof, review)
   || review.validation?.fullRouterSimulation !== 'passed' || review.validation.deploymentDataHash !== review.deploymentDataHash
   || review.validation.catalogHash !== catalogHash || review.validation.artifactSha256 !== createHash('sha256').update(proofRaw).digest('hex')) throw new Error('A matching full-route rehearsal for this exact deployment and catalog is required before signing.');
+let previousManifestPath, previousManifestRaw;
+if (!review.previousDeployment) throw new Error('This replacement requires the verified previous-router deployment review.');
+if (review.previousDeployment) {
+  previousManifestPath = reviewArtifact(review.previousDeployment.manifestPath);
+  previousManifestRaw = await readFile(previousManifestPath, 'utf8');
+  const previous = validatePreviousManifest(JSON.parse(previousManifestRaw), { sourceHash, creationBytecodeHash:keccak256(artifact.bytecode.object), treasury:config.treasury, totalSupply:config.totalSupply });
+  if (review.previousDeployment.manifestSha256 !== createHash('sha256').update(previousManifestRaw).digest('hex') || review.previousDeployment.address.toLowerCase() !== previous.address.toLowerCase()
+    || review.previousDeployment.runtimeCodeHash !== previous.integrity.runtimeCodeHash || review.previousDeployment.friendLaunches !== 0) throw new Error('Replacement review differs from the verified previous deployment.');
+}
 const result = await build({ entryPoints: [resolve(directory,'wallet.ts')], bundle: true, write: false, platform: 'browser', format: 'esm', target:'es2022', minify:true, define:{ __REVIEW__:JSON.stringify(review) } });
 const html = await readFile(resolve(directory,'index.html'));
+if (process.argv[3] === '--check') {
+  console.log(`Deployment handoff verified: ${review.quotes.length} quotes; ${review.deploymentAddressRead.prospectiveRouter}; nonce ${review.deploymentAddressRead.deployerNonce}. No server started and no transaction sent.`);
+  process.exit(0);
+}
 const server = createServer(async (req,res) => {
   if (!['127.0.0.1:4180','localhost:4180'].includes(req.headers.host) || !['GET','HEAD'].includes(req.method)) { res.writeHead(403).end(); return; }
   try {
-    if (readDeploymentCatalog().catalogHash !== catalogHash || await readFile(reviewPath, 'utf8') !== reviewRaw) { res.writeHead(409).end('Deployment review changed. Reload a newly verified review.'); return; }
+    if (readDeploymentCatalog().catalogHash !== catalogHash || await readFile(reviewPath, 'utf8') !== reviewRaw || await readFile(proofPath, 'utf8') !== proofRaw
+      || previousManifestPath && await readFile(previousManifestPath, 'utf8') !== previousManifestRaw) { res.writeHead(409).end('Deployment review changed. Reload a newly verified review.'); return; }
   } catch { res.writeHead(503).end('Deployment review unavailable.'); return; }
   const pathname = new URL(req.url,'http://localhost:4180').pathname;
   const body = pathname === '/' ? html : pathname === '/wallet.js' ? result.outputFiles[0].contents : pathname === '/review.json' ? JSON.stringify(review,null,2) : null;

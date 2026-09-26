@@ -1,20 +1,29 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { decodeFunctionData, encodeFunctionResult, keccak256, parseAbi, toHex } from 'viem';
+import { build } from 'esbuild';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { decodeFunctionData, encodeFunctionResult, encodeEventTopics, encodeAbiParameters, getContractAddress, keccak256, parseAbi, toHex } from 'viem';
 
 // All wallet calls are a fake injected provider. All RPC requests are fulfilled here.
 // Never launch this test with a persistent browser profile or a real wallet extension.
 const origin = process.env.RAREPET_DEPLOY_TEST_URL || 'http://127.0.0.1:4180';
 assert(['http://127.0.0.1:4180', 'http://localhost:4180'].includes(origin), 'Only the local handoff may be tested.');
-const review = JSON.parse(await readFile(new URL('../contracts/rare-launchpad/deployment-review.json', import.meta.url), 'utf8'));
+const review = JSON.parse(await readFile(resolve(process.argv[2] || 'contracts/rare-launchpad/deployment-review-rarefriends.json'), 'utf8'));
+// Deterministic local runtime fixture: no live RPC or wallet extension is used by these UI tests.
+const previousCode = '0x6001';
+if (review.previousDeployment) review.previousDeployment.runtimeCodeHash = keccak256(previousCode);
+const html = await readFile(new URL('../tools/launch-deploy/index.html', import.meta.url), 'utf8');
+const bundle = await build({ entryPoints: [fileURLToPath(new URL('../tools/launch-deploy/wallet.ts', import.meta.url))], bundle:true, write:false, platform:'browser', format:'esm', target:'es2022', define:{__REVIEW__:JSON.stringify(review)} });
 const rpc = 'https://rpc.mainnet.chain.robinhood.com';
 const key = `rarepet:router-deployment:${keccak256(review.unsignedTransaction.data)}`;
 const wrongOwner = '0x1111111111111111111111111111111111111111';
-const deployed = '0x2222222222222222222222222222222222222222';
+const deployed = getContractAddress({from:review.config.deployer,nonce:BigInt(review.deploymentAddressRead.deployerNonce)});
 const hash = `0x${'12'.repeat(32)}`, blockHash = `0x${'ab'.repeat(32)}`;
 const gasEstimate = BigInt(review.unsignedTransaction.gasEstimate);
 const abi = parseAbi(['function treasury() view returns(address)', 'function friendShares() view returns(uint96)', 'function treasuryShares() view returns(uint96)', 'function totalSupply() view returns(uint256)', 'function CHAIN_ID() view returns(uint256)', 'function quoteTokens() view returns(address[])', 'function getModuleState(address) view returns(uint8)']);
+const launchAbi = parseAbi(['event LaunchRecorded(address indexed collection,uint256 indexed tokenId,address indexed asset,address friendWallet,address owner,address quote,uint24 fee,bytes32 metadataHash,uint256 timestamp)']);
 const equal = (a, b) => a.toLowerCase() === b.toLowerCase();
 const screenshots = 'artifacts/launch-deploy';
 await mkdir(screenshots, { recursive: true });
@@ -27,6 +36,7 @@ function validatePayload(payload) {
   assert(payload.to === undefined || payload.to === null, 'Deployment must have no destination.');
   assert.equal(payload.data, review.unsignedTransaction.data, 'Exact reviewed creation bytecode and constructor arguments.');
   assert.equal(BigInt(payload.value ?? '0x0'), 0n, 'Contract creation sends no native asset value.');
+  assert.equal(BigInt(payload.nonce), BigInt(review.deploymentAddressRead.deployerNonce), 'The reviewed CREATE nonce is fixed.');
   if (payload.chainId !== undefined) assert.equal(BigInt(payload.chainId), 4663n);
 }
 
@@ -36,7 +46,9 @@ async function fixture(options = {}) {
   const page = await context.newPage(); page.setDefaultTimeout(12000);
   const state = { errors: [], unexpected: [], failures: [], rpc: [], wallet: [], attempts: 0, sends: 0,
     reject: false, unknownError: false, holdReceipt: false, rpcChain: '0x1237', changedModule: false,
-    wrongTransaction: false, wrongTreasury: false, staleReview: false, unavailableReview: false, balance: 1000000000000000000n, pendingStorageFailure: !!options.pendingStorageFailure };
+    wrongTransaction: false, wrongTreasury: false, wrongNonce:false, wrongReceiptAddress:false, staleReview: false, unavailableReview: false,
+    latestNonce:review.deploymentAddressRead.deployerNonce,pendingNonce:review.deploymentAddressRead.deployerNonce,addressHasCode:false,oldActivity:false,oldActivityAtRead:Infinity,oldReads:0,oldCodeChanged:false,
+    balance: 1000000000000000000n, pendingStorageFailure: !!options.pendingStorageFailure };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.exposeFunction('mockWalletMethod', method => { state.wallet.push(method); });
   await page.exposeFunction('validateMockDeployment', ({ payload, storage }) => {
@@ -80,7 +92,16 @@ async function fixture(options = {}) {
   async function rpcResult(call) {
     state.rpc.push(call.method);
     if (call.method === 'eth_chainId') return state.rpcChain;
-    if (call.method === 'eth_blockNumber') return '0x100';
+    if (call.method === 'eth_blockNumber') return '0x5000000';
+    if (call.method === 'eth_getTransactionCount') {assert(equal(call.params[0],review.config.deployer));return toHex(call.params[1]==='pending'?state.pendingNonce:state.latestNonce);}
+    if (call.method === 'eth_getLogs') {
+      assert(review.previousDeployment && equal(call.params[0].address,review.previousDeployment.address));
+      assert.equal(BigInt(call.params[0].fromBlock),72744001n);state.oldReads++;
+      if(!state.oldActivity&&state.oldReads<state.oldActivityAtRead)return [];
+      return [{address:review.previousDeployment.address,blockNumber:'0x5000000',blockHash,transactionHash:hash,transactionIndex:'0x0',logIndex:'0x0',removed:false,
+        topics:encodeEventTopics({abi:launchAbi,eventName:'LaunchRecorded',args:{collection:wrongOwner,tokenId:1n,asset:deployed}}),
+        data:encodeAbiParameters([{type:'address'},{type:'address'},{type:'address'},{type:'uint24'},{type:'bytes32'},{type:'uint256'}],[wrongOwner,review.config.deployer,review.quotes[0].address,10000,hash,1700000000n])}];
+    }
     if (call.method === 'eth_gasPrice') return '0x3b9aca00';
     if (call.method === 'eth_getBalance') { assert(equal(call.params[0], review.config.deployer), 'Only the reviewed deployer balance is checked.'); return toHex(state.balance); }
     if (call.method === 'eth_estimateGas') { validatePayload(call.params[0]); return toHex(gasEstimate); }
@@ -101,13 +122,13 @@ async function fixture(options = {}) {
       }
       return encodeFunctionResult({ abi, functionName: decoded.functionName, result });
     }
-    if (call.method === 'eth_getCode') { assert(equal(call.params[0], deployed)); return '0x6000'; }
-    if (call.method === 'eth_getBlockByNumber') return { hash: blockHash, parentHash: `0x${'aa'.repeat(32)}`, number: '0x100', timestamp: '0x60000000', nonce: '0x0000000000000000', difficulty: '0x0', gasLimit: '0x1000000', gasUsed: '0x0', size: '0x1', extraData: '0x', transactions: [], uncles: [], baseFeePerGas: '0x1' };
+    if (call.method === 'eth_getCode') { if(review.previousDeployment&&equal(call.params[0],review.previousDeployment.address))return state.oldCodeChanged?'0x6002':previousCode;assert(equal(call.params[0], deployed)); return state.addressHasCode||state.sends?'0x6000':'0x'; }
+    if (call.method === 'eth_getBlockByNumber') return { hash: blockHash, parentHash: `0x${'aa'.repeat(32)}`, number: '0x5000000', timestamp: '0x60000000', nonce: '0x0000000000000000', difficulty: '0x0', gasLimit: '0x1000000', gasUsed: '0x0', size: '0x1', extraData: '0x', transactions: [], uncles: [], baseFeePerGas: '0x1' };
     if (call.method === 'eth_getTransactionReceipt' || call.method === 'eth_getTransactionByHash') {
       assert.equal(call.params[0], hash, 'Only the fake submitted hash may be inspected.');
-      if (call.method === 'eth_getTransactionByHash') return { hash, from: review.config.deployer, to: null, value: '0x0', input: state.wrongTransaction ? '0x6000' : review.unsignedTransaction.data, blockHash, blockNumber: '0x100', transactionIndex: '0x0', nonce: '0x1', gas: '0x400000', gasPrice: '0x1', type: '0x0', chainId: '0x1237', v: '0x1', r: `0x${'00'.repeat(32)}`, s: `0x${'00'.repeat(32)}` };
+      if (call.method === 'eth_getTransactionByHash') return { hash, from: review.config.deployer, to: null, value: '0x0', input: state.wrongTransaction ? '0x6000' : review.unsignedTransaction.data, blockHash, blockNumber: '0x5000000', transactionIndex: '0x0', nonce: toHex(state.wrongNonce?review.deploymentAddressRead.deployerNonce+1:review.deploymentAddressRead.deployerNonce), gas: '0x400000', gasPrice: '0x1', type: '0x0', chainId: '0x1237', v: '0x1', r: `0x${'00'.repeat(32)}`, s: `0x${'00'.repeat(32)}` };
       if (state.holdReceipt) return null;
-      return { transactionHash: hash, from: review.config.deployer, to: null, contractAddress: deployed, blockHash, blockNumber: '0x100', transactionIndex: '0x0', status: '0x1', gasUsed: toHex(gasEstimate), cumulativeGasUsed: toHex(gasEstimate), effectiveGasPrice: '0x1', logs: [], logsBloom: `0x${'00'.repeat(256)}`, type: '0x0' };
+      return { transactionHash: hash, from: review.config.deployer, to: null, contractAddress: state.wrongReceiptAddress?wrongOwner:deployed, blockHash, blockNumber: '0x5000000', transactionIndex: '0x0', status: '0x1', gasUsed: toHex(gasEstimate), cumulativeGasUsed: toHex(gasEstimate), effectiveGasPrice: '0x1', logs: [], logsBloom: `0x${'00'.repeat(256)}`, type: '0x0' };
     }
     throw new Error(`Unexpected RPC method: ${call.method}`);
   }
@@ -116,7 +137,11 @@ async function fixture(options = {}) {
     if (url.origin === origin) {
       if (url.pathname === '/review.json' && state.unavailableReview) return route.fulfill({status:409,body:'Review changed.'});
       if (url.pathname === '/review.json' && state.staleReview) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...review,catalogHash:'obsolete-catalog'})});
-      return route.continue();
+      if(url.pathname==='/')return route.fulfill({status:200,contentType:'text/html',body:html});
+      if(url.pathname==='/wallet.js')return route.fulfill({status:200,contentType:'text/javascript',body:bundle.outputFiles[0].text});
+      if(url.pathname==='/review.json')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(review)});
+      if(url.pathname==='/favicon.ico')return route.fulfill({status:204,body:''});
+      state.unexpected.push(route.request().url());return route.abort();
     }
     if (url.origin === rpc && url.pathname === '/') {
       try {
@@ -169,6 +194,19 @@ try {
       await t.page.locator('#deploy').click(); await t.status(kind === 'staleReview' ? /outdated deployment or quote list/ : /review changed or is unavailable/);
       assert.equal(t.state.attempts, 0); assert.equal(t.state.sends, 0); await t.checked();
     }
+  });
+  await scenario('changed latest or pending nonce, occupied address and previous RF activity block the wallet prompt', async () => {
+    const cases=[['latestNonce',review.deploymentAddressRead.deployerNonce+1,/nonce changed/],['pendingNonce',review.deploymentAddressRead.deployerNonce+1,/nonce changed/],['addressHasCode',true,/already has code/]];
+    if(review.previousDeployment)cases.push(['oldActivity',true,/previous router now has RF launches/],['oldCodeChanged',true,/previous router runtime changed/]);
+    for(const [key,value,pattern] of cases){
+      const t=await fixture();await t.ready();t.state[key]=value;await t.page.locator('#deploy').click();await t.status(pattern);
+      assert.equal(t.state.attempts,0);assert.equal(t.state.sends,0);await t.checked();
+    }
+  });
+  if(review.previousDeployment)await scenario('old RF activity appearing after the fee estimate still blocks the final wallet prompt',async()=>{
+    const t=await fixture();await t.ready();t.state.oldActivityAtRead=t.state.oldReads+2;
+    await t.page.locator('#deploy').click();await t.status(/previous router now has RF launches/);
+    assert.equal(t.state.attempts,0);assert.equal(t.state.sends,0);await t.checked();
   });
   await scenario('wrong connected owner cannot estimate or submit', async () => {
     const t = await fixture({ account: wrongOwner }); await t.page.locator('#connect').click(); await t.status(/Select 0x/);
@@ -237,10 +275,10 @@ try {
     await t.page.reload({ waitUntil: 'networkidle' }); await t.status(/previous wallet request/);
     assert.equal(t.state.sends, 1); assert(await t.page.locator('#connect').isDisabled()); await t.checked();
   });
-  await scenario('mismatched submitted input or treasury cannot show a confirmed deployment', async () => {
-    for (const kind of ['wrongTransaction', 'wrongTreasury']) {
+  await scenario('mismatched submitted input, nonce, receipt address or treasury cannot show a confirmed deployment', async () => {
+    for (const kind of ['wrongTransaction', 'wrongNonce', 'wrongReceiptAddress', 'wrongTreasury']) {
       const t = await fixture(); await t.ready(); t.state[kind] = true; await t.page.locator('#deploy').click();
-      await t.status(kind === 'wrongTransaction' ? /does not match the reviewed deployment/ : /Deployed configuration did not match/);
+      await t.status(['wrongTransaction','wrongNonce'].includes(kind) ? /does not match the reviewed deployment/ : kind==='wrongReceiptAddress' ? /deployment address does not match/ : /Deployed configuration did not match/);
       assert(await t.page.locator('#result').isHidden()); assert(await t.page.locator('#recheck').isVisible()); assert(await t.page.locator('#deploy').isDisabled());
       assert.equal(t.state.sends, 1); await t.checked();
     }

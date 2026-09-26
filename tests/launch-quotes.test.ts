@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import catalog from '../games/rare-pet/launch-quote-catalog.json' with { type: 'json' };
+import { poolFixture } from './fixtures/rarefriends-pool.ts';
 import { catalogCandidates } from '../scripts/generate-launch-quote-catalog.mjs';
 const source = fileURLToPath(new URL('../games/rare-pet/launch-quotes.ts', import.meta.url));
 const proxySource = fileURLToPath(new URL('../api/launch-quotes.ts', import.meta.url));
@@ -22,12 +23,12 @@ function directory() {
   };
 }
 function setup(options: Record<string, unknown> = {}) {
-  const calls: Record<string, unknown>[] = [], payload = directory();
+  const calls: Record<string, unknown>[] = [], payload = directory(), pool = poolFixture();
   const client = {
-    getChainId: async () => 4663, getBlock: async () => ({ number: 77n, timestamp: BigInt(NOW - 1), hash: '0x' + 'ab'.repeat(32) }),
-    getCode: async (args: Record<string, unknown>) => { calls.push({ operation: 'code', ...args }); return '0x60006000'; },
+    getChainId: async () => 4663, getBlock: pool.client.getBlock, getLogs: pool.client.getLogs,
+    getCode: async (args: Record<string, unknown>) => { calls.push({ operation: 'code', ...args }); return (await pool.client.getCode(args)) ?? '0x60006000'; },
     readContract: async (args: Record<string, unknown>) => {
-      calls.push(args); const asset = LAUNCH_QUOTE_ASSETS.find(asset => asset.address === args.address || asset.feedAddress === args.address);
+      calls.push(args); if (['poolKey', 'poolManager', 'poolId', 'seedComplete', 'getSlot0', 'getLiquidity', 'getPositionInfo'].includes(args.functionName as string)) return pool.client.readContract(args); const asset = LAUNCH_QUOTE_ASSETS.find(asset => asset.address === args.address || asset.feedAddress === args.address);
       assert(asset, 'only pinned addresses can be read');
       if (args.functionName === 'decimals') return args.address === asset.address ? 18 : 8;
       if (args.functionName === 'symbol') return asset.symbol;
@@ -51,16 +52,16 @@ const feed = data => data.chainlink.find(entry => entry.proxyAddress === getLaun
 const price = data => data.price.quotes.find(entry => entry.tokenSymbol === 'QNT');
 
 test('shared reviewed catalog covers every issuer stock, including the asset Bankr omits', () => {
-  assert.equal(LAUNCH_QUOTE_ASSETS.length, 196); assert.equal(catalog.coverage.activeStocks, 195);
+  assert.equal(LAUNCH_QUOTE_ASSETS.length, 197); assert.equal(catalog.coverage.activeStocks, 195);
   assert.equal(catalog.coverage.chainlinkStocks, 35); assert.equal(catalog.coverage.issuerPricedStocks, 160);
   assert.equal(getLaunchQuoteAsset('qnt').address, '0xB7EDfE2F33C1aC06830a971dFb559bDe8A2a3d76');
   assert.equal(getLaunchQuoteAsset('qnt').priceSource, 'robinhood');
   for (const asset of LAUNCH_QUOTE_ASSETS) {
     assert.match(asset.address, /^0x[0-9a-fA-F]{40}$/); assert.equal(asset.chainId, 4663); assert.equal(asset.decimals, 18); assert(Object.isFrozen(asset));
-    if (asset.priceSource === 'chainlink') { assert.match(asset.feedAddress, /^0x[0-9a-fA-F]{40}$/); assert(Object.isFrozen(asset.feedRegistry)); }
+    if (asset.priceSource === 'chainlink' || asset.priceSource === 'rarefriends-pool') { assert.match(asset.feedAddress, /^0x[0-9a-fA-F]{40}$/); assert(Object.isFrozen(asset.feedRegistry)); }
     else { assert.equal(asset.feedAddress, null); assert.equal(asset.kind, 'stock'); }
   }
-  assert.equal(new Set(LAUNCH_QUOTE_ASSETS.map(asset => asset.address.toLowerCase())).size, 196);
+  assert.equal(new Set(LAUNCH_QUOTE_ASSETS.map(asset => asset.address.toLowerCase())).size, 197);
   for (const id of ['STOCKS', 'ETH', '0x1111111111111111111111111111111111111111', '<script>', 'qnt/../../bad']) assert.throws(() => getLaunchQuoteAsset(id), /supported/);
 });
 
@@ -79,15 +80,15 @@ test('generator is complete, deterministic and rejects ambiguous issuer identiti
 test('selected Chainlink stock retains exact token price without double-applying multiplier', async () => {
   const { reader, calls } = setup(); const quote = await reader.readLaunchQuotePrice('nvda');
   assert.equal(quote.usdPriceE18, 9007199254740993120000000000n); assert.equal(quote.usdPrice, '9007199254.74099312');
-  assert.equal(quote.updatedAt, NOW - 60); assert.equal(quote.expiresAt, NOW + 120); assert.equal(quote.blockNumber, 77n); assert.equal(quote.source, 'chainlink');
-  assert(calls.every(call => call.blockNumber === 77n)); assert(!calls.some(call => call.functionName === 'uiMultiplier'));
+  assert.equal(quote.updatedAt, NOW - 60); assert.equal(quote.expiresAt, NOW + 120); assert.equal(quote.blockNumber, 100000n); assert.equal(quote.source, 'chainlink');
+  assert(calls.every(call => call.blockNumber === 100000n)); assert(!calls.some(call => call.functionName === 'uiMultiplier'));
 });
 
 test('issuer midpoint uses exact arithmetic and current onchain multiplier once for QNT', async () => {
   const { reader, calls } = setup(); const quote = await reader.readLaunchQuotePrice('qnt');
   assert.equal(quote.usdPriceE18, 1250000000000000002n); assert.equal(quote.usdPrice, '1.250000000000000002');
   assert.equal(quote.source, 'robinhood'); assert.equal(quote.feedAddress, null); assert.equal(quote.updatedAt, NOW - 10); assert.equal(quote.expiresAt, NOW + 80);
-  assert(calls.every(call => call.blockNumber === 77n && call.address === quote.asset.address));
+  assert(calls.every(call => call.blockNumber === 100000n && call.address === quote.asset.address));
 });
 
 test('all catalog paths price with their exact pinned metadata, including GLD and incomplete Chainlink docs', async () => {
@@ -112,7 +113,7 @@ test('issuer identity, status, decimals and exact published feed metadata mismat
 });
 
 test('rejects wrong RPC, stale blocks, empty code, altered symbol, uid, feed or corporate-action pause', async () => {
-  for (const changes of [{ getChainId: async () => 1 }, { getBlock: async () => ({ number: 77n, timestamp: BigInt(NOW - 121) }) }, { getBlock: async () => ({ number: 77n, timestamp: BigInt(NOW + 31) }) }, { getCode: async () => '0x' }]) await assert.rejects(setup({ client: changes }).reader.readLaunchQuotePrice('weth'), /Robinhood|block|deployed/);
+  for (const changes of [{ getChainId: async () => 1 }, { getBlock: async () => ({ number: 100000n, timestamp: BigInt(NOW - 121) }) }, { getBlock: async () => ({ number: 100000n, timestamp: BigInt(NOW + 31) }) }, { getCode: async () => '0x' }]) await assert.rejects(setup({ client: changes }).reader.readLaunchQuotePrice('weth'), /Robinhood|block|deployed/);
   for (const [target, result] of [['decimals', 6], ['symbol', 'FAKE'], ['uid', '0x' + '11'.repeat(32)], ['description', 'ETH / EUR'], ['oraclePaused', true]]) {
     const { client, reader } = setup(); const read = client.readContract; client.readContract = async args => args.functionName === target ? result : read(args);
     await assert.rejects(reader.readLaunchQuotePrice('nvda'), /metadata|paused/);
@@ -150,7 +151,7 @@ test('multiplier disagreements and effective corporate actions block; near-futur
 
 test('network changes, failed/HTML/oversized service and cancellation never return a price', async () => {
   let reads = 0; await assert.rejects(setup({ client: { getChainId: async () => ++reads === 1 ? 4663 : 1 } }).reader.readLaunchQuotePrice('weth'), /changed networks/);
-  let blocks = 0; await assert.rejects(setup({ client: { getBlock: async () => ({ number: 77n, timestamp: BigInt(NOW - 1), hash: '0x' + (++blocks === 1 ? 'ab' : 'cd').repeat(32) }) } }).reader.readLaunchQuotePrice('qnt'), /block changed/);
+  let blocks = 0; await assert.rejects(setup({ client: { getBlock: async () => ({ number: 100000n, timestamp: BigInt(NOW - 1), hash: '0x' + (++blocks === 1 ? 'ab' : 'cd').repeat(32) }) } }).reader.readLaunchQuotePrice('qnt'), /block changed/);
   for (const response of [new Response('', { status: 503 }), new Response('<html/>'), jsonResponse({ data: 'x'.repeat(2_000_001) })]) await assert.rejects(setup({ dependencies: { fetcher: async () => response } }).reader.readLaunchQuotePrice('weth'), /unavailable|JSON|large/);
   const controller = new AbortController(); controller.abort(new Error('User switched Friend')); await assert.rejects(setup().reader.readLaunchQuotePrice('weth', controller.signal), /switched Friend/);
 });
@@ -160,8 +161,16 @@ test('proxy accepts catalog IDs only and fetches the minimum official sources wi
   for (const request of [{ method: 'POST' }, ...['?url=https://attacker.example', '?asset=qnt&asset=aapl', '?asset=https://attacker.example', '?asset=', '?asset=qnt/../../bad'].map(query => ({ method: 'GET', url: '/api/launch-quotes' + query }))]) { const response = output(); await handler(request, response); assert([400, 405].includes(response.statusCode)); assert.equal(calls.length, 0); }
   const response = output(); await handler({ method: 'GET', url: '/api/launch-quotes?asset=qnt' }, response); assert.equal(response.statusCode, 200); assert.equal(response.headers['Cache-Control'], 'no-store');
   assert.deepEqual(calls.sort(), ['https://api.robinhood.com/rhj/assets', 'https://api.robinhood.com/rhj/prices/QNT'].sort()); calls.length = 0;
-  await handler({ method: 'GET', url: '/api/launch-quotes?asset=weth' }, output()); assert.deepEqual(calls, ['https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json']);
+  await handler({ method: 'GET', url: '/api/launch-quotes?asset=weth' }, output()); assert.deepEqual(calls, ['https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json']); calls.length = 0;
+  await handler({ method: 'GET', url: '/api/launch-quotes?asset=rarefriends' }, output()); assert.deepEqual(calls, ['https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json']);
 });
 test('proxy returns truthful retryable failure when a needed official source is unavailable or too large', async () => {
   for (const responseFactory of [() => new Response('', { status: 403 }), () => new Response('<html>'), () => jsonResponse({ large: 'x'.repeat(600001) })]) { const handler = createLaunchQuotesHandler(async () => responseFactory()), response = output(); await handler({ method: 'GET' }, response); assert.equal(response.statusCode, 503); assert.equal(response.headers['Cache-Control'], 'no-store'); assert.match(JSON.parse(response.body).error, /Retry/); }
+});
+
+test('RAREFRIENDS converts its pool average using ETH/USD and includes bounded review evidence', async () => {
+  const { reader } = setup(); const quote = await reader.readLaunchQuotePrice('rarefriends');
+  assert.equal(quote.source, 'rarefriends-pool'); assert.equal(quote.asset.kind, 'rarefriends'); assert.equal(quote.pool.windowSeconds, 1800);
+  assert.equal(quote.usdPriceE18, 9007199254740993120000000000n * quote.pool.wethPerTokenE18 / 10n ** 18n);
+  assert.equal(quote.expiresAt, NOW + 120); assert.equal(quote.feedAddress, getLaunchQuoteAsset('weth').feedAddress);
 });

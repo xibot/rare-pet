@@ -26,7 +26,7 @@ export function createLaunchQuotesHandler(fetcher: typeof fetch = fetch) {
     }
     const sources: Record<string, string> = {};
     if (!asset || asset.kind === 'stock') sources.robinhood = SOURCES.robinhood;
-    if (!asset || asset.priceSource === 'chainlink') sources.chainlink = SOURCES.chainlink;
+    if (!asset || asset.priceSource === 'chainlink' || asset.priceSource === 'rarefriends-pool') sources.chainlink = SOURCES.chainlink;
     if (asset?.priceSource === 'robinhood') sources.price = `https://api.robinhood.com/rhj/prices/${encodeURIComponent(asset.symbol)}`;
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12_000);
     try {

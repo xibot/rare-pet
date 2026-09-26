@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { formatUnits, type Address, type Hex } from 'viem';
 import { PET_DEPLOYMENT, type PetIdentity, type PetWalletSession } from './wallet';
 import { LAUNCH_QUOTE_ASSETS } from './launch-quotes';
-import { readRareLaunchHistory, readRareSelfLaunchHistory, readRareLaunchFees, claimRareLaunchFees, claimRareSelfLaunchFees, confirmRareLaunchFeeClaim, RareLaunchTransactionError, type RareLaunchHistoryItem, type RareLaunchPendingFees } from './launch-doppler';
+import { readAllRareLaunchHistory, readRareLaunchFees, claimRareLaunchFees, claimRareSelfLaunchFees, confirmRareLaunchFeeClaim, RareLaunchTransactionError, type RareLaunchHistoryItem, type RareLaunchPendingFees } from './launch-doppler';
 import { getLaunchClaim, setLaunchClaim, subscribeLaunchClaims, type LaunchClaimRecord } from './launch-claim-record';
 const message = (cause: unknown) => cause instanceof Error ? cause.message : 'Fees are unavailable. Please refresh.';
 type Props = {
@@ -34,7 +34,7 @@ function LaunchHistoryContent({ mode, creator, pet, session, revision, router, r
     if (mode === 'friend' && (!pet?.walletAddress || pet.walletAddress.toLowerCase() !== creator.toLowerCase())) {
       setError('Choose a verified Rare Friend wallet to read its launches.'); setLoading(false); return () => abort.abort();
     }
-    const read = mode === 'self' ? readRareSelfLaunchHistory({ router, account: creator, signal: abort.signal }) : readRareLaunchHistory({ router, pet: pet!, signal: abort.signal });
+    const read = readAllRareLaunchHistory({ router, account: creator, pet: mode === 'friend' ? pet! : undefined, signal: abort.signal });
     void read.then(result => { if (!abort.signal.aborted) setItems(result.items); }).catch(cause => { if (!abort.signal.aborted) setError(message(cause)); }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [creator, router, mode, pet, refresh, reload]);

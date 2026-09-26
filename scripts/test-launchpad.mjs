@@ -11,6 +11,10 @@ const outdir = await mkdtemp(path.join(tmpdir(), 'rarepet-launch-preview-'));
 const artifact = path.resolve('artifacts/launchpad');
 const catalog = JSON.parse(await readFile(new URL('../games/rare-pet/launch-quote-catalog.json', import.meta.url), 'utf8'));
 const stockIds = catalog.assets.filter(asset => asset.kind === 'stock').sort((a, b) => a.symbol.localeCompare(b.symbol)).map(asset => asset.id);
+const rarefriends = catalog.assets.find(asset => asset.id === 'rarefriends');
+assert.equal(rarefriends?.address.toLowerCase(), '0x0779369854d3ecdea927206718ffd7730c67b71f', 'Rare Friends pairing uses its reviewed Robinhood token');
+assert.equal(rarefriends.kind, 'rarefriends');
+assert(!stockIds.includes('rarefriends'), 'Rare Friends is a token option, never a stock entry');
 await mkdir(artifact, { recursive: true });
 const previous = Object.fromEntries(['RAREPET_LAUNCHPAD_ADDRESS', 'BLOB_READ_WRITE_TOKEN'].map(key => [key, process.env[key]]));
 process.env.RAREPET_LAUNCHPAD_ADDRESS = '0x7777777777777777777777777777777777777777';
@@ -49,6 +53,13 @@ async function fits(page, root, label) {
   assert(dimensions.bodyWidth <= dimensions.viewport + 1, `${label}: page has no horizontal overflow: ${JSON.stringify(dimensions)}`);
   assert(dimensions.rootScroll <= dimensions.rootWidth + 1, `${label}: form has no horizontal overflow: ${JSON.stringify(dimensions)}`);
   assert(dimensions.left >= -1 && dimensions.right <= dimensions.viewport + 1, `${label}: card stays within the viewport`);
+  for (const button of await root.locator('.launch-pairs>button').all()) {
+    const content = await button.evaluate(element => {
+      const button = element.getBoundingClientRect(), symbol = element.querySelector('b').getBoundingClientRect();
+      return { label: element.textContent, width: element.clientWidth, scrollWidth: element.scrollWidth, left: button.left, right: button.right, symbolLeft: symbol.left, symbolRight: symbol.right };
+    });
+    assert(content.scrollWidth <= content.width + 1 && content.symbolLeft >= content.left && content.symbolRight <= content.right, `${label}: each pair label fits its button: ${JSON.stringify(content)}`);
+  }
   if (dimensions.pageCard) {
     assert(dimensions.scrollHeight <= dimensions.height + 1, `${label}: standalone page never clips its content in an inner scroller: ${JSON.stringify(dimensions)}`);
     assert.equal(dimensions.scrollTop, 0, `${label}: standalone card cannot internally scroll its heading away`);
@@ -72,11 +83,25 @@ async function fillDraft(root, { name = 'Rare Preview', ticker = 'rare' } = {}) 
   await imagePrepared(root);
   assert.equal(await root.locator('#launch-symbol').inputValue(), ticker.toUpperCase());
 }
+async function pairState(root, selected) {
+  const buttons = root.locator('.launch-pairs>button');
+  assert.equal(await buttons.count(), 3, 'there are exactly three pair families');
+  assert.deepEqual(await buttons.evaluateAll(elements => elements.map(element => element.getAttribute('aria-pressed'))),
+    ['weth', 'rarefriends', 'stock'].map(kind => String(kind === selected)), 'only the selected pair family is pressed');
+  assert.equal(await root.locator('.launch-stock-picker').count(), Number(selected === 'stock'), 'stock search and selector only appear for actual stocks');
+  assert.equal(await root.locator('.launch-pair-note').count(), Number(selected === 'rarefriends'), 'pool pricing requirements only appear for Rare Friends');
+  if (selected === 'rarefriends') assert.match(await root.locator('.launch-pair-note').innerText(), /30-minute.*Recent onchain pool activity.*stops if the price cannot be verified/);
+}
 async function review(root, mode, quote = 'AAPL', fee = '2') {
   await root.getByRole('button', { name: /^REVIEW PREVIEW/ }).click();
   await root.locator('.launch-review').waitFor();
   const text = await root.locator('.launch-review').innerText();
   assert(text.includes(`$RARE / ${quote}`)); assert(text.includes(`${fee}% of each swap`));
+  const expectedPair = catalog.assets.find(asset => asset.symbol === quote);
+  assert(expectedPair, 'review pair is in the reviewed catalog');
+  const pairDetail = root.locator('.launch-review dl>div').filter({ hasText: 'NETWORK / PAIR' });
+  assert.match((await pairDetail.innerText()).toLowerCase(), new RegExp(expectedPair.address.toLowerCase()));
+  assert.equal((await pairDetail.locator('a').getAttribute('href')).split('/address/')[1].toLowerCase(), expectedPair.address.toLowerCase(), 'review links to the selected quote token, not a previous pair');
   assert(text.includes('1,000,000,000 tokens')); assert(text.includes('Approximately $10,000'));
   assert(text.includes('85% creator · 10% RarePet treasury · 5% Doppler'));
   assert(text.includes('Nothing has been uploaded or launched.'));
@@ -136,9 +161,11 @@ try {
     assert.equal(await toggle(root, 'self').getAttribute('aria-pressed'), 'true', 'standalone launch page starts with Yourself');
     assert.equal(await root.locator('.launch-friend').count(), 0, 'self creator does not display a fake Rare Friend');
     assert.match(await root.locator('.launch-self').innerText(), /No Rare Friend needed/);
+    await pairState(root, 'weth');
     await fits(page, root, `${width} self form`);
     if (width === 1440) await invalidInputs(root); else await fillDraft(root);
     await root.getByRole('button', { name: /STOCKS/ }).click();
+    await pairState(root, 'stock');
     assert.deepEqual(await root.locator('#launch-stock option').evaluateAll(options => options.map(option => option.value)), stockIds, 'every stock in the shared deployment catalog is selectable');
     assert.equal(await root.locator('#launch-stock-count').innerText(), `${stockIds.length} stock & ETF tokens`);
     for (const stock of ['nvda', 'qnt', 'crm', 'gld', 'qqq', 'tsla', 'spy', 'aapl']) { await root.locator('#launch-stock').selectOption(stock); assert.equal(await root.locator('#launch-stock').inputValue(), stock); }
@@ -171,7 +198,16 @@ try {
     assert.equal(await root.getByLabel('TOKEN NAME', { exact: true }).inputValue(), 'Rare Preview');
     assert.equal(await root.locator('#launch-symbol').inputValue(), 'RARE');
     assert.equal(await root.locator('#launch-stock').inputValue(), 'aapl'); await imagePrepared(root);
-    await root.getByRole('button', { name: /WETH/ }).click();
+    await root.getByRole('button', { name: /^\$RAREFRIENDS/ }).click();
+    await pairState(root, 'rarefriends'); await fits(page, root, `${width} Rare Friends self form`);
+    assert.equal(await root.getByLabel('TOKEN NAME', { exact: true }).inputValue(), 'Rare Preview', 'changing the pair preserves the token draft');
+    await imagePrepared(root);
+    await page.screenshot({ path: path.join(artifact, `self-rarefriends-form-${width}.png`), fullPage: true });
+    await review(root, 'self', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends self review`);
+    await root.getByRole('button', { name: /EDIT TOKEN/ }).click(); await pairState(root, 'rarefriends');
+    await root.getByRole('button', { name: /STOCKS/ }).click(); await pairState(root, 'stock');
+    assert.equal(await root.locator('#launch-stock').inputValue(), 'nvda', 'selecting stocks from Rare Friends picks a real stock');
+    await root.getByRole('button', { name: /WETH/ }).click(); await pairState(root, 'weth');
     await root.getByRole('button', { name: '0.3%', exact: true }).click();
     await review(root, 'self', 'WETH', '0.3');
 
@@ -180,9 +216,13 @@ try {
     assert.equal(await root.getByLabel('TOKEN NAME', { exact: true }).inputValue(), '', 'switching creator modes clears the old unsigned draft');
     assert.equal(await root.getByAltText('Token image preview').count(), 0);
     assert.match(await root.locator('.launch-friend').innerText(), /1 LAUNCH \/ 24H/);
+    await pairState(root, 'weth');
     await fillDraft(root); await root.getByRole('button', { name: /STOCKS/ }).click(); await root.locator('#launch-stock').selectOption('aapl'); await root.getByRole('button', { name: '2%', exact: true }).click();
     await review(root, 'friend'); await fits(page, root, `${width} friend page review`);
     await page.screenshot({ path: path.join(artifact, `friend-page-review-${width}.png`), fullPage: true });
+    await root.getByRole('button', { name: /EDIT TOKEN/ }).click();
+    await root.getByRole('button', { name: /^\$RAREFRIENDS/ }).click(); await pairState(root, 'rarefriends');
+    await review(root, 'friend', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends creator page review`);
     if (width === 1440) {
       await root.getByRole('button', { name: 'CHOOSE MY FRIEND ↗', exact: true }).click();
       const picker = page.getByRole('dialog');
@@ -198,6 +238,7 @@ try {
     const beforeBrain = await page.locator('.trait').filter({ has: page.locator('span', { hasText: /^Brain$/ }) }).locator('strong').innerText();
     await page.getByRole('button', { name: /^Launch,/ }).click(); root = page.getByRole('dialog', { name: 'RARE LAUNCHPAD' }); await root.waitFor();
     assert.equal(await toggle(root, 'friend').getAttribute('aria-pressed'), 'true', 'care action opens the Rare Friend creator');
+    await pairState(root, 'weth');
     await fillDraft(root); await fits(page, root, `${width} friend modal form`);
     await root.evaluate(element => { element.scrollTop = 0; });
     await root.screenshot({ path: path.join(artifact, `friend-modal-form-${width}.png`) });
@@ -205,7 +246,14 @@ try {
     await review(root, 'friend'); await fits(page, root, `${width} friend modal review`);
     await root.evaluate(element => { element.scrollTop = 0; });
     await root.screenshot({ path: path.join(artifact, `friend-modal-review-${width}.png`) });
+    await root.getByRole('button', { name: /EDIT TOKEN/ }).click();
+    await root.getByRole('button', { name: /^\$RAREFRIENDS/ }).click(); await pairState(root, 'rarefriends');
+    await fits(page, root, `${width} Rare Friends modal form`);
+    await review(root, 'friend', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends modal review`);
+    await root.evaluate(element => { element.scrollTop = 0; });
+    await root.screenshot({ path: path.join(artifact, `friend-modal-rarefriends-review-${width}.png`) });
     await toggle(root, 'self').click(); assert.equal(await toggle(root, 'self').getAttribute('aria-pressed'), 'true');
+    await pairState(root, 'weth');
     await fits(page, root, `${width} self modal`);
     await root.getByRole('button', { name: 'Close Rare Launchpad' }).click();
     assert.equal(await page.getByRole('dialog').count(), 0);

@@ -52,6 +52,30 @@
       }
     },
     {
+      "id": "rarefriends",
+      "chainId": 4663,
+      "address": "0x0779369854d3EcdEA927206718FFD7730C67B71f",
+      "symbol": "RAREFRIENDS",
+      "name": "RareFriends",
+      "kind": "rarefriends",
+      "decimals": 18,
+      "assetId": null,
+      "priceSource": "rarefriends-pool",
+      "feedAddress": "0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9",
+      "feedName": "ETH / USD",
+      "feedDescription": "ETH / USD",
+      "feedRegistry": {
+        "path": "eth-usd-shared-svr",
+        "baseAsset": "ETH",
+        "quoteAsset": "USD",
+        "assetClass": "Crypto",
+        "blockchainName": "Robinhood",
+        "baseAssetEntityId": "crypto-ETH",
+        "quoteAssetEntityId": "forex-USD",
+        "marketHours": "Crypto"
+      }
+    },
+    {
       "id": "aaoi",
       "chainId": 4663,
       "address": "0x521Cf887E6531c6F667b5BC4D896E5d9bfE8EB2E",
@@ -3291,5 +3315,10 @@
       "feedDescription": null,
       "feedRegistry": null
     }
-  ]
+  ],
+  "rarefriendsVerification": {
+    "verifiedBlockNumber": "73282601",
+    "source": "https://rarefriends.com/docs/contracts",
+    "priceSource": "Canonical RF/WETH 30-minute arithmetic TWAP reconstructed from onchain Swap events, converted using Chainlink ETH/USD."
+  }
 }

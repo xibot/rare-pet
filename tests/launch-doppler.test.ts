@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { DopplerSDK, airlockAbi, computePoolId, type PreparedMulticurveCreate } from '@whetstone-research/doppler-sdk/evm';
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, parseAbi, keccak256, stringToHex, zeroAddress, type Address, type Hex, type PublicClient, type TransactionReceipt } from 'viem';
 import { buildRareLaunchParams, validateRareLaunchDraft, prepareRareLaunch, sendRareLaunch, confirmRareLaunch, readRareLaunchFees, claimRareLaunchFees,
@@ -7,6 +8,7 @@ import { buildRareLaunchParams, validateRareLaunchDraft, prepareRareLaunch, send
 import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset, type LaunchQuoteAsset } from '../games/rare-pet/launch-quotes.ts';
 import { RARE_WALLET_ABI } from '../games/rare-pet/rare-wallet-transfer.ts';
 import type { PetIdentity, PetWalletSession } from '../games/rare-pet/wallet.ts';
+import originalDeployment from '../contracts/rare-launchpad/deployments/4663.json' with { type: 'json' };
 const OWNER = '0x1111111111111111111111111111111111111111' as Address;
 const WALLET = '0x2222222222222222222222222222222222222222' as Address;
 const ROUTER = '0x3333333333333333333333333333333333333333' as Address;
@@ -17,6 +19,9 @@ const WETH = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as Address;
 const COLLECTION = '0x116EaA62241751E0c98dA43d458600c6C17cD361' as Address;
 const HASH = `0x${'a'.repeat(64)}` as Hex, BLOCK = `0x${'b'.repeat(64)}` as Hex, SALT = `0x${'c'.repeat(64)}` as Hex;
 const NOW = 1_800_000_000_000;
+const oldRouter = originalDeployment.address as Address;
+const oldQuotes = originalDeployment.configuration.quotes.map(quote => quote.address as Address);
+const oldCode = readFileSync(new URL('./fixtures/launch-router-v1-runtime.txt', import.meta.url), 'utf8').trim() as Hex;
 const pet: PetIdentity = { collection: 'genesis', chainId: 4663, contract: COLLECTION, tokenId: '2', label: 'Genesis #2', image: '', owner: OWNER, walletAddress: WALLET, blockNumber: '20', generation: null, rushEligible: true };
 const draft: RareLaunchDraft = { name: 'Rare Cat', symbol: 'RCAT', tokenURI: 'data:application/json;base64,e30=', fee: 3000, salt: SALT,
   quote: { asset: getLaunchQuoteAsset('weth'),
@@ -387,12 +392,14 @@ test('catalog changes do not discard pending recovery proof from an older catalo
 
 function draftForQuote(asset: LaunchQuoteAsset): RareLaunchDraft {
   return { ...draft, quote: { ...draft.quote, asset, source: asset.priceSource, feedAddress: asset.feedAddress,
+    ...(asset.kind === 'rarefriends' ? { usdPrice:'0.002', usdPriceE18:2000000000000000n,
+      pool:{poolId:'0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240' as Hex,windowStart:NOW/1000-1800,windowEnd:NOW/1000,windowSeconds:1800 as const,lastSwapAt:NOW/1000-600,wethPerTokenE18:1000000000000n,spotWethPerTokenE18:1000000000000n,permanentWethDepthWei:20n*10n**18n} } : {}),
     updatedAt: NOW / 1000, heartbeatSeconds: asset.priceSource === 'robinhood' ? 90 : 86400,
     expiresAt: NOW / 1000 + (asset.priceSource === 'robinhood' ? 90 : 120) } };
 }
-test('every issuer catalog asset can build the same zero-allocation permanent-liquidity launch in both modes', async () => {
+test('every catalog asset can build the same zero-allocation permanent-liquidity launch in both modes', async () => {
   const { buildRareSelfLaunchParams } = await import('../games/rare-pet/launch-doppler.ts');
-  assert.equal(LAUNCH_QUOTE_ASSETS.length, 196); assert.equal(LAUNCH_QUOTE_ASSETS.filter(a => a.kind === 'stock').length, 195);
+  assert.equal(LAUNCH_QUOTE_ASSETS.length, 197); assert.equal(LAUNCH_QUOTE_ASSETS.filter(a => a.kind === 'stock').length, 195);
   assert.equal(getLaunchQuoteAsset('qnt').priceSource, 'robinhood');
   for (const asset of LAUNCH_QUOTE_ASSETS) {
     const selected = draftForQuote(asset);
@@ -441,4 +448,79 @@ test('the supported pending-record capacity persists full-catalog reviews with m
   }
   const restored = createRareLaunchTransactionStore({ storage });
   for (const wallet of wallets) assert.equal(restored.getRareLaunchTransaction(wallet)?.hash, HASH, `lost pending record ${wallet}; stored bytes=${raw.length}`);
+});
+
+test('previous deployment stays readable for history but is never a fallback for new launches', async () => {
+  const { readRareLaunchHistory, readRareSelfLaunchHistory, readRareLaunchConfig, readRareSelfLaunchConfig } = await import('../games/rare-pet/launch-doppler.ts');
+  const { ARCHIVED_LAUNCH_ROUTERS, verifyArchivedLaunchPolicy, launchHistoryRouters } = await import('../games/rare-pet/launch-router-history.ts');
+  assert.equal(keccak256(oldCode), originalDeployment.integrity.runtimeCodeHash);
+  assert.equal(ARCHIVED_LAUNCH_ROUTERS[0].runtimeCodeHash, originalDeployment.integrity.runtimeCodeHash);
+  assert.doesNotThrow(() => verifyArchivedLaunchPolicy(oldRouter, oldCode, [...oldQuotes].reverse()));
+  assert.throws(() => verifyArchivedLaunchPolicy(oldRouter, '0x1234', oldQuotes), /previous launch router/);
+  assert.throws(() => verifyArchivedLaunchPolicy(oldRouter, oldCode, oldQuotes.slice(1)), /previous launch router/);
+  assert.throws(() => verifyArchivedLaunchPolicy(ROUTER, oldCode, oldQuotes), /previous launch router/);
+  assert.equal(launchHistoryRouters(oldRouter).length, 1);
+  assert.equal(launchHistoryRouters(ROUTER).length, 2);
+  const f = fixture(); f.changes.code = oldCode; f.changes.config.quoteTokens = oldQuotes;
+  f.deps.client.getBlockNumber = async () => 80_000_000n;
+  f.deps.client.getLogs = async () => [];
+  assert.equal((await readRareLaunchHistory({router:oldRouter,pet},f.deps)).items.length,0);
+  assert.equal((await readRareSelfLaunchHistory({router:oldRouter,account:OWNER},f.deps)).items.length,0);
+  await assert.rejects(readRareLaunchConfig(oldRouter,pet,f.deps),/complete verified quote catalog/);
+  await assert.rejects(readRareSelfLaunchConfig(oldRouter,OWNER,f.deps),/complete verified quote catalog/);
+  await assert.rejects(readRareLaunchHistory({router:ROUTER,pet},f.deps),/complete verified quote catalog/);
+  f.changes.code = '0x1234';
+  await assert.rejects(readRareLaunchHistory({router:oldRouter,pet},f.deps),/previous launch router/);
+  assert.equal(f.writes.length,0);
+});
+
+test('history combines both router generations and does not hide a failed or incomplete source', async () => {
+  const { readAllRareLaunchHistory } = await import('../games/rare-pet/launch-doppler.ts');
+  const f = fixture(), oldAsset = '0x7777777777777777777777777777777777777777' as Address;
+  const reads: Address[] = []; let missingLegacy = false, failLegacy = false;
+  f.deps.client.getBlockNumber = async () => 80_000_000n;
+  f.deps.client.getCode = async ({address}) => address.toLowerCase() === oldRouter.toLowerCase() ? oldCode : '0x1234';
+  const read = f.deps.client.readContract.bind(f.deps.client);
+  f.deps.client.readContract = (async (args: {address:Address;functionName:string}) => {
+    if(args.functionName === 'quoteTokens') return args.address.toLowerCase() === oldRouter.toLowerCase() ? oldQuotes : config.quoteTokens;
+    if(args.functionName === 'getLaunch') return {brain:1n,lastLaunchAt:BigInt(NOW/1000),hasLaunched:true};
+    if(args.functionName === 'selfLaunchCount') return 1n;
+    return read(args as never);
+  }) as typeof f.deps.client.readContract;
+  f.deps.client.getLogs = (async ({address:router,args}: {address:Address;args:Record<string,unknown>}) => {
+    reads.push(router); const legacy=router.toLowerCase()===oldRouter.toLowerCase();
+    if(legacy&&failLegacy) throw new Error('Previous router RPC unavailable');
+    if(legacy&&missingLegacy) return [];
+    return [{address:router,blockNumber:79_000_000n,blockHash:BLOCK,transactionHash:HASH,transactionIndex:0,logIndex:0,removed:false,
+      args:{...(args.creator?{creator:OWNER}:{collection:COLLECTION,tokenId:2n,friendWallet:WALLET,owner:OWNER}),asset:legacy?oldAsset:ASSET,quote:WETH,fee:3000,metadataHash:HASH,timestamp:BigInt(NOW/1000-(legacy?100:0))}}];
+  }) as typeof f.deps.client.getLogs;
+  for(const input of [{router:ROUTER,account:OWNER},{router:ROUTER,account:WALLET,pet}]) {
+    const history = await readAllRareLaunchHistory(input,f.deps);
+    assert.deepEqual(history.items.map(item=>item.asset),[ASSET,oldAsset]);
+  }
+  assert.ok(reads.some(address=>address===oldRouter));
+  missingLegacy=true;
+  await assert.rejects(readAllRareLaunchHistory({router:ROUTER,account:OWNER},f.deps),/incomplete/);
+  missingLegacy=false; failLegacy=true;
+  await assert.rejects(readAllRareLaunchHistory({router:ROUTER,account:WALLET,pet},f.deps),/RPC unavailable/);
+  assert.equal(f.writes.length,0);
+});
+
+test('RareFriends pool quotes bind canonical identity, depth and observations; moving average review tolerates at most one percent', async () => {
+  const { verifyRareLaunchPriceRefresh } = await import('../games/rare-pet/launch-doppler.ts');
+  const rarefriends = getLaunchQuoteAsset('rarefriends');
+  const quote = { ...draft.quote, asset: rarefriends, source: 'rarefriends-pool' as const,
+    usdPrice:'0.002',usdPriceE18:2000000000000000n,
+    pool:{poolId:'0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240' as Hex,windowStart:NOW/1000-1800,windowEnd:NOW/1000,windowSeconds:1800 as const,lastSwapAt:NOW/1000-600,wethPerTokenE18:1000000000000n,spotWethPerTokenE18:1000000000000n,permanentWethDepthWei:20n*10n**18n} };
+  const rfDraft = {...draft,quote};
+  assert.doesNotThrow(()=>validateRareLaunchDraft(rfDraft,NOW));
+  assert.equal(buildRareLaunchParams({pet,config,draft:rfDraft,now:NOW}).params.sale.numeraire,rarefriends.address);
+  for(const pool of [undefined,{...quote.pool,poolId:HASH},{...quote.pool,lastSwapAt:NOW/1000-3601},{...quote.pool,windowStart:NOW/1000-1700},{...quote.pool,permanentWethDepthWei:9n*10n**18n},{...quote.pool,spotWethPerTokenE18:quote.pool.wethPerTokenE18*121n/100n}]) {
+    assert.throws(()=>validateRareLaunchDraft({...rfDraft,quote:{...quote,pool}},NOW),/RareFriends pool price/);
+  }
+  assert.doesNotThrow(()=>verifyRareLaunchPriceRefresh(quote,{...quote,usdPriceE18:quote.usdPriceE18*101n/100n}));
+  assert.doesNotThrow(()=>verifyRareLaunchPriceRefresh(quote,{...quote,usdPriceE18:quote.usdPriceE18*99n/100n}));
+  assert.throws(()=>verifyRareLaunchPriceRefresh(quote,{...quote,usdPriceE18:quote.usdPriceE18*101n/100n+1n}),/price changed/);
+  assert.throws(()=>verifyRareLaunchPriceRefresh(quote,{...quote,usdPriceE18:quote.usdPriceE18*99n/100n-1n}),/price changed/);
+  assert.throws(()=>verifyRareLaunchPriceRefresh(draft.quote,{...draft.quote,usdPriceE18:draft.quote.usdPriceE18+1n}),/price changed/);
 });

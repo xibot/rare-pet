@@ -96,3 +96,18 @@ The local signing server was stopped after deployment to prevent stale pages fro
 ## Upstream references
 
 The ABI adapters match Doppler commit [`bda077cf05c834f3bb5eb311f5b86376910d7912`](https://github.com/whetstoneresearch/doppler/tree/bda077cf05c834f3bb5eb311f5b86376910d7912), including Airlock, DopplerHookInitializer, DopplerERC20V1Factory, NoOp governance/migration and FeesManager. See the [Doppler deployment directory](https://docs.doppler.lol/reference/contract-addresses), [Robinhood contract list](https://docs.robinhood.com/chain/contracts/) and [Robinhood stock-token API documentation](https://docs.robinhood.com/chain/stock-token-apis/). Pinned module approval is rechecked at construction and every launch; no protection is claimed against defects or privileged upgrades in upstream contracts.
+
+
+## Prepared RAREFRIENDS replacement
+
+The new shared catalog adds `RAREFRIENDS` at `0x0779369854d3EcdEA927206718FFD7730C67B71f`: WETH + RAREFRIENDS + 195 stock/ETF tokens (197). The deployed router documented above remains the original 196-token router until a replacement is signed, mined, independently verified and configured in the app. No Solidity change is required; the constructor allowlist is immutable and already supports up to 256 quotes.
+
+Keep the original deployment review, rehearsal and manifest. Prepare and rehearse separate replacement files:
+
+```sh
+node contracts/rare-launchpad/script/prepare-deployment.mjs contracts/rare-launchpad/deployment-config.json contracts/rare-launchpad/deployment-review-rarefriends.json contracts/rare-launchpad/deployments/4663.json
+node contracts/rare-launchpad/script/rehearse-state-override.mjs contracts/rare-launchpad/deployment-review-rarefriends.json contracts/rare-launchpad/state-override-review-rarefriends.json
+node tools/launch-deploy/serve.mjs contracts/rare-launchpad/deployment-review-rarefriends.json
+```
+
+The full-route rehearsal covers RAREFRIENDS in both creator modes, WETH in both modes, and the final stock quote. The local signing handoff rechecks the exact reviewed nonce, predicted address, catalog and previous router activity. After the user signs, pass the transaction hash plus those same review/proof paths to `verify-deployment.mjs`; its address-specific output preserves `deployments/4663.json`. Any previous RF launch activity blocks a silent state reset. The legacy contract remains callable; history and fee claims remain available, but the two contracts cannot impose one shared cooldown.

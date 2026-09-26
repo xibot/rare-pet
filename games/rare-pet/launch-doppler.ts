@@ -11,6 +11,7 @@ import type { PetIdentity, PetWalletSession } from './wallet';
 import { launchTreasury } from './config.ts';
 import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset, readLaunchQuotePrice, type LaunchQuotePrice, type LaunchQuoteId } from './launch-quotes.ts';
 import { RARE_WALLET_ABI } from './rare-wallet-transfer.ts';
+import { archivedLaunchRouter, launchHistoryRouters, verifyArchivedLaunchPolicy } from './launch-router-history.ts';
 
 /** Official Doppler bda077cf deployment, independently read on Robinhood block 72704138. */
 export const RARE_LAUNCH_DOPPLER = Object.freeze({
@@ -111,17 +112,33 @@ function validateLaunchDraft(draft: RareLaunchDraft, now = Date.now(), currentCa
   if (!RARE_LAUNCH_FEES.includes(draft.fee)) throw new Error('Choose one of the supported trading fees.');
   if (!/^0x[0-9a-fA-F]{64}$/.test(draft.salt)) throw new Error('The launch salt must be exactly 32 bytes.');
   const quote = draft.quote;
-  if (!['chainlink', 'robinhood'].includes(quote.source) || quote.asset.chainId !== 4663 || quote.asset.decimals !== 18
+  if (!['chainlink', 'robinhood', 'rarefriends-pool'].includes(quote.source) || quote.asset.chainId !== 4663 || quote.asset.decimals !== 18
     || ![quote.expiresAt, quote.readAt, quote.updatedAt, quote.heartbeatSeconds].every(Number.isSafeInteger)
     || quote.heartbeatSeconds <= 0 || quote.heartbeatSeconds > 86400 || quote.readAt <= 0 || quote.updatedAt <= 0
     || quote.expiresAt * 1000 <= now || quote.readAt * 1000 > now + 30000 || quote.updatedAt > quote.readAt + 30
     || quote.expiresAt > quote.readAt + 120 || quote.expiresAt > quote.updatedAt + quote.heartbeatSeconds
     || typeof quote.blockNumber !== 'bigint' || quote.blockNumber < 0n || typeof quote.usdPriceE18 !== 'bigint' || quote.usdPriceE18 <= 0n) throw new Error('Refresh the pair’s verified USD quote before launching.');
   address(quote.asset.address, 'quote token');
-  if (quote.source === 'chainlink') {
+  if (quote.source === 'chainlink' || quote.source === 'rarefriends-pool') {
     address(quote.feedAddress, 'price feed'); address(quote.asset.feedAddress, 'asset price feed');
     if (!equal(quote.feedAddress, quote.asset.feedAddress)) throw new Error('The quoted pair does not match its price feed.');
   } else if (quote.feedAddress !== null || quote.asset.feedAddress !== null || quote.asset.kind !== 'stock') throw new Error('The issuer quote must identify an official stock without a Chainlink feed.');
+  if (quote.source === 'rarefriends-pool') {
+    const pool = quote.pool;
+    if (quote.asset.kind !== 'rarefriends' || !equal(quote.asset.address, '0x0779369854d3EcdEA927206718FFD7730C67B71f')
+      || !equal(quote.feedAddress!, getLaunchQuoteAsset('weth').feedAddress!) || !pool
+      || pool.poolId !== '0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240'
+      || ![pool.windowStart, pool.windowEnd, pool.lastSwapAt].every(Number.isSafeInteger)
+      || pool.windowSeconds !== 1800 || pool.windowStart !== pool.windowEnd - 1800 || pool.windowStart <= 0
+      || pool.windowEnd > quote.readAt + 30 || pool.windowEnd < quote.readAt - 120
+      || pool.lastSwapAt <= 0 || pool.lastSwapAt > pool.windowEnd || quote.expiresAt > pool.lastSwapAt + 3600
+      || typeof pool.wethPerTokenE18 !== 'bigint' || pool.wethPerTokenE18 <= 0n
+      || typeof pool.spotWethPerTokenE18 !== 'bigint' || pool.spotWethPerTokenE18 <= 0n
+      || typeof pool.permanentWethDepthWei !== 'bigint' || pool.permanentWethDepthWei < 10n * WAD
+      || (pool.spotWethPerTokenE18 > pool.wethPerTokenE18 ? pool.spotWethPerTokenE18 - pool.wethPerTokenE18 : pool.wethPerTokenE18 - pool.spotWethPerTokenE18) * 100n > pool.wethPerTokenE18 * 20n) {
+      throw new Error('Refresh the verified RareFriends pool price before launching.');
+    }
+  }
   if (currentCatalog) {
     const trusted = getLaunchQuoteAsset(quote.asset.id);
     const sameFeed = trusted.feedAddress === null ? quote.feedAddress === null : quote.feedAddress !== null && equal(trusted.feedAddress, quote.feedAddress);
@@ -196,7 +213,7 @@ async function defaultDependencies(): Promise<RareLaunchDependencies> {
   const { createPetPublicClient, verifyPet } = await import('./wallet');
   return { client: createPetPublicClient(), verifyIdentity: (pet, owner) => verifyPet(pet.collection, pet.tokenId, owner) };
 }
-async function readLaunchConfig(router: Address, identity: { account: Address; pet?: PetIdentity }, injected?: Pick<RareLaunchDependencies, 'client'>): Promise<RareLaunchConfig> {
+async function readLaunchConfig(router: Address, identity: { account: Address; pet?: PetIdentity }, injected?: Pick<RareLaunchDependencies, 'client'>, historyOnly = false): Promise<RareLaunchConfig> {
   address(router, 'deployed launch router'); address(identity.account, 'launch creator');
   const pet = identity.pet;
   const { client } = injected ?? await defaultDependencies();
@@ -218,7 +235,10 @@ async function readLaunchConfig(router: Address, identity: { account: Address; p
     return actual === expected;
   }));
   if (states.some(value => !value)) throw new Error('A required Doppler module is no longer enabled.');
-  verifyRareLaunchQuoteCatalog(quoteTokens);
+  if (historyOnly && archivedLaunchRouter(router)) {
+    verifyRareLaunchQuoteCatalog(quoteTokens, false);
+    verifyArchivedLaunchPolicy(router, code, quoteTokens);
+  } else verifyRareLaunchQuoteCatalog(quoteTokens);
   address(treasury, 'treasury'); address(protocol, 'Doppler protocol');
   if (!equal(treasury, launchTreasury)) throw new Error('The launch router does not use the confirmed RarePet treasury.');
   if (totalSupply !== RARE_LAUNCH_SUPPLY || ![850n * 10n ** 15n].includes(friendShares) || friendShares + treasuryShares + PROTOCOL_SHARES !== WAD) throw new Error('The launch router has an unsupported supply or fee split.');
@@ -444,11 +464,11 @@ export async function readRareLaunchHistory(input: { router: Address; pet: PetId
   address(input.router, 'launch router'); address(input.pet.walletAddress, 'Rare Wallet');
   const { client } = injected ?? await defaultDependencies();
   input.signal?.throwIfAborted();
-  const config = await readRareLaunchConfig(input.router, input.pet, { client });
+  const config = await readLaunchConfig(input.router, { account: input.pet.walletAddress, pet: input.pet }, { client }, true);
   input.signal?.throwIfAborted();
   const block = await client.getBlock({ blockNumber: config.blockNumber });
   const event = RARE_LAUNCH_ROUTER_ABI.find(item => item.type === 'event' && item.name === 'LaunchRecorded')!;
-  const logs = await client.getLogs({ address: input.router, event, args: { collection: input.pet.contract, tokenId: BigInt(input.pet.tokenId) }, fromBlock: 0n, toBlock: config.blockNumber, strict: true });
+  const logs = await client.getLogs({ address: input.router, event, args: { collection: input.pet.contract, tokenId: BigInt(input.pet.tokenId) }, fromBlock: archivedLaunchRouter(input.router)?.fromBlock ?? 0n, toBlock: config.blockNumber, strict: true });
   input.signal?.throwIfAborted();
   if (logs.length > 500) throw new Error('This Friend’s launch history exceeds the supported limit. Use the chain explorer for its complete history.');
   const items: RareLaunchHistoryItem[] = [], seen = new Set<string>();
@@ -492,7 +512,15 @@ export function validateStoredRareLaunch(wallet: Address, value: unknown): Prepa
 async function validateCurrentQuote(draft: RareLaunchDraft, deps: RareLaunchDependencies) {
   const fresh = await (deps.refreshQuote ?? readLaunchQuotePrice)(draft.quote.asset.id);
   validateRareLaunchDraft({ ...draft, quote: fresh }, deps.now?.());
-  if (fresh.usdPriceE18 !== draft.quote.usdPriceE18 || !equal(fresh.asset.address, draft.quote.asset.address)) throw new Error('The pair’s USD price changed. Prepare a new review before launching.');
+  verifyRareLaunchPriceRefresh(draft.quote, fresh);
+}
+/** A rolling pool average moves each block. Keep the reviewed curves, with at most 1% drift. */
+export function verifyRareLaunchPriceRefresh(reviewed: LaunchQuotePrice, fresh: LaunchQuotePrice) {
+  const difference = fresh.usdPriceE18 > reviewed.usdPriceE18 ? fresh.usdPriceE18 - reviewed.usdPriceE18 : reviewed.usdPriceE18 - fresh.usdPriceE18;
+  const changed = reviewed.source === 'rarefriends-pool' && fresh.source === 'rarefriends-pool'
+    ? difference * 100n > reviewed.usdPriceE18
+    : difference !== 0n;
+  if (changed || !equal(fresh.asset.address, reviewed.asset.address)) throw new Error('The pair’s USD price changed. Prepare a new review before launching.');
 }
 type SelfSessionOptions = Readonly<{ session: PetWalletSession; account: Address; revision: number; assertActive?: () => void; onWalletRequest?: () => void }>;
 async function verifiedSelfSession(options: SelfSessionOptions, deps: RareLaunchDependencies, requireSigner: boolean) {
@@ -588,10 +616,10 @@ export async function sendRareSelfLaunch(options: SelfSessionOptions & { prepare
 }
 export async function readRareSelfLaunchHistory(input: { router: Address; account: Address; signal?: AbortSignal }, injected?: Pick<RareLaunchDependencies, 'client'>) {
   const { client } = injected ?? await defaultDependencies(); input.signal?.throwIfAborted();
-  const config = await readRareSelfLaunchConfig(input.router, input.account, { client });
+  const config = await readLaunchConfig(input.router, { account: input.account }, { client }, true);
   const block = await client.getBlock({ blockNumber: config.blockNumber });
   const event = RARE_LAUNCH_ROUTER_ABI.find(item => item.type === 'event' && item.name === 'SelfLaunchRecorded')!;
-  const logs = await client.getLogs({ address: input.router, event, args: { creator: input.account }, fromBlock: 0n, toBlock: config.blockNumber, strict: true });
+  const logs = await client.getLogs({ address: input.router, event, args: { creator: input.account }, fromBlock: archivedLaunchRouter(input.router)?.fromBlock ?? 0n, toBlock: config.blockNumber, strict: true });
   input.signal?.throwIfAborted();
   if (logs.length > 500) throw new Error('Creator launch history exceeds the supported limit. Use the chain explorer.');
   const items: RareLaunchHistoryItem[] = [], seen = new Set<string>();
@@ -607,6 +635,17 @@ export async function readRareSelfLaunchHistory(input: { router: Address; accoun
   if (current.hash !== block.hash || await client.getChainId() !== 4663) throw new Error('Creator launch history block changed.');
   input.signal?.throwIfAborted(); return immutable({ items: items.sort((a, b) => a.timestamp === b.timestamp ? 0 : a.timestamp > b.timestamp ? -1 : 1), blockNumber: config.blockNumber, incomplete: false as const });
 }
+/** Every known router is checked independently; an unavailable source is never an empty list. */
+export async function readAllRareLaunchHistory(input: { router: Address; account: Address; pet?: PetIdentity; signal?: AbortSignal }, injected?: Pick<RareLaunchDependencies, 'client'>) {
+  const results = await Promise.all(launchHistoryRouters(input.router).map(router => input.pet
+    ? readRareLaunchHistory({ router, pet: input.pet, signal: input.signal }, injected)
+    : readRareSelfLaunchHistory({ router, account: input.account, signal: input.signal }, injected)));
+  input.signal?.throwIfAborted();
+  const items = results.flatMap(result => result.items);
+  if (new Set(items.map(item => item.asset.toLowerCase())).size !== items.length) throw new Error('The combined launch history contains a duplicate asset. Retry its chain read.');
+  return immutable({ items: items.sort((a, b) => a.timestamp === b.timestamp ? 0 : a.timestamp > b.timestamp ? -1 : 1), incomplete: false as const });
+}
+
 export async function claimRareSelfLaunchFees(options: SelfSessionOptions & { asset: Address; onHash: (hash: Hex) => void }, injected?: RareLaunchDependencies) {
   if (active.has(options.session)) throw new Error('A launch transaction is already pending.'); active.add(options.session);
   try {

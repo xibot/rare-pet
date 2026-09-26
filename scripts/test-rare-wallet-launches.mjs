@@ -31,6 +31,7 @@ const modules = {
       return {items:[{asset:wallet==='${wallet}'?'${token}':'${otherToken}',hash:'${hash}',timestamp:1800000000n,quote:'0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73',fee:10000}],blockNumber:20n,incomplete:false};
     }
     export function readRareSelfLaunchHistory(){throw new Error('Owner launch history leaked into RF wallet')}
+    export function readAllRareLaunchHistory(input){return input.pet ? readRareLaunchHistory(input) : readRareSelfLaunchHistory(input)}
     export async function readRareLaunchFees({asset,wallet}) {
       window.test.reads.push({kind:'fees',wallet,asset});
       if(window.test.holdFees) await new Promise(resolve=>window.test.releaseFees=resolve);
