@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>RarePet Care | Mainnet deployment</title>
+    <style>
+      :root { color-scheme: dark; --lime: #ccff00; --muted: #b4b8a9; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #000; color: #fff; font: 14px/1.6 monospace; }
+      main { width: min(100%, 820px); margin: 40px auto; padding: 0 20px 32px; }
+      header { padding: 24px; background: var(--lime); color: #000; border: 1px solid var(--lime); }
+      .eyebrow { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+      h1 { margin: 0; font-size: clamp(24px, 5vw, 32px); line-height: 1.2; }
+      header p:last-child { margin-bottom: 0; }
+      .card { padding: 24px; border: 1px solid var(--lime); box-shadow: 5px 5px 0 var(--lime); }
+      h2 { margin: 24px 0 10px; font-size: 13px; letter-spacing: .04em; }
+      h2:first-child { margin-top: 0; }
+      .policy { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 24px; padding: 0; list-style: none; }
+      .policy li { padding: 12px; border: 1px solid #4b4d43; }
+      .policy strong { display: block; color: var(--lime); }
+      dl { margin: 0; }
+      dl > div { padding: 12px 0; border-bottom: 1px solid #36392f; }
+      dt { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+      dd { margin: 5px 0 0; overflow-wrap: anywhere; }
+      p, a, button, label, #result { overflow-wrap: anywhere; }
+      .note { padding: 14px; border-left: 3px solid var(--lime); background: #14160d; font-size: 12px; }
+      .note strong { color: var(--lime); }
+      .downloads { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0; }
+      a { color: var(--lime); text-underline-offset: 3px; }
+      button { max-width: 100%; margin: 0; padding: 14px; background: var(--lime); border: 1px solid var(--lime); border-radius: 0; color: #000; font: 700 13px/1.5 monospace; cursor: pointer; }
+      button:disabled { opacity: .4; cursor: default; }
+      button.secondary { background: #000; color: #fff; border-color: #8e9480; }
+      button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
+      label { display: flex; gap: 10px; align-items: flex-start; margin: 20px 0; }
+      input[type="checkbox"] { flex: 0 0 auto; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--lime); }
+      #estimate-value { color: var(--lime); }
+      #deploy { width: 100%; }
+      #status { min-height: 24px; white-space: pre-wrap; }
+      #result { padding: 16px; border: 1px solid var(--lime); background: #14160d; }
+      #clear, #recheck { margin: 12px 8px 0 0; }
+      #recovery-panel { margin: 20px 0; padding: 16px; border: 1px solid #8e9480; }
+      #recovery-panel label { display: block; margin: 12px 0 6px; color: var(--muted); }
+      #recovery { display: block; width: 100%; min-width: 0; padding: 12px; border: 1px solid #8e9480; border-radius: 0; background: #000; color: #fff; font: inherit; }
+      #recover { margin-top: 12px; }
+      small { color: var(--muted); }
+      .hidden { display: none !important; }
+      @media (max-width: 480px) {
+        main { margin: 16px auto; padding: 0 12px 24px; }
+        header, .card { padding: 18px; }
+        .policy { grid-template-columns: 1fr; }
+        .actions button { width: 100%; }
+        #clear, #recheck { width: 100%; margin-right: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">RAREPET CARE / ROBINHOOD CHAIN</p>
+        <h1>MAINNET DEPLOYMENT</h1>
+        <p>Permanent care records. Adjustable future rules.</p>
+      </header>
+      <section class="card" aria-label="Care contract deployment review">
+        <h2>WHAT THIS ENABLES</h2>
+        <ul class="policy">
+          <li><strong>PET · FIXED</strong>One action every 24 hours.</li>
+          <li><strong>FEED + POOP</strong>Onchain care with configurable future rewards and limits.</li>
+          <li><strong>PLAY XP · DISABLED</strong>Activate later after connecting a completion verifier.</li>
+          <li><strong>LAUNCH · ALREADY DEPLOYED</strong>Existing router stays at +1 Brain every 24 hours.</li>
+        </ul>
+        <p class="note">Lifetime earned totals and action history stay onchain. The admin can change future care rules after a public <strong>24-hour delay</strong>. Pet’s cooldown and daily limit stay fixed.</p>
+        <h2>REVIEW THE DEPLOYMENT</h2>
+        <dl id="details"></dl>
+        <p id="validation" class="note"></p>
+        <p class="note"><strong>This contract has not been independently audited.</strong> Review the treasury admin address shown here before signing. This transaction creates the care contract and pays its ETH network fee; it does not transfer tokens or NFTs.</p>
+        <div class="downloads">
+          <a href="/review.json" download="rarepet-care-deployment-review.json">Unsigned deployment review ↗</a>
+          <a href="/standard-input.json" download="rarepet-care-standard-input.json">Contract source + compiler settings ↗</a>
+        </div>
+        <div class="actions">
+          <button id="connect" type="button">CONNECT DEPLOYER WALLET</button>
+          <button id="estimate" type="button" class="secondary" disabled>CHECK NETWORK FEE</button>
+        </div>
+        <p id="estimate-value"></p>
+        <label>
+          <input id="reviewed" type="checkbox">
+          <span>I reviewed the mainnet network, treasury admin address, fixed Pet limit, editable future rules and disabled Play XP.</span>
+        </label>
+        <button id="deploy" type="button" disabled>DEPLOY — CONFIRM IN MY WALLET ↗</button>
+        <p id="status" role="status" aria-live="polite">No transaction has been sent.</p>
+        <div id="result" class="hidden"></div>
+        <button id="clear" type="button" class="secondary hidden">ONLY AFTER CANCELLING IN WALLET — CLEAR</button>
+        <button id="recheck" type="button" class="secondary hidden">RECHECK SUBMITTED DEPLOYMENT</button>
+        <div id="recovery-panel" class="hidden">
+          <h2>RECOVER A SUBMITTED TRANSACTION</h2>
+          <p>If the wallet outcome is unknown, use the transaction hash from your wallet to check its result before trying again.</p>
+          <label for="recovery">Deployment transaction hash</label>
+          <input id="recovery" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" aria-label="Deployment transaction hash">
+          <button id="recover" type="button" class="secondary">CHECK TRANSACTION</button>
+        </div>
+        <p><small>Keep this page open until confirmation. Deployment starts only when you press Deploy and approve the contract creation in your wallet.</small></p>
+      </section>
+    </main>
+    <script type="module" src="/wallet.js"></script>
+  </body>
+</html>

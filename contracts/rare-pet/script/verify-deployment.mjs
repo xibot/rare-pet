@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createPublicClient, http, encodeDeployData, getContractAddress, keccak256 } from 'viem';
-import { validateDeploymentConfig } from './deployment-policy.mjs';
+import { validateDeploymentConfig, validateInitialRules, careRulesMatch } from './deployment-policy.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RPC = process.env.RARE_CARE_RPC || 'https://rpc.mainnet.chain.robinhood.com';
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
@@ -13,6 +13,7 @@ export async function verifyCareDeployment(hash, reviewPath, outputPath) {
   const review = JSON.parse(await readFile(resolve(reviewPath), 'utf8'));
   const config = validateDeploymentConfig(review.config);
   const artifact = JSON.parse(await readFile(resolve(root, 'out/RarePetCare.sol/RarePetCare.json'), 'utf8'));
+  validateInitialRules(artifact.abi, review.initialRules);
   const sourceHash = keccak256(new Uint8Array(await readFile(resolve(root, 'src/RarePetCare.sol'))));
   if (review.sourceHash !== sourceHash || artifact.metadata?.sources?.['src/RarePetCare.sol']?.keccak256 !== sourceHash
     || keccak256(artifact.bytecode.object) !== review.creationBytecodeHash) throw new Error('Review/build/source mismatch.');
@@ -37,8 +38,8 @@ export async function verifyCareDeployment(hash, reviewPath, outputPath) {
   if (!same(admin, config.admin) || version !== 1n || delay !== 86400n || chainId !== 4663n
     || !same(genesis, '0x116EaA62241751E0c98dA43d458600c6C17cD361')
     || !same(generations, '0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D')) throw new Error('Initial identity/admin/rule configuration differs.');
-  const expected = JSON.parse(await readFile(resolve(root, 'rules.example.json'), 'utf8'));
-  if (json(rules) !== json(expected)) throw new Error('Initial rules differ from the reviewed defaults.');
+  const expected = validateInitialRules(artifact.abi, JSON.parse(await readFile(resolve(root, 'rules.example.json'), 'utf8')));
+  if (!careRulesMatch(artifact.abi, rules, expected)) throw new Error('Initial rules differ from the reviewed defaults.');
   const receiptBlock = await client.getBlock({ blockNumber: receipt.blockNumber });
   if (!same(receiptBlock.hash, receipt.blockHash) || (await client.getBlock({ blockNumber: block.number })).hash !== block.hash) throw new Error('Chain confirmation changed during verification.');
   const manifest = { version: 1, status: 'DEPLOYED — receipt, runtime, authority and initial rules verified',
