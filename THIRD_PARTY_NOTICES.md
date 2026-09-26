@@ -9,6 +9,7 @@ RarePet is a XIBOT project built for Genesis and Generations Rare Friends. It us
 - **Silkscreen, Archivo, and Sometype Mono fonts**: distributed under their SIL Open Font Licenses. Binaries, full license texts, exact source URLs, and hashes are retained in `games/rare-rush/assets/fonts`.
 - **Doppler SDK 1.0.43**: MIT-licensed EVM token-launch SDK by Whetstone Research. The full [license](licenses/doppler-sdk-MIT.txt) is retained and included in the site credits. Upstream: <https://github.com/whetstoneresearch/doppler-sdk>.
 - **Vercel Blob 2.8.0**: server-side storage SDK; its license is retained in the installed package. No storage credentials are included in the browser bundle.
+- **gifenc 1.0.3**: MIT-licensed local GIF encoder by Matt DesLauriers. Its installed license is included in the site credits. Upstream: <https://github.com/mattdesl/gifenc>.
 - **React, React DOM, viem, esbuild, TypeScript, Playwright, and their dependencies**: retain the licenses in their installed packages. Browser bundles retain dependency license notices. See `package-lock.json` for pinned versions and integrity hashes.
 
 The static build emits `credits.txt` with SDK attribution, the SDK license, and font license texts. No new blanket license is asserted for Rare Friends branding or for original XIBOT application code.

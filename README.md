@@ -12,12 +12,13 @@ npm run dev
 # http://localhost:4175
 ```
 
-This is the standalone RarePet repository. The app lives in `games/rare-pet`; the minimum Rare Rush engine, identity reader, fonts, and canonical preview artwork needed by RarePet are retained under `games/rare-rush`. `npm run build` creates the static distributable in `dist-pet`, including real `/docs/` and `/launch/` pages. The local server supports `/docs/`, `/launch/`, their slashless routes and direct reloads; all pages load the shared root-level assets. The included `vercel.json` uses `npm ci`, `npm run build`, and that output directory; it does not deploy anything. The care and launch contracts have not been deployed. Public launches remain gated until the launch router and treasury are reviewed and configured with the confirmed 85/10/5 fee split.
+This is the standalone RarePet repository. The app lives in `games/rare-pet`; the minimum Rare Rush engine, identity reader, fonts, and canonical preview artwork needed by RarePet are retained under `games/rare-rush`. `npm run build` creates the static distributable in `dist-pet`, including real `/docs/` and `/launch/` pages. The local server supports `/docs/`, `/launch/`, their slashless routes and direct reloads; all pages load the shared root-level assets. The included `vercel.json` uses `npm ci`, `npm run build`, and that output directory; it does not deploy anything. The care contract is awaiting deployment. The verified launch router is configured in production with the confirmed 85/10/5 fee split; deployment details are recorded below.
 
 ## What works
 
 - Explicit Preview and My Wallet modes. Preview offers three canonical Genesis and three Generations Friends, wallet-free Pet, Feed, Poop and actual Rare Rush play. Per-Friend device storage, independent care cooldowns, deadline decay and seven-pet rarity milestones remain separate from wallet care. Reset Preview resets only the selected sample’s care.
 - Genesis portraits use the same 36 canonical Generations bodies as Rare Rush. Change Body selects a different body and carries it into the embedded game; the original portrait stays intact. Six canonical Worlds and five Classic floors are selectable. Background islands always match the main island, with smaller flybys for Classic. Separate sky and side corridors reserve space for the main pet, its speech and animations; narrow screens use one sky corridor. The island, chosen body and last preview Friend are remembered on this device. All showcase choices are cosmetic.
+- Share to X sits below the Friend greeting as a small lime outline badge. The local exporter offers 2000 × 2000 still PNGs and 800 × 800 animated GIFs of Pet, Feed and Poop with the selected canonical Friend, island, body and speech bubble. GIFs loop 48 frames over 2.4 seconds, encode in a cancellable worker and never upload artwork or update care.
 - Three reactions each for Pet, Feed, Poop and completed Play, with hearts, different snacks, cleanup effects and XP celebrations. Reduced-motion preferences disable animation and decorative effects.
 - Connect an injected browser wallet through FriendSDK; switch to Robinhood Chain (4663); discover and select Genesis or Generations. Current ownership and original art are reverified before selection. Manual token verification remains available if transfer-history discovery is incomplete. Generation 0 can receive care; Rare Rush requires a Genesis or hardwired Generations Friend.
 - Rare Wallet opens the selected Friend’s canonical wallet in a black-and-lime modal with a copyable address, native ETH, ERC-20 and ERC-721/ERC-1155 holdings, and its confirmed token launches with full copyable contract addresses. Trading fees can be reviewed and claimed into that same Rare Wallet; confirmed claims refresh its holdings. Assets are discovered from recipient-filtered history and checked against one chain snapshot, with bounded continuation and manual asset lookup. Reviewed transfers execute from the Friend account; the connected owner pays gas. Preview cannot access real wallets.
@@ -72,6 +73,7 @@ npm run test:wallet
 npm run test:rare-wallet
 npm run test:rare-wallet:browser
 npm run test:rare-wallet:launch:browser
+npm run test:share:gif
 # With Foundry and solc 0.8.30 installed:
 forge test --root contracts/rare-pet -vv
 forge test --root contracts/rare-launchpad -vv

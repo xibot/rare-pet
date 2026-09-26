@@ -27,12 +27,14 @@
     "test:launch": "node --test tests/launch*.test.ts",
     "test:launch:browser": "node scripts/test-launchpad.mjs",
     "test:launch:contracts": "forge test --root contracts/rare-launchpad -vv",
-    "test:rare-wallet:launch:browser": "node scripts/test-rare-wallet-launches.mjs"
+    "test:rare-wallet:launch:browser": "node scripts/test-rare-wallet-launches.mjs",
+    "test:share:gif": "node scripts/test-share-gif.mjs"
   },
   "dependencies": {
     "@rarefriends/friendsdk": "file:rarefriends-friendsdk-0.1.2.tgz",
     "@vercel/blob": "2.8.0",
     "@whetstone-research/doppler-sdk": "1.0.43",
+    "gifenc": "1.0.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "viem": "2.56.3"

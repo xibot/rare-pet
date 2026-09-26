@@ -38,3 +38,46 @@
   .change-body { width:100%; display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; font-size:9px; }
   .change-body small { width:100%; font-size:7px; }
 }
+
+/* Theme only the Friend chooser; the habitat controls retain their own surfaces. */
+.pet-dialog.friend-picker-dialog{
+ --picker-panel:#11140e;--picker-text:#f6f8ef;--picker-muted:#a5ae99;--picker-border:#3d4533;--picker-control:#69765a;--picker-lime:#ccff00;
+ background:#000;color:var(--picker-text);color-scheme:dark;border-color:#737b66;scrollbar-color:#637247 #080a06;
+}
+.friend-picker-dialog .dialog-heading{background:var(--picker-lime);color:#000;border-bottom-color:#000}
+.friend-picker-dialog .dialog-heading button{background:#000;color:var(--picker-lime);border-color:#000}
+.friend-picker-dialog .dialog-heading button:hover{background:#273200}
+.friend-picker-dialog :is(button,a,input,select):focus-visible{outline:2px solid var(--picker-lime);outline-offset:3px}
+.friend-picker-dialog .dialog-heading button:focus-visible{outline-color:#000}
+.friend-picker-dialog .picker-content>p{color:var(--picker-muted)}
+.friend-picker-dialog .picker-mode-switch{border-color:var(--picker-control)}
+.friend-picker-dialog .picker-mode-switch button{background:var(--picker-panel);color:var(--picker-muted)}
+.friend-picker-dialog .picker-mode-switch button+button{border-left:1px solid var(--picker-control)}
+.friend-picker-dialog .picker-mode-switch button[aria-pressed=true]{background:#000;color:var(--picker-lime);box-shadow:inset 0 -3px 0 var(--picker-lime)}
+.friend-picker-dialog .collection-switch button{background:var(--picker-panel);color:var(--picker-text);border-color:var(--picker-control)}
+.friend-picker-dialog .collection-switch button[aria-pressed=true]{background:#182000;color:var(--picker-lime);border-color:var(--picker-lime)}
+.friend-picker-dialog .friend-picker button{background:var(--picker-panel);color:var(--picker-text);border-color:var(--picker-control);min-width:0}
+.friend-picker-dialog .friend-picker button:hover{background:#232a18;border-color:var(--picker-lime)}
+.friend-picker-dialog .friend-picker button[aria-pressed=true]{background:#182000;border-color:var(--picker-lime);box-shadow:inset 0 0 0 1px var(--picker-lime)}
+.friend-picker-dialog .friend-picker button b{overflow-wrap:anywhere}
+.friend-picker-dialog .friend-picker button span{color:var(--picker-muted)}
+.friend-picker-dialog .friend-picker img{filter:drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)}
+.friend-picker-dialog .picker-account{flex-wrap:wrap;min-width:0}
+.friend-picker-dialog .picker-account>span{overflow-wrap:anywhere;min-width:0}
+.friend-picker-dialog .picker-account button,.friend-picker-dialog .wallet-choices button{background:var(--picker-panel);color:var(--picker-text);border-color:var(--picker-control)}
+.friend-picker-dialog .manual-pet{border-color:var(--picker-border)}
+.friend-picker-dialog .manual-pet label{color:var(--picker-muted)}
+.friend-picker-dialog .manual-pet input,.friend-picker-dialog .manual-pet select{background:var(--picker-panel);color:var(--picker-text);border-color:var(--picker-control);border-radius:0}
+.friend-picker-dialog .manual-pet input::placeholder{color:#8f9983;opacity:1}
+.friend-picker-dialog .manual-pet option{background:var(--picker-panel);color:var(--picker-text)}
+.friend-picker-dialog .manual-pet button,.friend-picker-dialog .solid-button{background:var(--picker-lime);color:#000;border-color:var(--picker-lime)}
+.friend-picker-dialog .picker-content button:hover:not(:disabled):not([aria-pressed=true]){border-color:var(--picker-lime)}
+.friend-picker-dialog .picker-content button:disabled{opacity:1;background:#12160e;color:#8f9983;border-color:#414a35;box-shadow:none}
+.friend-picker-dialog .picker-content .inline-note{color:var(--picker-muted)}
+.friend-picker-dialog .picker-content .inline-error{background:#241e0f;border-color:#9b8045;color:#f1d896}
+.friend-picker-dialog .wallet-choices{flex-wrap:wrap}
+@media(max-width:360px){
+ .friend-picker-dialog .picker-content{padding:12px}.friend-picker-dialog .friend-picker{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .friend-picker-dialog .picker-account>span{flex-basis:100%}.friend-picker-dialog .picker-mode-switch button{font-size:9px}
+ .friend-picker-dialog .dialog-heading h2{font-size:13px;line-height:1.5}.friend-picker-dialog .collection-switch button{padding:9px 12px;font-size:11px}
+}

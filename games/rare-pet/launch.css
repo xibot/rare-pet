@@ -5,3 +5,73 @@
 
 .launch-stock-picker{margin-top:18px;min-width:0}.launch-stock-picker select{max-width:100%}.launch-stock-results{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 0 16px;font:400 10px var(--rush-font-mono);color:#717763}.launch-stock-results button{background:none;border:0;padding:4px 0;font:500 9px var(--rush-font-mono);text-decoration:underline;cursor:pointer}.launch-stock-picker input[type=search]{appearance:none}
 .launch-token-ca{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;margin:8px 0}.launch-token-ca>span{font-size:9px;color:#717763}.launch-token-ca code,.launch-claim-review code{font:inherit;overflow-wrap:anywhere;word-break:break-word}.launch-history-item>.launch-token-links{display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:8px 14px}.launch-token-links a{font-size:10px}.launch-history-item>strong{font-size:11px}
+
+/* RarePet launch surfaces share the black/lime wallet palette. */
+.pet-dialog.launch-dialog{
+ --launch-panel:#11140e;--launch-hover:#232a18;--launch-text:#f6f8ef;--launch-muted:#a5ae99;
+ --launch-border:#3d4533;--launch-control:#69765a;--launch-lime:#ccff00;
+ background:#000;color:var(--launch-text);color-scheme:dark;border-color:#737b66;scrollbar-color:#637247 #080a06;
+}
+.launch-dialog .dialog-heading{background:var(--launch-lime);color:#000;border-bottom-color:#000}
+.launch-dialog .dialog-heading button{background:#000;color:var(--launch-lime);border-color:#000}
+.launch-dialog .dialog-heading button:hover:not(:disabled){background:#273200}
+.launch-dialog :is(button,a,input,select):focus-visible{outline:2px solid var(--launch-lime);outline-offset:3px}
+.launch-dialog .dialog-heading button:focus-visible{outline-color:#000}
+.launch-dialog .launch-content{color:var(--launch-text)}
+.launch-dialog .launch-content :is(button,input,select){color:var(--launch-text)}
+.launch-dialog :is(.launch-eyebrow,.launch-intro p,.launch-friend small,.launch-image-label>small,.launch-fine,.launch-stock-results,.launch-self>small,.launch-split>small,.launch-review dt,.launch-review dd small,.launch-token-ca>span){color:var(--launch-muted)}
+.launch-dialog .launch-mode{color:#000;background:var(--launch-lime);border-color:var(--launch-lime)}
+.launch-dialog :is(.launch-friend,.launch-self,.launch-split,.launch-note){background:var(--launch-panel);color:var(--launch-text);border-color:var(--launch-control)}
+.launch-dialog .launch-friend-art{background:#000;border:1px solid var(--launch-border)}
+.launch-dialog .launch-form label,.launch-dialog .launch-form legend{color:var(--launch-muted)}
+.launch-dialog .launch-image-box{border-color:var(--launch-control);color:var(--launch-text);background:repeating-conic-gradient(#11140e 0% 25%,#1c2115 0% 50%) 0 0/16px 16px}
+.launch-dialog .launch-image-box>b{color:var(--launch-lime)}
+.launch-dialog .launch-image-box:focus-within{outline-color:var(--launch-lime)}
+.launch-dialog .launch-form input:not([type=file]),.launch-dialog .launch-form select{background:var(--launch-panel);border-color:var(--launch-control);color:var(--launch-text);min-width:0}
+.launch-dialog .launch-form input::placeholder{color:#8f9983;opacity:1}
+.launch-dialog .launch-form select option{background:var(--launch-panel);color:var(--launch-text)}
+.launch-dialog .launch-ticker{background:var(--launch-panel);border-color:var(--launch-control);min-width:0}
+.launch-dialog .launch-ticker>span{color:var(--launch-muted)}
+.launch-dialog .launch-options>button{background:var(--launch-panel);border-color:var(--launch-control);color:var(--launch-text);min-width:0}
+.launch-dialog .launch-options>button:hover:not(:disabled){background:var(--launch-hover);border-color:var(--launch-lime)}
+.launch-dialog .launch-options>button[aria-pressed=true]{background:#182000;color:var(--launch-lime);border-color:var(--launch-lime);box-shadow:inset 0 -2px 0 var(--launch-lime)}
+.launch-dialog .launch-split>b{color:var(--launch-lime)}
+.launch-dialog .launch-primary{background:var(--launch-lime);border-color:var(--launch-lime);color:#000;box-shadow:3px 3px 0 #000,4px 4px 0 var(--launch-control)}
+.launch-dialog .launch-primary:hover:not(:disabled){background:#ddff59;border-color:#ddff59;color:#000}
+.launch-dialog .launch-footer{border-color:var(--launch-border);color:var(--launch-muted);flex-wrap:wrap}
+.launch-dialog .launch-footer a,.launch-dialog .launch-review dd a,.launch-dialog .launch-fine a,.launch-dialog .launch-note a,.launch-dialog .launch-history-item a{color:var(--launch-lime)}
+.launch-dialog a:hover{text-decoration:underline;text-underline-offset:3px}
+.launch-dialog .launch-back{border-color:var(--launch-control);color:var(--launch-muted)}
+.launch-dialog .launch-token>img{background:var(--launch-panel);border-color:var(--launch-control)}
+.launch-dialog .launch-review dl{border-color:var(--launch-control)}
+.launch-dialog .launch-review dl>div{border-color:var(--launch-border)}
+.launch-dialog .launch-error{background:#241e0f;border-color:#9b8045;color:#f1d896}
+.launch-dialog .launch-status{color:var(--launch-lime)}
+.launch-dialog .launch-mode-toggle{border-color:var(--launch-control)}
+.launch-dialog .launch-mode-toggle button{background:var(--launch-panel);color:var(--launch-muted)}
+.launch-dialog .launch-mode-toggle button+button{border-color:var(--launch-control)}
+.launch-dialog .launch-mode-toggle button:hover:not(:disabled){background:var(--launch-hover);color:var(--launch-text)}
+.launch-dialog .launch-mode-toggle button[aria-pressed=true]{background:#000;color:var(--launch-lime);box-shadow:inset 0 -3px 0 var(--launch-lime)}
+.launch-dialog .launch-self button{background:var(--launch-lime);color:#000;border-color:var(--launch-lime)}
+.launch-dialog .launch-change-friend,.launch-dialog .launch-note>button,.launch-dialog .launch-my-tokens button{background:var(--launch-panel);color:var(--launch-text);border-color:var(--launch-control);min-height:36px}
+.launch-dialog :is(.launch-change-friend,.launch-note>button,.launch-my-tokens button):hover:not(:disabled){background:var(--launch-hover);color:var(--launch-lime);border-color:var(--launch-lime)}
+.launch-dialog .launch-my-tokens{border-color:var(--launch-control)}
+.launch-dialog .launch-history-heading{flex-wrap:wrap}
+.launch-dialog .launch-history-item{border-color:var(--launch-border)}
+.launch-dialog .launch-history-item>div{flex-wrap:wrap;align-items:center}
+.launch-dialog .launch-history-item>div>span{color:var(--launch-muted)}
+.launch-dialog .launch-claim-review{background:var(--launch-panel);border:1px solid var(--launch-control);overflow-wrap:anywhere}
+.launch-dialog .launch-claim-review>button{background:var(--launch-lime);color:#000;border-color:var(--launch-lime);width:100%;margin-top:9px}
+.launch-dialog .launch-claim-review>button:hover:not(:disabled){background:#ddff59;color:#000}
+.launch-dialog .launch-stock-results button{color:var(--launch-lime)}
+.launch-dialog .launch-content button:disabled{opacity:1;background:#12160e;color:#8f9983;border-color:#414a35;box-shadow:none;cursor:not-allowed}
+.launch-dialog .launch-content input:disabled,.launch-dialog .launch-content select:disabled{color:#8f9983;border-color:#414a35}
+@media(max-width:360px){
+ .launch-dialog .launch-content{padding:16px 12px}.launch-dialog .launch-mode-toggle{margin:-16px -12px 20px}
+ .launch-dialog .launch-specs{grid-template-columns:90px minmax(0,1fr);gap:12px}.launch-dialog .launch-form input:not([type=file]){padding:9px 8px}
+ .launch-dialog .launch-intro h3{font-size:18px}.launch-dialog .launch-intro p{font-size:12px}.launch-dialog .launch-ticker>span{padding-left:8px}
+ .launch-dialog .launch-split{padding:12px}.launch-dialog .launch-split>b{font-size:12px}.launch-dialog .launch-primary{font-size:12px!important}
+ .launch-dialog .launch-token{gap:12px}.launch-dialog .launch-token>img{width:68px;height:68px}.launch-dialog .launch-token h4{font-size:18px}
+}
+.launch-dialog .launch-content .launch-primary{color:#000}
+.launch-dialog .launch-content .launch-primary:disabled{color:#8f9983}
