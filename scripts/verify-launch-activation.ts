@@ -2,7 +2,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createPublicClient, custom, http, isAddress, parseAbi, type Address } from 'viem';
-import { createRareLaunchSalt, prepareRareLaunch, prepareRareSelfLaunch, readRareLaunchConfig, readRareSelfLaunchConfig, type RareLaunchDependencies } from '../games/rare-pet/launch-doppler.ts';
+import { createRareLaunchSalt, prepareRareLaunch, prepareRareSelfLaunch, readAllRareLaunchHistory, readRareLaunchConfig, readRareSelfLaunchConfig, type RareLaunchDependencies } from '../games/rare-pet/launch-doppler.ts';
 import { createLaunchQuoteReader, LAUNCH_QUOTE_ASSETS } from '../games/rare-pet/launch-quotes.ts';
 import { launchTreasury } from '../games/rare-pet/config.ts';
 import type { PetIdentity, PetWalletSession } from '../games/rare-pet/wallet.ts';
@@ -11,7 +11,7 @@ const router = process.argv[2] as Address;
 if (!isAddress(router)) throw new Error('Pass the deployed router address as the first argument.');
 const output = process.argv[3] ? resolve(process.argv[3]) : null;
 const underlying = http('https://rpc.mainnet.chain.robinhood.com', { retryCount: 0, timeout: 20_000 })({});
-const permitted = new Set(['eth_chainId', 'eth_blockNumber', 'eth_getBlockByNumber', 'eth_getCode', 'eth_call', 'eth_estimateGas', 'eth_getBalance', 'eth_getTransactionCount']);
+const permitted = new Set(['eth_chainId', 'eth_blockNumber', 'eth_getBlockByNumber', 'eth_getCode', 'eth_call', 'eth_estimateGas', 'eth_getBalance', 'eth_getTransactionCount', 'eth_getLogs']);
 const methods = new Set<string>();
 const client = createPublicClient({ cacheTime: 0, transport: custom({ request: async ({ method, params }) => {
   if (!permitted.has(method)) throw new Error(`Forbidden RPC method in read-only smoke: ${method}`);
@@ -59,23 +59,40 @@ function draft(quote: Awaited<ReturnType<typeof readLaunchQuotePrice>>) {
   return { name: 'RarePet activation simulation', symbol: 'RPSIM', fee: 10000 as const, salt: createRareLaunchSalt(), quote,
     tokenURI: `data:application/json;base64,${Buffer.from(JSON.stringify({ name: 'RarePet activation simulation', description: 'Read-only simulation; no token is deployed.', image: 'https://rarepet.app/favicon.svg' })).toString('base64')}` };
 }
-const quote = await readLaunchQuotePrice('weth');
-const [friend, self] = await Promise.all([
-  prepareRareLaunch({ session: readOnlySession(pet.owner), pet, revision: 1, router, draft: draft(quote) }, deps),
-  prepareRareSelfLaunch({ session: readOnlySession(launchTreasury), account: launchTreasury, revision: 1, router, draft: draft(quote) }, deps),
-]);
+const pairs = [];
+// Use the actual application preparation path and live deployed code for both
+// creator modes. Each quote is refreshed immediately before its simulations.
+for (const id of ['weth', 'usdg', 'cbbtc'] as const) {
+  const quote = await readLaunchQuotePrice(id);
+  const friend = await prepareRareLaunch({ session: readOnlySession(pet.owner), pet, revision: 1, router, draft: draft(quote) }, deps);
+  const self = await prepareRareSelfLaunch({ session: readOnlySession(launchTreasury), account: launchTreasury, revision: 1, router, draft: draft(quote) }, deps);
+  const pair = {
+    id, quote: { address: quote.asset.address, symbol: quote.asset.symbol, decimals: quote.asset.decimals,
+      price: quote.usdPrice, source: quote.source, blockNumber: quote.blockNumber, updatedAt: quote.updatedAt },
+    fee: friend.review.fee, supply: friend.review.supply,
+    friend: { collection, tokenId: '2', owner: pet.owner, wallet: pet.walletAddress, blockNumber: friend.config.blockNumber,
+      brain: friend.config.brain, readyAt: friend.config.readyAt, predictedAsset: friend.doppler.prediction.tokenAddress,
+      poolId: friend.doppler.prediction.poolId, estimatedGas: friend.gasEstimate, approximateStartMarketCapUSD: friend.review.approximateStartMarketCapUSD },
+    self: { creator: launchTreasury, creatorEqualsTreasury: true, blockNumber: self.config.blockNumber, launchCount: self.config.brain,
+      predictedAsset: self.doppler.prediction.tokenAddress, poolId: self.doppler.prediction.poolId, estimatedGas: self.gasEstimate,
+      approximateStartMarketCapUSD: self.review.approximateStartMarketCapUSD },
+  };
+  pairs.push(pair);
+  console.log(JSON.stringify({ stage: 'LIVE_PAIR_PASSED', ...pair }, (_key, value) => typeof value === 'bigint' ? value.toString() : value));
+}
+// Keep the standard app history code intact, including verification of the
+// archived router. HTTP requests are individual requests, never an RPC batch.
+const friendHistory = await readAllRareLaunchHistory({ router, account: pet.walletAddress!, pet }, deps);
+const selfHistory = await readAllRareLaunchHistory({ router, account: launchTreasury }, deps);
+const history = { friend: friendHistory, self: selfHistory };
+console.log(JSON.stringify({ stage: 'LIVE_HISTORY_PASSED', friendLaunches: friendHistory.items.length, selfLaunches: selfHistory.items.length }));
 const [friendAfter, selfAfter] = await Promise.all([readRareLaunchConfig(router, pet, deps), readRareSelfLaunchConfig(router, launchTreasury, deps)]);
 if (friendAfter.brain !== friendConfig.brain || friendAfter.lastLaunchAt !== friendConfig.lastLaunchAt || selfAfter.brain !== selfConfig.brain) throw new Error('Launch state changed during smoke. Recheck the live ledger.');
 const proof = {
-  status: 'PASSED — read-only live router config and exact RF/self prepare simulations', observedAt: new Date().toISOString(), router,
+  status: 'PASSED — read-only live router config, WETH/USDG/cbBTC RF/self prepare simulations and combined launch history', observedAt: new Date().toISOString(), router,
   stateOverrides: false, signer: false, broadcast: false, rpcMethods: [...methods].sort(),
   config: { ...friendConfig, quoteTokens: friendConfig.quoteTokens },
-  quote: { symbol: quote.asset.symbol, price: quote.usdPrice, source: quote.source, blockNumber: quote.blockNumber, updatedAt: quote.updatedAt },
-  friend: { collection, tokenId: '2', owner: pet.owner, wallet: pet.walletAddress, blockNumber: friend.config.blockNumber,
-    brain: friend.config.brain, readyAt: friend.config.readyAt, predictedAsset: friend.doppler.prediction.tokenAddress, poolId: friend.doppler.prediction.poolId, estimatedGas: friend.gasEstimate },
-  self: { creator: launchTreasury, creatorEqualsTreasury: true, blockNumber: self.config.blockNumber, launchCount: self.config.brain,
-    predictedAsset: self.doppler.prediction.tokenAddress, poolId: self.doppler.prediction.poolId, estimatedGas: self.gasEstimate },
-  supply: friend.review.supply, approximateStartMarketCapUSD: friend.review.approximateStartMarketCapUSD,
+  pairs, history,
   metadata: 'Inline simulation-only JSON referencing the existing public RarePet favicon; no uploads or mints.',
 };
 const serialized = `${JSON.stringify(proof, (_key, value) => typeof value === 'bigint' ? value.toString() : value, 2)}\n`;

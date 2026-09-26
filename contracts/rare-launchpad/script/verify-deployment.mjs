@@ -18,7 +18,7 @@ const artifact = JSON.parse(await readFile(resolve(root, 'out/RarePetLaunchRoute
 const snapshot = readDeploymentCatalog();
 const sourceHash = keccak256(new Uint8Array(await readFile(resolve(root, 'src/RarePetLaunchRouter.sol'))));
 if (!rehearsalMatches(proof, review) || review.validation?.artifactSha256 !== createHash('sha256').update(proofRaw).digest('hex') || snapshot.catalogHash !== review.catalogHash || sourceHash !== review.sourceHash || artifact.metadata.sources['src/RarePetLaunchRouter.sol'].keccak256 !== sourceHash) throw new Error('Source, catalog or review binding mismatch.');
-const client = createPublicClient({ transport: http('https://rpc.mainnet.chain.robinhood.com', { batch: { batchSize: 30, wait: 20 }, timeout: 20000, retryCount: 1 }), cacheTime: 0 });
+const client = createPublicClient({ transport: http('https://rpc.mainnet.chain.robinhood.com', { timeout: 30000, retryCount: 2, retryDelay: 1500 }), cacheTime: 0 });
 if (await client.getChainId() !== 4663) throw new Error('Wrong chain.');
 const block = await client.getBlock(); const blockNumber = block.number;
 const [tx, receipt, code] = await Promise.all([client.getTransaction({ hash }), client.getTransactionReceipt({ hash }), client.getCode({ address, blockNumber })]);
@@ -63,6 +63,7 @@ for (let i = 0; i < quotes.length; i += 12) {
     return { symbol, address: quote, decimals, codeHash: keccak256(code) };
   }));
   verifiedQuotes.push(...rows);
+  if (verifiedQuotes.length % 60 === 0 || verifiedQuotes.length === quotes.length) console.log(`Verified ${verifiedQuotes.length}/${quotes.length} deployed quote identities.`);
 }
 if (await read('allowedQuote', [zeroAddress])) throw new Error('Zero-address quote unexpectedly allowed.');
 const airlockAbi = parseAbi(['function getModuleState(address) view returns(uint8)', 'function owner() view returns(address)']);

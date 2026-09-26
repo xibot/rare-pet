@@ -75,7 +75,7 @@ The wallet also lists **Tokens Launched**, with full copyable contract addresses
 
 [Rare Launchpad](https://rarepet.app/launch/), powered by **Doppler**, lets you **Launch as Yourself** or **Launch as Your Rare Friend**.
 
-Set the token's name, ticker and image. Pair it with **WETH, $RAREFRIENDS, USDG, cbBTC** or a supported Robinhood stock/ETF token, then choose a **0.3%, 1% or 2%** trading fee. The prepared catalog includes 199 pairs: four crypto assets and all 195 supported stock/ETF tokens, with ticker/name search and price checks before launch. The additional pairs require the replacement Doppler router to be deployed and verified before activation. USDG uses 6 decimals and the CCIP-bridged cbBTC uses 8; pool pricing and fee amounts respect each token’s units.
+Set the token's name, ticker and image. Pair it with **WETH, $RAREFRIENDS, USDG, cbBTC** or a supported Robinhood stock/ETF token, then choose a **0.3%, 1% or 2%** trading fee. The live catalog includes 199 pairs: four crypto assets and all 195 supported stock/ETF tokens, with ticker/name search and price checks before launch. USDG uses 6 decimals and the CCIP-bridged cbBTC uses 8; pool pricing and fee amounts respect each token’s units.
 
 The launch preset assigns the full supply of **1 billion tokens to liquidity**, with no creator token allocation. A Friend can launch once every rolling 24 hours; a confirmed RF launch adds one Brain in the separate launch ledger. Self launches need no NFT, have no daily limit and do not change a Friend's Brain.
 
@@ -140,7 +140,7 @@ This is the standalone RarePet repository. The retained Rare Rush code supplies 
 - [Developer guide](docs/DEVELOPMENT.md) — setup, configuration, checks and implementation details.
 - [Care contract](contracts/rare-pet/README.md) — future onchain care and the XP trust model.
 - [Launch router](contracts/rare-launchpad/README.md) — launch policy, fee split and verification limits.
-- [Launch deployment](contracts/rare-launchpad/deployments/4663.json) — current Robinhood contract and configuration.
+- [Launch deployment](contracts/rare-launchpad/deployments/4663-0xc6a4b2d4d369747b26e4ff805a79a57da2505dc3.json) — current Robinhood contract and configuration.
 - [Genesis bodies](games/rare-rush/genesis/BODIES.md) — canonical body artwork and provenance.
 - [Rare Rush integration](games/rare-rush/UPSTREAM.md) — retained game code and update notes.
 - [Vibeathon submission](https://github.com/spokesz/rarefriends-vibeathon/pull/76) — RarePet's separate entry, submitted September 25, 2026.
