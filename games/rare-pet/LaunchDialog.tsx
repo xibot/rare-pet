@@ -25,14 +25,13 @@ type DraftReview = { name: string; symbol: string; quoteId: LaunchQuoteId; fee: 
 
 type LaunchProps = {
   friend: PreviewFriend | PetIdentity; pet: PetIdentity | null; session: PetWalletSession; revision: number; bodyId: string;
-  close: () => void; chooseFriend: () => void; onLaunch: () => void; embedded?: boolean; creatorMode?: 'self' | 'friend'; onCreatorModeChange?: (mode: 'self' | 'friend') => void;
+  close: () => void; chooseFriend: () => void; onLaunch: () => void;
 };
 export function LaunchDialog(props: LaunchProps) {
-  const [mode, setMode] = useState<'self' | 'friend'>(props.embedded && !props.pet ? 'self' : 'friend');
-  const selectedMode = props.creatorMode ?? mode;
-  return <LaunchForm key={selectedMode} {...props} mode={selectedMode} setMode={props.onCreatorModeChange ?? setMode}/>;
+  const [mode, setMode] = useState<'self' | 'friend'>('friend');
+  return <LaunchForm key={mode} {...props} mode={mode} setMode={setMode}/>;
 }
-function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFriend, onLaunch, embedded = false, mode, setMode }: LaunchProps & {
+function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFriend, onLaunch, mode, setMode }: LaunchProps & {
   mode: 'self' | 'friend'; setMode: (mode: 'self' | 'friend') => void;
 }) {
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -61,7 +60,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
   const wait = mode === 'friend' && config ? Math.max(0, Number(config.readyAt) - now) : 0;
   const expired = !!prepared && prepared.draft.quote.expiresAt <= now;
   useEffect(() => {
-    const element = dialog.current; if (!embedded) element?.showModal();
+    const element = dialog.current; element?.showModal();
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => { alive.current = false; operation.current++; abort.current.abort(); imageGeneration.current++; clearInterval(timer); if (imageRef.current) URL.revokeObjectURL(imageRef.current.previewUrl); element?.close(); };
   }, []);
@@ -148,7 +147,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
   }
   const requestClose = () => { if (!lock.current) close(); };
   const content = <>
-    <div className="dialog-heading"><h2 id="launch-heading"><Icon name="launch"/> RARE LAUNCHPAD</h2>{!embedded && <button aria-label="Close Rare Launchpad" disabled={busy} onClick={requestClose}>×</button>}</div>
+    <div className="dialog-heading"><h2 id="launch-heading"><Icon name="launch"/> RARE LAUNCHPAD</h2><button aria-label="Close Rare Launchpad" disabled={busy} onClick={requestClose}>×</button></div>
     <div className="launch-content">
       <div className="launch-mode-toggle" role="group" aria-label="Launch as"><button aria-pressed={mode === 'self'} disabled={busy} onClick={() => setMode('self')}>LAUNCH AS YOURSELF</button><button aria-pressed={mode === 'friend'} disabled={busy} onClick={() => setMode('friend')}>LAUNCH AS YOUR RARE FRIEND</button></div>
       <div className="launch-intro"><div><span className="launch-eyebrow">A BIG IDEA. A RARE FRIEND.</span><h3>{asset ? 'Hello, world.' : review ? 'Make it rare.' : 'Launch something rare.'}</h3><p>{mode === 'friend' ? 'Your Friend. Their token. Their trading fees.' : 'Your token. Your wallet. Your trading fees.'}</p></div><span className="launch-mode">{preview ? 'PREVIEW' : enabled ? 'ROBINHOOD' : 'PREVIEW / SETUP'}</span></div>
@@ -180,5 +179,5 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
       <div className="launch-footer"><a href="/docs/#launch">HOW LAUNCHES WORK ↗</a><span>POWERED BY DOPPLER</span></div>
     </div>
   </>;
-  return embedded ? <section className="pet-dialog launch-dialog launch-page-card" aria-labelledby="launch-heading">{content}</section> : <dialog ref={dialog} className="pet-dialog launch-dialog" aria-labelledby="launch-heading" onCancel={event => { event.preventDefault(); requestClose(); }} onClick={event => { if (event.target === dialog.current) requestClose(); }}>{content}</dialog>;
+  return <dialog ref={dialog} className="pet-dialog launch-dialog" aria-labelledby="launch-heading" onCancel={event => { event.preventDefault(); requestClose(); }} onClick={event => { if (event.target === dialog.current) requestClose(); }}>{content}</dialog>;
 }

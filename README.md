@@ -2,7 +2,7 @@
 
 **Your Rare Friend, every day.**
 
-[Meet Your Pet](https://rarepet.app) · [Rare Launchpad](https://rarepet.app/launch/) · [Care Guide](https://rarepet.app/docs/) · [Rare Rush](https://rarerush.app) · [Vibeathon Entry](https://github.com/spokesz/rarefriends-vibeathon/pull/76)
+[Meet Your Pet](https://rarepet.app) · [Care Guide](https://rarepet.app/docs/) · [Rare Rush](https://rarerush.app) · [Vibeathon Entry](https://github.com/spokesz/rarefriends-vibeathon/pull/76)
 
 Every Rare Friend is a Rare Pet. Give your Genesis or Generations Friend a little love, a good meal, a game together, and a floating home of their own.
 
@@ -73,7 +73,7 @@ The wallet also lists **Tokens Launched**, with full copyable contract addresses
 
 ## Launch a rare idea
 
-[Rare Launchpad](https://rarepet.app/launch/), powered by **Doppler**, lets you **Launch as Yourself** or **Launch as Your Rare Friend**.
+Open [RarePet](https://rarepet.app) and choose **LAUNCH** in **Daily Care**. Rare Launchpad, powered by **Doppler**, lets you **Launch as Yourself** or **Launch as Your Rare Friend**.
 
 Set the token's name, ticker and image. Pair it with **WETH, $RAREFRIENDS, USDG, cbBTC** or a supported Robinhood stock/ETF token, then choose a **0.3%, 1% or 2%** trading fee. The live catalog includes 199 pairs: four crypto assets and all 195 supported stock/ETF tokens, with ticker/name search and price checks before launch. USDG uses 6 decimals and the CCIP-bridged cbBTC uses 8; pool pricing and fee amounts respect each token’s units.
 
@@ -127,7 +127,7 @@ npm test
 npm run build
 ```
 
-The production build is written to `dist-pet/`, including `/docs/` and `/launch/`. FriendSDK v0.1.2 is bundled for reproducible installation. See the [developer guide](docs/DEVELOPMENT.md) for browser checks, live configuration, contract tests and deployment details.
+The production build is written to `dist-pet/`, including the main app and `/docs/`. Launch is available through **LAUNCH** in **Daily Care**. FriendSDK v0.1.2 is bundled for reproducible installation. See the [developer guide](docs/DEVELOPMENT.md) for browser checks, live configuration, contract tests and deployment details.
 
 ## Explore the code
 

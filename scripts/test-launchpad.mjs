@@ -58,11 +58,13 @@ async function fits(page, root, label) {
   const dimensions = await root.evaluate(element => {
     const rect = element.getBoundingClientRect();
     return { bodyWidth: document.body.scrollWidth, viewport: innerWidth, rootWidth: element.clientWidth, rootScroll: element.scrollWidth, left: rect.left, right: rect.right,
-      pageCard: element.classList.contains('launch-page-card'), height: element.clientHeight, scrollHeight: element.scrollHeight, scrollTop: element.scrollTop };
+      modal: element.tagName === 'DIALOG' && element.open, top: rect.top, bottom: rect.bottom, viewportHeight: innerHeight };
   });
   assert(dimensions.bodyWidth <= dimensions.viewport + 1, `${label}: page has no horizontal overflow: ${JSON.stringify(dimensions)}`);
   assert(dimensions.rootScroll <= dimensions.rootWidth + 1, `${label}: form has no horizontal overflow: ${JSON.stringify(dimensions)}`);
-  assert(dimensions.left >= -1 && dimensions.right <= dimensions.viewport + 1, `${label}: card stays within the viewport`);
+  assert(dimensions.left >= -1 && dimensions.right <= dimensions.viewport + 1, `${label}: modal stays within the viewport`);
+  assert(dimensions.modal, `${label}: launches stay in an open native dialog`);
+  assert(dimensions.top >= -1 && dimensions.bottom <= dimensions.viewportHeight + 1, `${label}: modal height fits the viewport with internal scrolling`);
   for (const button of await root.locator('.launch-pairs>button').all()) {
     const content = await button.evaluate(element => {
       const button = element.getBoundingClientRect(), symbol = element.querySelector('b').getBoundingClientRect();
@@ -70,10 +72,7 @@ async function fits(page, root, label) {
     });
     assert(content.scrollWidth <= content.width + 1 && content.symbolLeft >= content.left && content.symbolRight <= content.right, `${label}: each pair label fits its button: ${JSON.stringify(content)}`);
   }
-  if (dimensions.pageCard) {
-    assert(dimensions.scrollHeight <= dimensions.height + 1, `${label}: standalone page never clips its content in an inner scroller: ${JSON.stringify(dimensions)}`);
-    assert.equal(dimensions.scrollTop, 0, `${label}: standalone card cannot internally scroll its heading away`);
-  }
+  assert.equal(await root.getByRole('button', { name: 'Close Rare Launchpad', exact: true }).isEnabled(), true, `${label}: preview modal remains dismissible`);
 }
 async function imagePrepared(root) {
   const image = root.getByAltText('Token image preview'); await image.waitFor();
@@ -178,11 +177,14 @@ try {
       if (url.origin !== origin || url.pathname.startsWith('/api/')) { forbidden.push(`${route.request().method()} ${url.href}`); return route.abort(); }
       return route.continue();
     });
-    await page.goto(`${origin}/launch/`); await page.getByRole('heading', { name: 'RARE LAUNCHPAD', exact: true }).waitFor();
+    await page.goto(origin); await page.getByRole('heading', { name: 'My RarePet.', exact: true }).waitFor();
+    await page.getByRole('button', { name: /^Launch,/ }).click();
     await page.evaluate(() => document.fonts.ready);
-    let root = page.locator('.launch-page-card');
+    let root = page.getByRole('dialog', { name: 'RARE LAUNCHPAD', exact: true }); await root.waitFor();
     assert.equal(await page.evaluate(() => typeof window.ethereum), 'undefined');
-    assert.equal(await toggle(root, 'self').getAttribute('aria-pressed'), 'true', 'standalone launch page starts with Yourself');
+    assert.equal(await toggle(root, 'friend').getAttribute('aria-pressed'), 'true', 'Daily Care opens the Rare Friend creator');
+    await toggle(root, 'self').click();
+    assert.equal(await toggle(root, 'self').getAttribute('aria-pressed'), 'true', 'Yourself mode remains available inside the launch modal');
     assert.equal(await root.locator('.launch-friend').count(), 0, 'self creator does not display a fake Rare Friend');
     assert.match(await root.locator('.launch-self').innerText(), /No Rare Friend needed/);
     await pairState(root, 'weth');
@@ -243,12 +245,12 @@ try {
     assert.match(await root.locator('.launch-friend').innerText(), /1 LAUNCH \/ 24H/);
     await pairState(root, 'weth');
     await fillDraft(root); await root.getByRole('button', { name: /STOCKS/ }).click(); await root.locator('#launch-stock').selectOption('aapl'); await root.getByRole('button', { name: '2%', exact: true }).click();
-    await review(root, 'friend'); await fits(page, root, `${width} friend page review`);
-    await page.screenshot({ path: path.join(artifact, `friend-page-review-${width}.png`), fullPage: true });
+    await review(root, 'friend'); await fits(page, root, `${width} friend review`);
+    await page.screenshot({ path: path.join(artifact, `friend-review-${width}.png`), fullPage: true });
     await root.getByRole('button', { name: /EDIT TOKEN/ }).click();
-    await reviewAdditionalPairs(page, root, 'friend', `friend-page-${width}`);
+    await reviewAdditionalPairs(page, root, 'friend', `friend-${width}`);
     await root.getByRole('button', { name: /^\$RAREFRIENDS/ }).click(); await pairState(root, 'rarefriends');
-    await review(root, 'friend', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends creator page review`);
+    await review(root, 'friend', 'RAREFRIENDS', '2'); await fits(page, root, `${width} Rare Friends creator review`);
     if (width === 1440) {
       await root.getByRole('button', { name: 'CHOOSE MY FRIEND ↗', exact: true }).click();
       const picker = page.getByRole('dialog');
@@ -256,9 +258,11 @@ try {
       await picker.getByRole('button', { name: 'Genesis', exact: true }).click();
       const card = picker.locator('.preview-picker').getByRole('button').first(), label = await card.locator('b').innerText();
       await card.click(); await picker.waitFor({ state: 'hidden' });
-      assert.equal(await toggle(root, 'friend').getAttribute('aria-pressed'), 'true', 'choosing another preview Friend preserves Rare Friend creator mode');
+      assert.equal(await root.count(), 0, 'Choosing a Friend returns to the main dashboard');
+      await page.getByRole('button', { name: /^Launch,/ }).click(); await root.waitFor();
+      assert.equal(await toggle(root, 'friend').getAttribute('aria-pressed'), 'true', 'Reopening Launch uses the newly selected Rare Friend');
       assert((await root.locator('.launch-friend').innerText()).includes(label));
-      await fits(page, root, 'changed preview Friend page');
+      await fits(page, root, 'changed preview Friend modal');
     }
     await page.goto(origin); await page.getByRole('heading', { name: 'My RarePet.' }).waitFor();
     const beforeBrain = await page.locator('.trait').filter({ has: page.locator('span', { hasText: /^Brain$/ }) }).locator('strong').innerText();

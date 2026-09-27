@@ -1,5 +1,5 @@
 import { context } from 'esbuild';
-import { mkdir, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, realpath, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,8 +15,7 @@ export async function buildPetSite({ outdir = path.join(project, 'dist-pet'), wa
     if (result.errors.length) return;
     await writeFile(path.join(outdir, 'index.html'), await readFile(path.join(project, 'games/rare-pet/index.html')));
     await mkdir(path.join(outdir, 'docs'), { recursive: true });
-    await mkdir(path.join(outdir, 'launch'), { recursive: true });
-    await writeFile(path.join(outdir, 'launch/index.html'), await readFile(path.join(project, 'games/rare-pet/index.html')));
+    await rm(path.join(outdir, 'launch'), { recursive: true, force: true });
     await writeFile(path.join(outdir, 'docs/index.html'), await readFile(path.join(project, 'games/rare-pet/docs.html')));
     await writeFile(path.join(outdir, 'favicon.svg'), await readFile(path.join(project, 'games/rare-rush/assets/favicon.svg')));
     const notices = await Promise.all(['THIRD_PARTY_NOTICES.md', 'licenses/friendsdk-APACHE-2.0.txt', 'licenses/doppler-sdk-MIT.txt', 'node_modules/gifenc/LICENSE.md', 'node_modules/@rarefriends/friendsdk/NOTICE.md', 'games/rare-rush/assets/fonts/SILKSCREEN-OFL.txt', 'games/rare-rush/assets/fonts/ARCHIVO-OFL.txt', 'games/rare-rush/assets/fonts/SOMETYPE-MONO-OFL.txt'].map(file => readFile(path.join(project, file), 'utf8')));
@@ -36,8 +35,9 @@ export function createPetServer(outdir) {
         await handler(req, res); return;
       }
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
-      const pathname = url.pathname === '/' ? '/index.html' : /^\/docs\/?$/.test(url.pathname) ? '/docs/index.html' : /^\/launch\/?$/.test(url.pathname) ? '/launch/index.html' : url.pathname;
-      if (!/^\/(?:index\.(?:html|js|css)|share-gif-worker\.js|(?:docs|launch)\/index\.html|favicon.svg|credits.txt|assets\/[\w-]+\.woff2)$/.test(pathname)) { res.writeHead(404).end(); return; }
+      if (/^\/launch(?:\/|\/index\.html)?$/.test(url.pathname)) { res.writeHead(308, { Location: '/' }).end(); return; }
+      const pathname = url.pathname === '/' ? '/index.html' : /^\/docs\/?$/.test(url.pathname) ? '/docs/index.html' : url.pathname;
+      if (!/^\/(?:index\.(?:html|js|css)|share-gif-worker\.js|docs\/index\.html|favicon.svg|credits.txt|assets\/[\w-]+\.woff2)$/.test(pathname)) { res.writeHead(404).end(); return; }
       const root = await realpath(outdir), file = await realpath(path.join(root, pathname));
       if (!file.startsWith(root + path.sep)) { res.writeHead(404).end(); return; }
       res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });

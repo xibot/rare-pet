@@ -243,7 +243,7 @@ export function MarketDialog({ session, actor, close }: { session: PetWalletSess
         </section>}
       </div>
       {!selected && error && <p className="market-error" role="alert">{error}</p>}
-      <div className="market-footer"><span>ROBINHOOD TOKENS · RAREPET LAUNCHES</span><a href="/launch/">LAUNCH YOUR TOKEN ↗</a></div>
+      <div className="market-footer"><span>ROBINHOOD TOKENS · RAREPET LAUNCHES</span></div>
     </div>
   </dialog>;
 }

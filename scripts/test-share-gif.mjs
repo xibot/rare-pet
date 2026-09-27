@@ -69,10 +69,12 @@ try {
     await page.locator('.habitat-heading').screenshot({path:path.join(artifact,`share-label-${width}.png`)});
     await choose('Generations');
   }
-  await page.goto(origin+'/launch/');await page.locator('.launch-page-card').waitFor();
-  assert.equal(await page.locator('.launch-page-card').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(0, 0, 0)');
-  assert.equal(await page.locator('.launch-primary').evaluate(el=>getComputedStyle(el).color),'rgb(0, 0, 0)','lime primary buttons use readable black text');
-  await page.screenshot({path:path.join(artifact,'launch-dark-320.png'),fullPage:true});
+  await page.getByRole('button',{name:/^Launch,/}).click();const launch=page.getByRole('dialog',{name:'RARE LAUNCHPAD',exact:true});await launch.waitFor();
+  assert.equal(await launch.getByRole('button',{name:'LAUNCH AS YOUR RARE FRIEND',exact:true}).getAttribute('aria-pressed'),'true','Daily Care opens Friend mode');
+  assert.equal(await launch.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(0, 0, 0)');
+  assert.equal(await launch.locator('.launch-primary').evaluate(el=>getComputedStyle(el).color),'rgb(0, 0, 0)','lime primary buttons use readable black text');
+  await fits(launch);await launch.screenshot({path:path.join(artifact,'launch-dark-modal-320.png')});
+  await launch.getByRole('button',{name:'Close Rare Launchpad',exact:true}).click();
   await page.goto(origin);await page.getByRole('heading',{name:'My RarePet.'}).waitFor();
   await page.setViewportSize({width:1440,height:1050});
   for(const collection of ['Generations','Genesis']) {

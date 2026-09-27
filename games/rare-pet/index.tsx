@@ -61,9 +61,7 @@ function Dialog({ title, children, close, className = '' }: { title: string; chi
 }
 
 function App() {
-  const launchPage = /^\/launch(?:\/|\/index\.html)?$/.test(location.pathname);
   const [session] = useState(createPetWalletSession);
-  const [pageLaunchMode, setPageLaunchMode] = useState<'self' | 'friend'>('self');
   const wallet = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [lastPreview, setLastPreview] = useState(savedPreviewIndex);
   const [selected, setSelected] = useState<Selected>(() => ({ kind: 'preview', index: lastPreview }));
@@ -261,7 +259,7 @@ function App() {
 
   return <div className="rarepet-app">
     <div className="site-header-shell"><header className="site-header"><a className="site-logo" href="/" aria-label="RarePet home"><PetBrand/></a><nav aria-label="Main navigation"><button className="nav-how-to-play" onClick={() => setRules(true)}>HOW TO CARE</button><a className="nav-docs" href="/docs/">DOCS</a><button className="nav-arcade" onClick={openWallet} aria-haspopup="dialog" aria-label={wallet.account ? 'Manage connected wallet' : undefined} disabled={!!pending || wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'connected' && wallet.account ? `${wallet.account.slice(0, 6)}…${wallet.account.slice(-4)}` : wallet.status === 'wrong-network' ? 'SWITCH NETWORK' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET'} <span aria-hidden="true">↗</span></button></nav></header></div>
-    {!launchPage && <main>
+    <main>
       <div className="page-title"><div><span className="eyebrow">A FRIEND FOR EVERY DAY</span><h1>My RarePet<span>.</span></h1></div><button className="change-button" disabled={!!pending} onClick={() => openPicker(preview ? 'preview' : 'wallet')}>CHOOSE FRIEND <span>⇄</span></button></div>
       <div className="mode-bar"><div className="mode-switch" role="group" aria-label="Pet mode"><button aria-pressed={preview} disabled={!!pending} onClick={() => { if (!preview) choosePreview(lastPreview); }}>PREVIEW</button><button aria-pressed={!preview} disabled={!!pending} onClick={() => openPicker('wallet')}>MY WALLET <span aria-hidden="true">↗</span></button></div><p>{preview ? 'Try the daily routine. No wallet needed.' : 'Your own Friend. Your daily ritual.'}</p>{preview && <button className="reset-preview" onClick={resetPreview}>RESET PREVIEW ↻</button>}</div>
       <section className="pet-shell" aria-label="RarePet dashboard">
@@ -301,8 +299,7 @@ function App() {
       {wallet.error && <p className="inline-error" role="alert">{wallet.error}</p>}
       {wallet.status === 'unavailable' && !preview && <p className="inline-note">Use a browser with a wallet extension, or open RarePet in your wallet’s browser. The preview works without a wallet.</p>}
       <footer><div className="footer-brand"><span>RARE PET BY XIBOT</span><small>ROBINHOOD CHAIN</small></div><a className="footer-docs" href="/docs/">DOCS ↗</a><p>{preview ? 'Preview only · care stays on this device · no transactions.' : careContract ? 'Care lives onchain · original NFT traits stay unchanged.' : 'NFT ownership is live. Onchain care is not configured in this build.'}</p><a href="https://rarefriends.com" target="_blank" rel="noreferrer">RARE FRIENDS ↗</a></footer><p className="credits"><a href="/credits.txt" target="_blank">Rare Friends artwork · Built with FriendSDK</a></p>
-    </main>}
-    {launchPage && <main className="launch-page"><a className="launch-page-back" href="/">← BACK TO RAREPET</a><LaunchDialog key={`page:${(art ?? live)?.collection}:${(art ?? live)?.tokenId}:${wallet.revision}`} embedded creatorMode={pageLaunchMode} onCreatorModeChange={setPageLaunchMode} friend={(art ?? live) ?? previewFriends[lastPreview]} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => {}} chooseFriend={() => openPicker('wallet')} onLaunch={() => setLaunchRefresh(value => value + 1)}/><footer><div className="footer-brand"><span>RARE PET BY XIBOT</span><small>ROBINHOOD CHAIN</small></div><a href="/docs/#launch">LAUNCH DOCS ↗</a></footer></main>}
+    </main>
     {walletAccount && wallet.account && <Dialog title="Your wallet" className="wallet-account-dialog" close={() => setWalletAccount(false)}><div className="wallet-account-content">
       <span className="wallet-account-label">CONNECTED WALLET</span>
       <p className="wallet-account-address">{wallet.account}</p>
