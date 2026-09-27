@@ -48,7 +48,7 @@ try {
   const page = await context.newPage(); page.setDefaultTimeout(30000);
   page.on('pageerror', error => errors.push(error.message));
   const share = () => page.getByRole('dialog', { name: 'A moment worth sharing.' });
-  async function open() { await page.getByRole('button', { name: 'Share your Rare Friend on X' }).click(); await share().getByRole('button', { name: 'DOWNLOAD PNG' }).waitFor(); }
+  async function open() { await page.getByRole('button', { name: 'Share your Rare Friend' }).click(); await share().getByRole('button', { name: 'DOWNLOAD PNG' }).waitFor(); }
   async function ready(format='GIF') { const button=share().getByRole('button',{name:`DOWNLOAD ${format}`,exact:true});await page.waitForFunction(() => {const b=document.querySelector('.share-download');return b&&!b.disabled});await share().locator('.share-image img').evaluate(img=>img.decode());assert(await button.isEnabled()); }
   async function fits(root) {assert(await root.evaluate(el=>el.scrollWidth<=el.clientWidth+1),'no dialog overflow');assert(await page.evaluate(()=>document.body.scrollWidth<=innerWidth+1),'no page overflow');}
   async function choose(collection) {
@@ -62,10 +62,10 @@ try {
   for(const width of [1440,390,320]) {
     await page.setViewportSize({width,height:1050});
     const metrics=await page.locator('.friend-status-actions').evaluate(el=>{
-      const label=getComputedStyle(el.querySelector('.friend-status')),button=getComputedStyle(el.querySelector('.habitat-share-button')),icon=el.querySelector('.habitat-share-button svg').getBoundingClientRect();
-      return {label:[label.fontSize,label.fontWeight,label.padding,label.letterSpacing],button:[button.fontSize,button.fontWeight,button.padding,button.letterSpacing],background:button.backgroundColor,border:button.borderTopColor,icon:icon.width,labelHeight:el.querySelector('.friend-status').getBoundingClientRect().height,buttonHeight:el.querySelector('button').getBoundingClientRect().height};
+      const label=getComputedStyle(el.querySelector('.friend-status')),button=getComputedStyle(el.querySelector('.habitat-share-button')),icon=el.querySelector('.habitat-share-button [aria-hidden="true"]');
+      return {label:[label.fontSize,label.fontWeight,label.padding,label.letterSpacing],button:[button.fontSize,button.fontWeight,button.padding,button.letterSpacing],background:button.backgroundColor,border:button.borderTopColor,icon:icon.textContent,iconFont:getComputedStyle(icon).fontSize,labelHeight:el.querySelector('.friend-status').getBoundingClientRect().height,buttonHeight:el.querySelector('button').getBoundingClientRect().height};
     });
-    assert.deepEqual(metrics.button,metrics.label,'share typography and padding match greeting exactly');assert.equal(metrics.background,'rgba(0, 0, 0, 0)');assert.equal(metrics.border,'rgb(204, 255, 0)');assert.equal(metrics.icon,parseInt(metrics.label[0]));assert.equal(metrics.buttonHeight,metrics.labelHeight);
+    assert.deepEqual(metrics.button,metrics.label,'share typography and padding match greeting exactly');assert.equal(metrics.background,'rgba(0, 0, 0, 0)');assert.equal(metrics.border,'rgb(204, 255, 0)');assert.equal(metrics.icon,'↗');assert.equal(metrics.iconFont,metrics.label[0]);assert.equal(metrics.buttonHeight,metrics.labelHeight);
     await page.locator('.habitat-heading').screenshot({path:path.join(artifact,`share-label-${width}.png`)});
     await choose('Generations');
   }

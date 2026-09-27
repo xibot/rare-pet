@@ -80,3 +80,20 @@ header.site-header :is(a,button):focus-visible { outline: 3px solid #ccff00; out
   .site-header nav .nav-arcade { font-size: 10px; padding: 10px 12px; }
   .site-header nav .nav-arcade > span { margin-left: 8px; font-size: 14px; }
 }
+
+/* Owner-wallet management stays separate from the Friend chooser. */
+.pet-dialog.wallet-account-dialog { width: min(520px, calc(100vw - 32px)); background: #000; color: #f6f8ef; color-scheme: dark; border-color: #737b66; }
+.wallet-account-dialog .dialog-heading { background: #ccff00; color: #000; border-bottom-color: #000; }
+.wallet-account-dialog .dialog-heading button { background: #000; color: #ccff00; border-color: #000; }
+.wallet-account-content { padding: 24px; }
+.wallet-account-label { color: #a5ae99; font: 11px var(--rush-font-mono); }
+.wallet-account-content .wallet-account-address { margin: 12px 0 20px; color: #ccff00; font: 14px/1.7 var(--rush-font-mono); overflow-wrap: anywhere; }
+.wallet-account-content > p { color: #b4bda8; font-size: 14px; line-height: 1.6; }
+.wallet-account-actions { display: flex; gap: 12px; margin-top: 24px; }
+.wallet-account-content button { min-height: 44px; border: 1px solid #69765a; background: #11140e; color: #f6f8ef; padding: 12px; font: 11px var(--rush-font-mono); }
+.wallet-account-actions > button { flex: 1; }
+.wallet-account-actions .wallet-disconnect-button { background: #ccff00; color: #000; border-color: #ccff00; }
+.wallet-account-dialog button:hover { border-color: #ccff00; text-decoration: none; }
+.wallet-account-dialog button:focus-visible { outline: 2px solid #ccff00; outline-offset: 3px; }
+.wallet-account-dialog .dialog-heading button:focus-visible { outline-color: #000; }
+@media (max-width: 420px) { .wallet-account-content { padding: 18px; } .wallet-account-actions { flex-direction: column; } }

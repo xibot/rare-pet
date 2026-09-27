@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createGamePreview, parseChanceGame } from '@rarefriends/friendsdk/game';
 import RareRush, { GenesisRush } from '../rare-rush/index';
@@ -17,7 +17,7 @@ import { Docs } from './Docs';
 import { PlayDialog } from './PlayDialog';
 import { SpaceBackdrop } from './SpaceBackdrop';
 import { islandFlights } from './islandFlights';
-import { ShareDialog, XIcon } from './ShareDialog';
+import { ShareDialog } from './ShareDialog';
 import { RareWalletDialog } from './RareWalletDialog';
 import { MarketDialog } from './MarketDialog';
 import type { ShareAction } from './share-image';
@@ -54,8 +54,9 @@ const statNames = ['Kinship', 'Strength', 'Stamina', 'Experience', 'Brain', 'Hea
 type TraitKey = Lowercase<(typeof statNames)[number]>;
 function Dialog({ title, children, close, className = '' }: { title: string; children: ReactNode; close: () => void; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => { const dialog = ref.current!; dialog.showModal(); return () => dialog.close(); }, []);
-  return <dialog ref={ref} className={`pet-dialog ${className}`} onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === ref.current) close(); }}><div className="dialog-heading"><h2>{title}</h2><button aria-label="Close dialog" onClick={close}>×</button></div>{children}</dialog>;
+  return <dialog ref={ref} className={`pet-dialog ${className}`} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === ref.current) close(); }}><div className="dialog-heading"><h2 id={titleId}>{title}</h2><button aria-label="Close dialog" onClick={close}>×</button></div>{children}</dialog>;
 }
 
 function App() {
@@ -97,6 +98,7 @@ function App() {
   const [sharing, setSharing] = useState(false), [shareAction, setShareAction] = useState<ShareAction>('pet');
   const [rareWallet, setRareWallet] = useState(false), [launching, setLaunching] = useState(false);
   const [market, setMarket] = useState(false);
+  const [walletAccount, setWalletAccount] = useState(false);
   const [launchConfig, setLaunchConfig] = useState<RareLaunchConfig | null>(null), [launchRefresh, setLaunchRefresh] = useState(0);
   const reactionTimer = useRef<number | undefined>(undefined), reactionCounts = useRef({ pet: 0, feed: 0, poop: 0, play: 0 });
   const playCelebration = useRef(false);
@@ -129,6 +131,9 @@ function App() {
     const animation = window.setInterval(() => { if (!document.hidden && !motion.matches) setFrame(f => f + 1); }, 280);
     return () => { clearInterval(clock); clearInterval(animation); clearTimeout(reactionTimer.current); session.dispose(); };
   }, [session]);
+  useEffect(() => {
+    if (wallet.status === 'disconnected' || wallet.status === 'unavailable' || wallet.status === 'error') setWalletAccount(false);
+  }, [wallet.status]);
   useEffect(() => {
     op.current++; selectionOp.current++; lock.current = false; setPending(''); setSelecting(false); setConfirmation(null); setPlaying(false); setSharing(false); setRareWallet(false); setLaunching(false); playCelebration.current = false; setOwned([]); setDiscoveryError(''); clearReaction();
     if (wallet.status !== 'connected' || !wallet.account) { setLoading(false); return; }
@@ -183,6 +188,16 @@ function App() {
     op.current++; selectionOp.current++; setSelecting(false); setConfirmation(null); setSelected({ kind: 'preview', index }); careRef.current = next; setCare(next); setPicker(false); setPlaying(false); setError(''); setTx(''); clearReaction(); setNotice('Preview care is saved on this device.');
   }
   function openPicker(mode: 'preview' | 'wallet') { setPickerMode(mode); setPicker(true); }
+  function openWallet() {
+    if (lock.current) return;
+    if (wallet.account) { setWalletAccount(true); return; }
+    openPicker('wallet');
+    void session.connect();
+  }
+  function disconnectWallet() {
+    setWalletAccount(false);
+    session.disconnect();
+  }
   function clearReaction() { clearTimeout(reactionTimer.current); setReaction(''); }
   function animate(action: CareAction) {
     clearTimeout(reactionTimer.current);
@@ -244,7 +259,7 @@ function App() {
   }
 
   return <div className="rarepet-app">
-    <div className="site-header-shell"><header className="site-header"><a className="site-logo" href="/" aria-label="RarePet home"><PetBrand/></a><nav aria-label="Main navigation"><button className="nav-how-to-play" onClick={() => setRules(true)}>HOW TO CARE</button><a className="nav-launch" href="/launch/">LAUNCH</a><a className="nav-docs" href="/docs/">DOCS</a><button className="nav-arcade" onClick={() => { openPicker('wallet'); if (wallet.status === 'wrong-network') void session.switchNetwork(); else if (wallet.status !== 'connected') void session.connect(); }} disabled={wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'connected' && wallet.account ? `${wallet.account.slice(0, 6)}…${wallet.account.slice(-4)}` : wallet.status === 'wrong-network' ? 'SWITCH NETWORK' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET'} <span aria-hidden="true">↗</span></button></nav></header></div>
+    <div className="site-header-shell"><header className="site-header"><a className="site-logo" href="/" aria-label="RarePet home"><PetBrand/></a><nav aria-label="Main navigation"><button className="nav-how-to-play" onClick={() => setRules(true)}>HOW TO CARE</button><a className="nav-docs" href="/docs/">DOCS</a><button className="nav-arcade" onClick={openWallet} aria-haspopup="dialog" aria-label={wallet.account ? 'Manage connected wallet' : undefined} disabled={!!pending || wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'connected' && wallet.account ? `${wallet.account.slice(0, 6)}…${wallet.account.slice(-4)}` : wallet.status === 'wrong-network' ? 'SWITCH NETWORK' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET'} <span aria-hidden="true">↗</span></button></nav></header></div>
     {!launchPage && <main>
       <div className="page-title"><div><span className="eyebrow">A FRIEND FOR EVERY DAY</span><h1>My RarePet<span>.</span></h1></div><button className="change-button" disabled={!!pending} onClick={() => openPicker(preview ? 'preview' : 'wallet')}>CHOOSE FRIEND <span>⇄</span></button></div>
       <div className="mode-bar"><div className="mode-switch" role="group" aria-label="Pet mode"><button aria-pressed={preview} disabled={!!pending} onClick={() => { if (!preview) choosePreview(lastPreview); }}>PREVIEW</button><button aria-pressed={!preview} disabled={!!pending} onClick={() => openPicker('wallet')}>MY WALLET <span aria-hidden="true">↗</span></button></div><p>{preview ? 'Try the daily routine. No wallet needed.' : 'Your own Friend. Your daily ritual.'}</p>{preview && <button className="reset-preview" onClick={resetPreview}>RESET PREVIEW ↻</button>}</div>
@@ -261,7 +276,7 @@ function App() {
             return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id === 'launch' ? setLaunching(true) : act(a.id)} aria-label={`${a.name}, ${practice ? 'practice only, no onchain XP' : a.gain}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{practice ? 'XP VERIFIER COMING SOON' : a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && !practice && availability.remaining > 0 && availability.remaining < activeRules.actions.play.dailyLimit && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
           })}<button className="care-action rare-wallet-action" disabled={!!pending || invalid} onClick={() => setRareWallet(true)} aria-label="Rare Wallet"><span className="action-icon"><Icon name="wallet"/></span><span className="action-text"><strong>Rare Wallet</strong><small>YOUR FRIEND’S ASSETS</small></span><span className="action-timing"><b>OPEN WALLET ↗</b></span></button><button className="care-action rare-wallet-action market-action" disabled={!!pending} onClick={() => setMarket(true)} aria-label="Buy / Sell"><span className="action-icon"><Icon name="trade"/></span><span className="action-text"><strong>Buy / Sell</strong><small>RAREPET TOKENS</small></span><span className="action-timing"><b>OPEN MARKET ↗</b></span></button><div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
           <div className={`habitat ${reaction ? `reaction-${reaction}` : ''}`}>
-            <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'WALLET CHANGED'}</span><h2>{label}</h2></div><div className="friend-status-actions"><span className="friend-status">{due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span><button className="habitat-share-button" disabled={invalid || !!pending} onClick={() => setSharing(true)} aria-label="Share your Rare Friend on X">SHARE TO <XIcon/></button></div></div>
+            <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'WALLET CHANGED'}</span><h2>{label}</h2></div><div className="friend-status-actions"><span className="friend-status">{due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span><button className="habitat-share-button" disabled={invalid || !!pending} onClick={() => setSharing(true)} aria-label="Share your Rare Friend">SHARE <span aria-hidden="true">↗</span></button></div></div>
             <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
             <div className="habitat-customize"><IslandPicker value={island} onChange={chooseIsland}/>{isGenesis && <button className="change-body" onClick={changeBody} title="Try one of 36 Rare Rush bodies">CHANGE BODY <span aria-hidden="true">↻</span><small>36 RARE RUSH BODIES</small></button>}</div>
             <div className="bond-status"><span className="bond-heart">♡</span><div><b>{due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. This streak’s grace deadline: ${new Date(graceDeadline * 1000).toLocaleString()}.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{due > 0 ? duration(due) : 'PET ME'}</span></div>
@@ -287,6 +302,14 @@ function App() {
       <footer><div className="footer-brand"><span>RARE PET BY XIBOT</span><small>ROBINHOOD CHAIN</small></div><a className="footer-docs" href="/docs/">DOCS ↗</a><p>{preview ? 'Preview only · care stays on this device · no transactions.' : careContract ? 'Care lives onchain · original NFT traits stay unchanged.' : 'NFT ownership is live. Onchain care is not configured in this build.'}</p><a href="https://rarefriends.com" target="_blank" rel="noreferrer">RARE FRIENDS ↗</a></footer><p className="credits"><a href="/credits.txt" target="_blank">Rare Friends artwork · Built with FriendSDK</a></p>
     </main>}
     {launchPage && <main className="launch-page"><a className="launch-page-back" href="/">← BACK TO RAREPET</a><LaunchDialog key={`page:${(art ?? live)?.collection}:${(art ?? live)?.tokenId}:${wallet.revision}`} embedded creatorMode={pageLaunchMode} onCreatorModeChange={setPageLaunchMode} friend={(art ?? live) ?? previewFriends[lastPreview]} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => {}} chooseFriend={() => openPicker('wallet')} onLaunch={() => setLaunchRefresh(value => value + 1)}/><footer><div className="footer-brand"><span>RARE PET BY XIBOT</span><small>ROBINHOOD CHAIN</small></div><a href="/docs/#launch">LAUNCH DOCS ↗</a></footer></main>}
+    {walletAccount && wallet.account && <Dialog title="Your wallet" className="wallet-account-dialog" close={() => setWalletAccount(false)}><div className="wallet-account-content">
+      <span className="wallet-account-label">CONNECTED WALLET</span>
+      <p className="wallet-account-address">{wallet.account}</p>
+      <p>Disconnect your wallet from RarePet here. Your Friends and their onchain care records stay with you.</p>
+      {wallet.status === 'wrong-network' && <button className="wallet-network-button" onClick={() => void session.switchNetwork()}>SWITCH TO ROBINHOOD ↗</button>}
+      {wallet.error && <p role="alert">{wallet.error}</p>}
+      <div className="wallet-account-actions"><button onClick={() => setWalletAccount(false)}>KEEP CONNECTED</button><button className="wallet-disconnect-button" onClick={disconnectWallet}>DISCONNECT WALLET</button></div>
+    </div></Dialog>}
     {market && <MarketDialog session={session} close={() => setMarket(false)}/>}
     {sharing && (art ?? live) && <ShareDialog friend={(art ?? live)!} island={island} bodyId={bodyId} initialAction={shareAction} initialVariant={reactionVariant} close={() => setSharing(false)}/>}
     {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => setLaunchRefresh(value => value + 1)}/>}
@@ -296,14 +319,14 @@ function App() {
       {pickerMode === 'preview' ? <>
         <p>Meet a Genesis or Generations Friend. Try care and Rare Rush without connecting a wallet.</p>
         <div className="collection-switch" role="group" aria-label="Preview collection">{(['generations', 'genesis'] as const).map(which => <button key={which} aria-pressed={previewCollection === which} onClick={() => setPreviewCollection(which)}>{which === 'genesis' ? 'Genesis' : 'Generations'}</button>)}</div>
-        <div className="friend-picker preview-picker">{previewFriends.map((friend, index) => friend.collection === previewCollection && <button key={`${friend.collection}:${friend.tokenId}`} onClick={() => choosePreview(index)} aria-pressed={preview && selected.index === index}>{friend.collection === 'genesis' ? <GenesisPetSprite portraitUrl={friend.image} bodyId={bodyId}/> : <img src={friend.image} alt=""/>}<b>{friend.label}</b><span>PREVIEW</span></button>)}</div>
+        <div className="friend-picker preview-picker">{previewFriends.map((friend, index) => friend.collection === previewCollection && <button key={`${friend.collection}:${friend.tokenId}`} onClick={() => choosePreview(index)} aria-pressed={preview && selected.index === index}>{friend.collection === 'genesis' ? <GenesisPetSprite portraitUrl={friend.image} bodyId={bodyId}/> : <PetSprite sprites={friend.sprites} frame={0}/>}<b>{friend.label}</b><span>PREVIEW</span></button>)}</div>
         <p className="inline-note">Preview care stays on this device. Genesis bodies and island floors are cosmetic.</p>
       </> : <>
         <p>Connect your wallet and bring home a Genesis or Generations Rare Friend.</p>
         {wallet.status === 'connected' ? <>
-          <div className="picker-account"><span>{wallet.account?.slice(0, 8)}…{wallet.account?.slice(-6)}</span><button onClick={() => setRefresh(n => n + 1)} disabled={loading}>REFRESH</button><button onClick={() => session.disconnect()}>DISCONNECT</button></div>
+          <div className="picker-account"><span>{wallet.account?.slice(0, 8)}…{wallet.account?.slice(-6)}</span><button onClick={() => setRefresh(n => n + 1)} disabled={loading}>REFRESH</button></div>
           {loading && <p role="status">Finding your Friends on Robinhood…</p>}{discoveryError && <p className="inline-error" role="alert">{discoveryError}</p>}{!loading && !owned.length && !discoveryError && <p>No Rare Friends found in this wallet. Try another wallet or verify a token below.</p>}
-          <div className="friend-picker">{owned.map(pet => <button key={`${pet.collection}:${pet.tokenId}`} disabled={selecting} onClick={() => void chooseOwned(pet.collection, pet.tokenId)}>{pet.collection === 'genesis' ? <GenesisPetSprite portraitUrl={pet.image} bodyId={bodyId}/> : <img src={pet.image} alt=""/>}<b>{pet.label}</b><span>{pet.collection.toUpperCase()}</span></button>)}</div>
+          <div className="friend-picker">{owned.map(pet => <button key={`${pet.collection}:${pet.tokenId}`} disabled={selecting} onClick={() => void chooseOwned(pet.collection, pet.tokenId)}>{pet.collection === 'genesis' ? <GenesisPetSprite portraitUrl={pet.image} bodyId={bodyId}/> : pet.sprites ? <PetSprite sprites={pet.sprites} frame={0}/> : <img src={pet.image} alt=""/>}<b>{pet.label}</b><span>{pet.collection.toUpperCase()}</span></button>)}</div>
           <form className="manual-pet" onSubmit={e => { e.preventDefault(); void chooseOwned(collection, manual); }}><label>COLLECTION<select value={collection} onChange={e => setCollection(e.target.value as PetCollection)}><option value="genesis">Genesis</option><option value="generations">Generations</option></select></label><label>TOKEN ID<input value={manual} onChange={e => setManual(e.target.value)} pattern="[1-9][0-9]{0,77}" maxLength={78} inputMode="numeric" placeholder="42" required/></label><button type="submit" disabled={selecting}>{selecting ? 'VERIFYING…' : 'VERIFY & SELECT'}</button></form>
         </> : <>
           <button className="solid-button" onClick={() => wallet.status === 'wrong-network' ? void session.switchNetwork() : void session.connect()} disabled={wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET'}</button>

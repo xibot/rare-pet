@@ -65,7 +65,7 @@ async function ready(action) {
   return dialog;
 }
 async function open() {
-  await page.getByRole('button', { name: 'Share your Rare Friend on X' }).click();
+  await page.getByRole('button', { name: 'Share your Rare Friend' }).click();
   return ready();
 }
 async function close() { await shareDialog().getByRole('button', { name: 'Close sharing' }).click(); }
@@ -160,7 +160,7 @@ try {
       return native.call(this, blob => delay ? setTimeout(() => callback(blob), 800) : callback(blob), ...args);
     };
   });
-  await page.getByRole('button', { name: 'Share your Rare Friend on X' }).click();
+  await page.getByRole('button', { name: 'Share your Rare Friend' }).click();
   await page.waitForFunction(() => window.shareQA.delayedBlobs === 1);
   await shareDialog().getByRole('button', { name: 'Feed', exact: true }).click();
   await shareDialog().getByRole('button', { name: 'Poop', exact: true }).click();
@@ -170,7 +170,7 @@ try {
   assert.equal(verifyPNG(await imageData(), 'latest-action after old completion'), winning, 'A slow stale export cannot replace the latest action');
   await close();
   await page.evaluate(() => { window.shareQA.delayNextBlob = true; });
-  await page.getByRole('button', { name: 'Share your Rare Friend on X' }).click();
+  await page.getByRole('button', { name: 'Share your Rare Friend' }).click();
   await page.waitForFunction(() => window.shareQA.delayedBlobs === 2);
   await close();
   await open();

@@ -103,6 +103,13 @@ async function fixture(width = 1100, height = 900) {
 }
 
 function card(page) { return page.locator('.friend-picker:not(.preview-picker)').getByRole('button').filter({ has: page.locator('b', { hasText: /^Genesis #1$/ }) }); }
+function accountDialog(page) { return page.getByRole('dialog', { name: 'Your wallet', exact: true }); }
+function friendDialog(page) { return page.getByRole('dialog', { name: 'Choose your Rare Friend', exact: true }); }
+async function assertSelectedGenesis(page) {
+  assert.equal(await page.locator('.habitat-heading h2').innerText(), 'Genesis #1', 'Closing wallet management preserves the selected Friend');
+  assert.equal(await page.locator('.pet-portrait image[data-genesis-art]').getAttribute('href'), portrait);
+  assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).getAttribute('aria-pressed'), 'true');
+}
 async function chooseGenesis(page, state) {
   if (!await page.getByRole('dialog').count()) await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
   await card(page).waitFor();
@@ -124,7 +131,8 @@ async function chooseGenesis(page, state) {
 async function assertInvalidated(page) {
   await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Choose your Friend');
   assert.equal(await page.locator('.pet-portrait').count(), 0, 'A stale identity cannot remain visible');
-  for (const button of await page.locator('.care-action').all()) assert.equal(await button.isDisabled(), true);
+  for (const button of await page.locator('.care-action:not(.market-action)').all()) assert.equal(await button.isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Buy / Sell', exact: true }).isEnabled(), true, 'Market browsing remains available without an eligible Friend');
 }
 async function assertClean(page, state) {
   assert.deepEqual(state.errors, [], 'No uncaught browser errors');
@@ -147,6 +155,22 @@ try {
     await page.locator('.nav-arcade').click();
     await page.waitForFunction(() => document.querySelector('.nav-arcade')?.textContent.includes('0x1111'));
     await chooseGenesis(page, state);
+    await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
+    assert.equal(await friendDialog(page).getByRole('button', { name: /DISCONNECT/ }).count(), 0, 'Friend selection contains no disconnect action');
+    assert.equal(await friendDialog(page).getByRole('button', { name: 'REFRESH', exact: true }).count(), 1);
+    await friendDialog(page).getByRole('button', { name: 'Close dialog', exact: true }).click();
+    await assertSelectedGenesis(page);
+    for (const dismissal of ['KEEP CONNECTED', 'Close dialog', 'Escape']) {
+      await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).click();
+      await accountDialog(page).waitFor();
+      assert.equal(await accountDialog(page).locator('.wallet-account-address').innerText(), account);
+      assert.equal(await friendDialog(page).count(), 0, 'Connected top-right button opens account management instead of Friend selection');
+      if (dismissal === 'Escape') await page.keyboard.press('Escape');
+      else await accountDialog(page).getByRole('button', { name: dismissal, exact: true }).click();
+      await accountDialog(page).waitFor({ state: 'detached' });
+      await assertSelectedGenesis(page);
+      assert.equal(await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).count(), 1, 'Dismissing the modal keeps the wallet connected');
+    }
     assert.equal(await page.locator('body').evaluate(el => el.scrollWidth > innerWidth), false, 'Dashboard fits viewport');
     const oldBody = await page.locator('.pet-portrait [data-genesis-body]').getAttribute('data-genesis-body');
     await page.getByRole('button', { name: /CHANGE BODY/ }).click();
@@ -176,14 +200,27 @@ try {
     if (width === 1100) {
       await page.evaluate(() => window.testWallet.network('0x1'));
       await assertInvalidated(page);
-      await page.locator('.nav-arcade').filter({ hasText: 'SWITCH NETWORK' }).click();
+      await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).click();
+      await accountDialog(page).getByRole('button', { name: 'SWITCH TO ROBINHOOD ↗', exact: true }).click();
       await page.waitForFunction(() => document.querySelector('.nav-arcade')?.textContent.includes('0x1111'));
+      await accountDialog(page).getByRole('button', { name: 'KEEP CONNECTED', exact: true }).click();
       await chooseGenesis(page, state);
 
-      await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
-      await page.getByRole('button', { name: 'DISCONNECT', exact: true }).click();
+      await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).click();
+      await accountDialog(page).getByRole('button', { name: 'DISCONNECT WALLET', exact: true }).click();
       await assertInvalidated(page);
-      await page.getByRole('dialog').getByRole('button', { name: 'CONNECT WALLET', exact: true }).click();
+      assert.equal(await page.getByRole('dialog').count(), 0, 'Disconnect closes wallet management without opening the chooser');
+      await page.locator('.nav-arcade').filter({ hasText: 'CONNECT WALLET' }).click();
+      await friendDialog(page).waitFor();
+      await chooseGenesis(page, state);
+
+      await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).click();
+      await page.evaluate(() => window.testWallet.change(null));
+      await assertInvalidated(page);
+      await accountDialog(page).waitFor({ state: 'detached' });
+      await page.locator('.nav-arcade').filter({ hasText: 'CONNECT WALLET' }).click();
+      await card(page).waitFor();
+      assert.equal(await accountDialog(page).count(), 0, 'An external disconnect cannot resurrect an old account modal after reconnecting');
       await chooseGenesis(page, state);
 
       await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
