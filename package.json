@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "RarePet by XIBOT \u2014 daily care for Genesis and Generations Rare Friends, with Rare Rush play.",
+  "description": "RarePet by XIBOT — daily care for Genesis and Generations Rare Friends, with Rare Rush play.",
   "scripts": {
     "dev": "node scripts/pet-site.mjs dev",
     "build": "node scripts/pet-site.mjs build",
@@ -43,6 +43,8 @@
     "@types/node": "22.20.4",
     "@types/react": "19.1.12",
     "@types/react-dom": "19.1.9",
+    "@uniswap/universal-router-sdk": "5.14.0",
+    "@uniswap/v4-sdk": "2.4.1",
     "esbuild": "0.28.2",
     "playwright": "1.63.0",
     "typescript": "6.0.3"

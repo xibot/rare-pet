@@ -87,6 +87,12 @@ The launch preset assigns the full supply of **1 billion tokens to liquidity**, 
 
 These are the initial shares of collected trading fees. Fees accrue when swaps happen; they are not guaranteed earnings. Launches and fee claims are live on Robinhood Chain and require wallet confirmation. The [deployed router and verification record](contracts/rare-launchpad/README.md) document the configuration and checks; the contracts have not been audited.
 
+## Buy / Sell
+
+Open **Buy / Sell** below Rare Wallet to discover tokens launched through RarePet. Browse the token grid, search by name, ticker or contract, and filter by the actual launch pair. You do not need to own a Rare Friend to browse or trade.
+
+Buy and sell from **your connected wallet** using the token's existing Doppler pool. Review the input, quoted output, minimum received and slippage, approve the displayed amount when needed, then confirm the swap. WETH pairs use WETH; ETH pays network gas. Trading has **no trait effect or care cooldown** and keeps the launch's existing fee split.
+
 ## Permanent care. Room to grow.
 
 **Pet, Feed and Poop now have a deployed onchain care ledger.** [RarePetCare](contracts/rare-pet/README.md) preserves lifetime earned points, action counts, best streak and per-action receipts for each Friend, even when ownership changes. Current Kinship, streak and streak-based Rarity can still fall when care is missed; lifetime achievements remain recorded.
