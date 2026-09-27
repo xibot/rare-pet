@@ -219,7 +219,7 @@ async function quoteMarket(input:QuoteInput,injected?:MarketSwapDependencies,rev
   const [quoted,balance,tokenAllowance,permit] = await Promise.all([
     selected.launch ? quoter.quoteExactInputV4({poolKey:selected.launch.poolKey,zeroForOne:equal(tokenIn.address,selected.launch.poolKey.currency0),exactAmount:amountIn,hookData:'0x'}).then(q=>({...q,route:null}))
       : reviewedRoute ? recheckMarketRoute(reviewedRoute,amountIn,block.number,deps.client,deps.verifyRoutingInfrastructure)
-      : readMarketRoute({tokenIn:tokenIn.address,tokenOut:tokenOut.address,amountIn,account:account??'0x0000000000000000000000000000000000000001',blockNumber:block.number},{client:deps.client,fetcher:deps.fetcher,verifyInfrastructure:deps.verifyRoutingInfrastructure}),
+      : readMarketRoute({tokenIn:tokenIn.address,tokenOut:tokenOut.address,amountIn,account:account??'0x000000000000000000000000000000000000dEaD',blockNumber:block.number},{client:deps.client,fetcher:deps.fetcher,verifyInfrastructure:deps.verifyRoutingInfrastructure}),
     account ? deps.client.readContract({address:tokenIn.address,abi:MARKET_ERC20_ABI,functionName:'balanceOf',args:[account],blockNumber:block.number}) : null,
     account ? deps.client.readContract({address:tokenIn.address,abi:MARKET_ERC20_ABI,functionName:'allowance',args:[account,MARKET_SWAP_DEPLOYMENT.permit2],blockNumber:block.number}) : null,
     account ? deps.client.readContract({address:MARKET_SWAP_DEPLOYMENT.permit2,abi:MARKET_PERMIT2_ABI,functionName:'allowance',args:[account,tokenIn.address,MARKET_SWAP_DEPLOYMENT.router],blockNumber:block.number}) : null,

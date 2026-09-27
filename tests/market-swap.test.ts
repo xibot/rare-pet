@@ -331,3 +331,13 @@ test('RF ERC20 approval simulation must decode to the inner true bytes, never fa
     assert.equal(getMarketTransaction(f.source)?.status,'failed');
   }
 });
+
+// The router sentinel (0x1) is a precompile, not a valid preview swapper for the Trading API.
+test('anonymous ecosystem quotes use an inert preview address and never authorize a trade',async()=>{
+  const f=ecosystemFixture(3,false),fetcher=f.deps.fetcher!;let swapper='';
+  f.deps.fetcher=async(url,options)=>{swapper=JSON.parse(String(options?.body)).swapper;return fetcher(url,options);};
+  const q=await readMarketSwapQuote({market:f.asset,side:'buy',amount:'0.001',slippageBps:50},f.deps);
+  assert.equal(swapper,'0x000000000000000000000000000000000000dEaD');
+  assert.equal(q.account,null);assert.equal(q.actor,null);assert.equal(q.balance,null);
+  await assert.rejects(sendMarketSwap(f.options(q),f.deps),/Get a new quote/);assert.equal(f.writes.length,0);
+});

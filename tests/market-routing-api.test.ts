@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
-import { createMarketRoutingHandler } from '../api/market-routing.ts';
+import { createMarketRoutingHandler, type MarketRoutingDiagnostic } from '../api/market-routing.ts';
 import catalog from '../games/rare-pet/launch-quote-catalog.json' with { type: 'json' };
 import { createPetServer } from '../scripts/pet-site.mjs';
 
@@ -13,7 +13,7 @@ const json = (value: unknown, init: ResponseInit = {}) => new Response(JSON.stri
 const classic = () => json({ routing: 'CLASSIC', quote: { route, amount: '999', permit2Data: 'not-forwarded' }, requestId: 'not-forwarded' });
 type Handler = ReturnType<typeof createMarketRoutingHandler>;
 function setup(fetcher: typeof fetch = async () => classic(), options: Parameters<typeof createMarketRoutingHandler>[0] = {}) {
-  return createMarketRoutingHandler({ apiKey: () => KEY, fetcher, ...options });
+  return createMarketRoutingHandler({ apiKey: () => KEY, fetcher, warn: () => {}, ...options });
 }
 async function invoke(handler: Handler, body: unknown = input, options: { method?: string; headers?: Record<string, string>; chunks?: Array<string | Buffer> } = {}) {
   const request = Readable.from(options.chunks ?? []) as IncomingMessage & { body?: unknown };
@@ -108,6 +108,38 @@ test('provider errors, malformed JSON, redirects and wrong content types are gen
     () => new Response(KEY, { headers: { 'content-type': 'text/html' } }), () => new Response('{malformed' + KEY, { headers: { 'content-type': 'application/json' } })];
   for (const make of responses) { const result = await invoke(setup(async () => make())); assert.equal(result.status, 503); assert(!result.raw.includes(KEY)); assert(!result.raw.includes('attacker')); }
   const thrown = await invoke(setup(async () => { throw new Error(`Network error ${KEY}`); })); assert.equal(thrown.status, 503); assert(!thrown.raw.includes(KEY));
+});
+
+test('safe diagnostics classify provider failures without logging secrets, bodies, headers or wallet data', async () => {
+  const cases: { fetcher: typeof fetch; stage: MarketRoutingDiagnostic['stage']; status?: number }[] = [
+    ...[400, 401, 403, 429, 500].map(status => ({ fetcher: async () => json({ error: KEY, wallet: input.swapper }, { status }), stage: 'http' as const, status })),
+    { fetcher: async () => { throw new Error(`${KEY} ${JSON.stringify(input)}`); }, stage: 'fetch' },
+    { fetcher: async () => new Response(KEY, { headers: { 'content-type': 'text/html' } }), stage: 'response-type', status: 200 },
+    { fetcher: async () => json({ secret: KEY }, { headers: { 'content-length': '200001' } }), stage: 'response-size', status: 200 },
+    { fetcher: async () => new Response(`{${KEY}`, { headers: { 'content-type': 'application/json' } }), stage: 'response-json', status: 200 },
+    { fetcher: async () => json({ routing: KEY, quote: { route } }), stage: 'response-shape', status: 200 },
+    { fetcher: async () => new Response(new ReadableStream({ start(controller) { controller.error(new Error(KEY)); } }), { headers: { 'content-type': 'application/json' } }), stage: 'response-body', status: 200 },
+    { fetcher: async () => new Promise<Response>(() => {}), stage: 'timeout' },
+  ];
+  for (const entry of cases) {
+    const logs: MarketRoutingDiagnostic[] = [];
+    const result = await invoke(setup(entry.fetcher, { timeoutMs: 10, warn: diagnostic => logs.push(diagnostic) }));
+    assert.equal(result.status, 503);
+    assert.deepEqual(logs, ['V3', 'V4'].map(protocol => ({ protocol, stage: entry.stage, ...(entry.status === undefined ? {} : { status: entry.status }) })));
+    assert(logs.every(Object.isFrozen));
+    const rendered = JSON.stringify(logs);
+    for (const privateValue of [KEY, ...Object.values(input), '"headers":', '"body":', 'x-api-key']) assert(!rendered.includes(privateValue));
+  }
+});
+
+test('diagnostics log at most failed protocols, remain quiet for success/input errors, and cannot break a partial success', async () => {
+  const logs: MarketRoutingDiagnostic[] = [];
+  const handler = setup(async (_url, init) => JSON.parse(init!.body as string).protocols[0] === 'V3' ? classic() : json({ error: KEY }, { status: 401 }), { warn: diagnostic => { logs.push(diagnostic); throw new Error('Logger unavailable'); } });
+  const result = await invoke(handler); assert.equal(result.status, 200); assert.deepEqual(result.body.routes, [route]);
+  assert.deepEqual(logs, [{ protocol: 'V4', stage: 'http', status: 401 }]);
+  logs.length = 0;
+  await invoke(handler, { ...input, tokenIn: 'invalid' }); assert.equal(logs.length, 0);
+  await invoke(setup(async () => classic(), { warn: diagnostic => logs.push(diagnostic) })); assert.equal(logs.length, 0);
 });
 
 test('provider response size is bounded using declared and actual streamed bytes', async () => {

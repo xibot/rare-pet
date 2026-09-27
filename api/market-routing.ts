@@ -10,8 +10,14 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 type Request = IncomingMessage & { body?: unknown };
 type Response = { statusCode: number; setHeader(name: string, value: string): unknown; end(body?: string): unknown };
 type Input = { tokenIn: string; tokenOut: string; amount: string; swapper: string };
-type Dependencies = { fetcher?: typeof fetch; apiKey?: () => string | undefined; now?: () => number; timeoutMs?: number };
+type ProviderStage = 'fetch' | 'http' | 'response-type' | 'response-size' | 'response-body' | 'response-json' | 'response-shape' | 'timeout';
+export type MarketRoutingDiagnostic = Readonly<{ protocol: 'V3' | 'V4'; stage: ProviderStage; status?: number }>;
+type Dependencies = { fetcher?: typeof fetch; apiKey?: () => string | undefined; now?: () => number; timeoutMs?: number; warn?: (diagnostic: MarketRoutingDiagnostic) => void };
 class InputError extends Error { readonly status: number; constructor(status: number, message: string) { super(message); this.status = status; } }
+class ProviderError extends Error {
+  readonly stage: ProviderStage; readonly status?: number;
+  constructor(stage: ProviderStage, status?: number) { super('Route provider unavailable.'); this.stage = stage; if (Number.isInteger(status) && status! >= 100 && status! <= 599) this.status = status; }
+}
 
 function validate(value: unknown): Input {
   if (!object(value) || Object.keys(value).length !== 4 || Object.keys(value).some(key => !['tokenIn', 'tokenOut', 'amount', 'swapper'].includes(key)) ||
@@ -56,31 +62,40 @@ async function readBody(request: Request, signal: AbortSignal): Promise<unknown>
 }
 
 async function readRoute(input: Input, protocol: 'V3' | 'V4', key: string, fetcher: typeof fetch, signal: AbortSignal): Promise<unknown[]> {
-  const response = await abortable(fetcher(PROVIDER, {
-    method: 'POST', redirect: 'error', signal,
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'x-api-key': key, 'x-permit2-disabled': 'true', 'x-universal-router-version': '2.1.1' },
-    body: JSON.stringify({ ...input, type: 'EXACT_INPUT', tokenInChainId: 4663, tokenOutChainId: 4663,
-      protocols: [protocol], permitAmount: 'EXACT', slippageTolerance: 0.5, routingPreference: 'BEST_PRICE', ...(protocol === 'V4' ? { hooksOptions: 'V4_NO_HOOKS' } : {}) }),
-  }), signal);
-  if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') || !response.body) {
-    void response.body?.cancel().catch(() => {}); throw new Error('Route provider unavailable.');
-  }
-  const declaredLength = response.headers.get('content-length');
-  if (declaredLength && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_RESPONSE)) { void response.body.cancel().catch(() => {}); throw new Error('Route response too large.'); }
-  const reader = response.body.getReader(), chunks: Uint8Array[] = []; let length = 0;
+  let stage: ProviderStage = 'fetch', status: number | undefined;
   try {
-    for (;;) {
-      const part = await abortable(reader.read(), signal); if (part.done) break;
-      length += part.value.byteLength; if (length > MAX_RESPONSE) throw new Error('Route response too large.'); chunks.push(part.value);
-    }
-  } finally { void reader.cancel().catch(() => {}); }
-  const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  if (!object(value) || value.routing !== 'CLASSIC' || !object(value.quote) || !Array.isArray(value.quote.route) ||
-      !value.quote.route.every(route => Array.isArray(route) && route.every(object))) throw new Error('Unsupported route response.');
-  return value.quote.route;
+    const response = await abortable(fetcher(PROVIDER, {
+      method: 'POST', redirect: 'error', signal,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'x-api-key': key, 'x-permit2-disabled': 'true', 'x-universal-router-version': '2.1.1' },
+      body: JSON.stringify({ ...input, type: 'EXACT_INPUT', tokenInChainId: 4663, tokenOutChainId: 4663,
+        protocols: [protocol], permitAmount: 'EXACT', slippageTolerance: 0.5, routingPreference: 'BEST_PRICE', ...(protocol === 'V4' ? { hooksOptions: 'V4_NO_HOOKS' } : {}) }),
+    }), signal);
+    status = response.status; stage = 'http';
+    if (!response.ok) { void response.body?.cancel().catch(() => {}); throw new Error('Route provider unavailable.'); }
+    stage = 'response-type';
+    if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') || !response.body) { void response.body?.cancel().catch(() => {}); throw new Error('Route provider unavailable.'); }
+    stage = 'response-size';
+    const declaredLength = response.headers.get('content-length');
+    if (declaredLength && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_RESPONSE)) { void response.body.cancel().catch(() => {}); throw new Error('Route response too large.'); }
+    const reader = response.body.getReader(), chunks: Uint8Array[] = []; let length = 0;
+    try {
+      for (;;) {
+        stage = 'response-body';
+        const part = await abortable(reader.read(), signal); if (part.done) break;
+        stage = 'response-size';
+        length += part.value.byteLength; if (length > MAX_RESPONSE) throw new Error('Route response too large.'); chunks.push(part.value);
+      }
+    } finally { void reader.cancel().catch(() => {}); }
+    stage = 'response-json';
+    const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    stage = 'response-shape';
+    if (!object(value) || value.routing !== 'CLASSIC' || !object(value.quote) || !Array.isArray(value.quote.route) ||
+        !value.quote.route.every(route => Array.isArray(route) && route.every(object))) throw new Error('Unsupported route response.');
+    return value.quote.route;
+  } catch { throw new ProviderError(signal.aborted ? 'timeout' : stage, status); }
 }
 
-export function createMarketRoutingHandler({ fetcher = fetch, apiKey = () => process.env.UNISWAP_API_KEY, now = Date.now, timeoutMs = 12_000 }: Dependencies = {}) {
+export function createMarketRoutingHandler({ fetcher = fetch, apiKey = () => process.env.UNISWAP_API_KEY, now = Date.now, timeoutMs = 12_000, warn = diagnostic => console.warn('[market-routing]', diagnostic) }: Dependencies = {}) {
   // Bounded, per-instance backstop; no wallet/IP history is retained. Deployment-wide limits belong at the edge.
   let windowStart = now(), requests = 0, active = 0;
   return async function handler(request: Request, response: Response) {
@@ -98,6 +113,15 @@ export function createMarketRoutingHandler({ fetcher = fetch, apiKey = () => pro
     try {
       const input = validate(await readBody(request, controller.signal));
       const results = await Promise.allSettled(['V3', 'V4'].map(protocol => readRoute(input, protocol as 'V3' | 'V4', key, fetcher, controller.signal)));
+      // At most two constant-shape entries per admitted request. Never log provider error
+      // strings, responses, request data, addresses, headers or credentials.
+      results.forEach((result, index) => {
+        if (result.status !== 'rejected') return;
+        const cause = result.reason;
+        const diagnostic: MarketRoutingDiagnostic = Object.freeze({ protocol: index === 0 ? 'V3' : 'V4', stage: cause instanceof ProviderError ? cause.stage : 'fetch',
+          ...(cause instanceof ProviderError && cause.status !== undefined ? { status: cause.status } : {}) });
+        try { warn(diagnostic); } catch { /* Diagnostics must not change routing behavior. */ }
+      });
       const successful = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
       if (!successful.length) { send(503, { error: 'Could not discover a route. Try again shortly.' }); return; }
       send(200, { routes: successful.filter(route => route.length > 0) });
