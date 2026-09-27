@@ -16,9 +16,9 @@ Created by **XIBOT** for the [Rare Friends Vibeathon](https://github.com/spokesz
 | --- | --- | --- |
 | **Your Friend** | Three Genesis and three Generations samples | Your owned Genesis or Generations NFT |
 | **Getting started** | Open the app; no wallet needed | Connect a browser wallet on Robinhood Chain |
-| **Care progress** | Saved on this device, separately for each sample | Onchain care is coming after Vibeathon testing |
+| **Care progress** | Saved on this device, separately for each sample | Onchain Pet, Feed and Poop, with permanent care history |
 | **Wallet features** | Explore the interface | Manage eligible Friends' wallets and launch tokens |
-| **Transactions** | None | Wallet sends, launches and fee claims require confirmation and gas |
+| **Transactions** | None | Care actions, wallet sends, launches and fee claims require confirmation and gas |
 
 **Preview** is the Vibeathon care demo. Choose a Friend, try the actions, change islands, and play Rare Rush. Care points and game rewards are simulated. Reset Preview clears only the selected sample's care.
 
@@ -26,13 +26,13 @@ Created by **XIBOT** for the [Rare Friends Vibeathon](https://github.com/spokesz
 
 ## A little care. Every day.
 
-Each action has its own countdown. In Preview, keeping a routine grows your Friend's RarePet traits:
+Each action has its own countdown. Pet, Feed and Poop record care on Robinhood Chain in My Wallet, or on this device in Preview. These are the starting rules:
 
 | Action | When | What grows |
 | --- | --- | --- |
 | **Pet** | Once every 24 hours | +1 Kinship and the care streak |
 | **Feed** | Once every 4 hours | +1 Strength and +5 Stamina |
-| **Play** | 3 rewarded completed runs per rolling 24 hours | +10 Experience per completion |
+| **Play — Preview only** | 3 rewarded completed runs per rolling 24 hours | +10 preview Experience per completion |
 | **Poop** | Once every 4 hours | +1 Health |
 | **Keep the streak** | Every 7 consecutive care cycles | +1 RarePet Rarity |
 
@@ -87,13 +87,15 @@ The launch preset assigns the full supply of **1 billion tokens to liquidity**, 
 
 These are the initial shares of collected trading fees. Fees accrue when swaps happen; they are not guaranteed earnings. Launches and fee claims are live on Robinhood Chain and require wallet confirmation. The [deployed router and verification record](contracts/rare-launchpad/README.md) document the configuration and checks; the contracts have not been audited.
 
-## What comes next
+## Permanent care. Room to grow.
 
-**Fully onchain care traits are planned after the Vibeathon test stage.** The new care contract has configurable points, cooldowns and daily limits, with a 24-hour delay for rule changes. Lifetime points, action counts and per-action receipts stay permanently attached to each Friend. It is built for review and not deployed. Live Experience also needs the verified game-completion service. Pet remains locked at one action per 24 hours, and Launch at +1 Brain per 24 hours.
+**Pet, Feed and Poop now have a deployed onchain care ledger.** [RarePetCare](contracts/rare-pet/README.md) preserves lifetime earned points, action counts, best streak and per-action receipts for each Friend, even when ownership changes. Current Kinship, streak and streak-based Rarity can still fall when care is missed; lifetime achievements remain recorded.
 
-After the mainnet care rollout comes the planned **rarity farming season**: the rarer your Friend becomes through daily care, the bigger their prize rewards. The season, eligibility and prize distribution are still to come. Preview points have no onchain value, and a progress carryover is not promised.
+Future rewards and Feed/Play/Poop cooldowns and limits can be adjusted through a public **24-hour rule-change delay**. Past records cannot be edited or reset. Pet stays locked at one action per 24 hours, and Launch at +1 Brain per 24 hours. Live Experience remains disabled until the verified game-completion service and client claim flow are connected.
 
-Rare Wallet and the separate launch router are already live; their availability is independent of the care rollout.
+Next comes the planned **rarity farming season**: the rarer your Friend becomes through daily care, the bigger their prize rewards. The season, eligibility and prize distribution are still to come. Preview points have no onchain value, and a progress carryover is not promised.
+
+Rare Wallet and the separate launch router remain independent of care. Care deployment and runtime checks are recorded in the [deployment manifest](contracts/rare-pet/deployments/4663.json); source verification and automated tests are not an independent security audit.
 
 ## Run locally
 
@@ -125,7 +127,7 @@ RarePet uses **TypeScript, React, SVG rendering, FriendSDK and viem**. Solidity 
 | --- | --- |
 | [`games/rare-pet/`](games/rare-pet/) | Habitat, care model, sharing, Rare Wallet, launchpad and guide |
 | [`games/rare-rush/`](games/rare-rush/) | Embedded game engine, canonical artwork, bodies and fonts |
-| [`contracts/rare-pet/`](contracts/rare-pet/) | Care ledger and completion-signature rules; awaiting deployment |
+| [`contracts/rare-pet/`](contracts/rare-pet/) | Deployed care ledger, permanent history and future completion-signature rules |
 | [`contracts/rare-launchpad/`](contracts/rare-launchpad/) | Deployed launch router, tests and verification records |
 | [`api/`](api/) | Launch-image publication and quote pricing |
 | [`tests/`](tests/) | Care, gameplay, identity, launch and wallet checks |
@@ -138,7 +140,8 @@ This is the standalone RarePet repository. The retained Rare Rush code supplies 
 
 - [RarePet care guide](https://rarepet.app/docs/) — modes, actions, traits, timers and streaks.
 - [Developer guide](docs/DEVELOPMENT.md) — setup, configuration, checks and implementation details.
-- [Care contract](contracts/rare-pet/README.md) — future onchain care and the XP trust model.
+- [Care contract](contracts/rare-pet/README.md) — onchain care, permanent records and the XP trust model.
+- [Care deployment](contracts/rare-pet/deployments/4663.json) — Robinhood care contract, authority and initial rules.
 - [Launch router](contracts/rare-launchpad/README.md) — launch policy, fee split and verification limits.
 - [Launch deployment](contracts/rare-launchpad/deployments/4663-0xc6a4b2d4d369747b26e4ff805a79a57da2505dc3.json) — current Robinhood contract and configuration.
 - [Genesis bodies](games/rare-rush/genesis/BODIES.md) — canonical body artwork and provenance.

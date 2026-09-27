@@ -55,7 +55,7 @@ export function verifyCareReceipt(receipt: TransactionReceipt, hash: Hex, contra
 }
 
 export async function readCare(pet: PetIdentity, blockNumber?: bigint): Promise<CareState> {
-  if (!careContract) throw new Error('Onchain care is not deployed yet. You can explore the preview.');
+  if (!careContract) throw new Error('Onchain care is not configured in this build. You can explore the preview.');
   const block = await client.getBlock(blockNumber === undefined ? { blockTag: 'latest' } : { blockNumber });
   if (!block.hash || block.number === null) throw new Error('The care snapshot block is not confirmed.');
   const fixed = { address: careContract, abi: careAbi, blockNumber: block.number } as const;
@@ -107,7 +107,7 @@ export async function readCare(pet: PetIdentity, blockNumber?: bigint): Promise<
   };
 }
 export async function writeCare(session: FriendWalletSession, pet: PetIdentity, action: OnchainCareAction, revision: number, onHash: (hash: string) => void, assertActive: () => void = () => {}, expectedRuleVersion?: number) {
-  if (!careContract) throw new Error('Onchain care is not deployed yet.');
+  if (!careContract) throw new Error('Onchain care is not configured in this build.');
   const assertSession = () => {
     assertActive();
     const state = session.getSnapshot();

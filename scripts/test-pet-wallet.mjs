@@ -112,7 +112,7 @@ async function chooseGenesis(page, state) {
   assert(state.ownerReads > priorReads, 'Selection rechecks current Genesis ownership');
   assert.equal(await page.locator('.pet-portrait image[data-genesis-art]').getAttribute('href'), portrait, 'Dashboard body keeps the original canonical Genesis portrait');
   assert.equal(await page.locator('.pet-portrait [data-genesis-body]').count(), 1, 'Verified Genesis has an approved runner body');
-  assert.equal(await page.locator('.mode-tag').innerText(), 'CARE COMING ONCHAIN');
+  assert.equal(await page.locator('.mode-tag').innerText(), 'CARE NOT CONFIGURED');
   for (const name of ['Pet,', 'Feed,', 'Poop,']) {
     assert.equal(await page.getByRole('button', { name: new RegExp(`^${name}`) }).isDisabled(), true, 'Undeployed care never enables a transaction');
   }

@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "status": "DEPLOYED \u2014 receipt, runtime, authority and initial rules verified",
+  "chainId": 4663,
+  "address": "0x0082229d9592292E2542cb29a6b94d9a2F22d124",
+  "transactionHash": "0x7d2eb582a54416b32cdfcac287b2b439f18b83ac7759e728f4329f232e65827b",
+  "deployer": "0xCa88efc94b567A5185FEA63599aD895c3e514FBc",
+  "verifiedAt": "2026-09-27T00:04:13.093Z",
+  "checkedBlock": "73497474",
+  "checkedBlockHash": "0x7d27dec23c810e14dadc6f7991c0a9c2b8ccb76ae9d80761c334efe04346145c",
+  "receipt": {
+    "blockNumber": "73495965",
+    "blockHash": "0x6c84a260069e79001ea9d94b17ab2765891ff7727272a4aa1cd6c2553477706f",
+    "gasUsed": "3192874"
+  },
+  "sourceHash": "0x1106323a797999cd818beaefccaf778fca3ee27c934d91bcfdc100cf4268a4b4",
+  "runtimeCodeHash": "0xb011ebf1d1e59052a7d3ef94b91f17e94ce2a2cd0589108f0f61432305e63363",
+  "source": "src/RarePetCare.sol",
+  "compiler": {
+    "version": "0.8.30+commit.73712a01"
+  },
+  "admin": "0xCa88efc94b567A5185FEA63599aD895c3e514FBc",
+  "ruleDelaySeconds": "86400",
+  "currentRuleVersion": "1",
+  "rules": {
+    "actions": [
+      {
+        "points": 1,
+        "secondaryPoints": 0,
+        "cooldown": 86400,
+        "dailyLimit": 1,
+        "enabled": true
+      },
+      {
+        "points": 1,
+        "secondaryPoints": 5,
+        "cooldown": 14400,
+        "dailyLimit": 6,
+        "enabled": true
+      },
+      {
+        "points": 10,
+        "secondaryPoints": 0,
+        "cooldown": 0,
+        "dailyLimit": 3,
+        "enabled": true
+      },
+      {
+        "points": 1,
+        "secondaryPoints": 0,
+        "cooldown": 14400,
+        "dailyLimit": 6,
+        "enabled": true
+      }
+    ],
+    "petGrace": 86400,
+    "decayInterval": 86400,
+    "decayPoints": 1,
+    "rarityEvery": 7,
+    "rarityPoints": 1,
+    "playSigner": "0x0000000000000000000000000000000000000000"
+  },
+  "sourceVerification": {
+    "status": "verified",
+    "explorer": "https://robinhoodchain.blockscout.com/address/0x0082229d9592292E2542cb29a6b94d9a2F22d124?tab=contract",
+    "match": "exact",
+    "verifiedAt": "2026-09-27T00:10:20Z",
+    "method": "Solidity (Standard JSON input)",
+    "compiler": "v0.8.30+commit.73712a01",
+    "license": "MIT"
+  },
+  "scope": "Read-only source/configuration checks, not a security audit. No care or rule-change transaction sent.",
+  "activationChecks": {
+    "chainId": 4663,
+    "checkedBlock": "73498682",
+    "collections": [
+      "Genesis #2",
+      "Generations #68356"
+    ],
+    "ownerCareSimulations": 6,
+    "unauthorizedCareRejections": 6,
+    "staleRuleRejections": 6,
+    "playDisabledChecks": 2,
+    "method": "Read-only RPC using the app care reader and transaction simulations; no transactions submitted."
+  },
+  "appConfiguration": {
+    "project": "xibot/rarepet",
+    "environments": [
+      "production",
+      "preview"
+    ],
+    "variable": "RAREPET_CONTRACT_ADDRESS",
+    "value": "0x0082229d9592292E2542cb29a6b94d9a2F22d124",
+    "playXp": "disabled \u2014 completion service and client claim integration pending"
+  },
+  "validation": {
+    "appTests": {
+      "passed": 332,
+      "failed": 0
+    },
+    "typecheck": "passed",
+    "serverTypecheck": "passed",
+    "configuredBuild": "passed",
+    "contractSuitePreviouslyPassed": 64
+  }
+}
