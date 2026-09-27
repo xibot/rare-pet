@@ -42,7 +42,7 @@ export function filterMarketAssets(assets: readonly MarketAsset[], input: { quer
 }
 
 /** Launches retain their verified actual pair. Ecosystem routing starts against
- * WETH, except WETH itself uses USDG. A route still needs liquidity in the external app.
+ * WETH, except WETH itself uses USDG. A route still needs verified onchain liquidity before trading.
  */
 export function marketAssetQuote(asset: MarketAsset): LaunchQuoteAsset {
   if (!isAddress(asset.address) || same(asset.address, zeroAddress)) throw new Error('Choose a valid market asset.');

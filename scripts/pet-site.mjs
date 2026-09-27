@@ -30,8 +30,8 @@ export function createPetServer(outdir) {
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (url.pathname === '/api/launch-quotes' || url.pathname === '/api/launch-image') {
-        const endpoint = url.pathname === '/api/launch-quotes' ? '../api/launch-quotes.ts' : '../api/launch-image.ts';
+      if (url.pathname === '/api/launch-quotes' || url.pathname === '/api/launch-image' || url.pathname === '/api/market-routing') {
+        const endpoint = url.pathname === '/api/market-routing' ? '../api/market-routing.ts' : url.pathname === '/api/launch-quotes' ? '../api/launch-quotes.ts' : '../api/launch-image.ts';
         const handler = (await import(endpoint)).default;
         await handler(req, res); return;
       }

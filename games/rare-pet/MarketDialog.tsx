@@ -2,8 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type
 import { formatUnits, type Address, type Hex } from 'viem';
 import { PET_DEPLOYMENT, type PetWalletSession } from './wallet';
 import { readRareMarketPage, type RareMarketCursor, type RareMarketToken } from './market-catalog';
-import { buildMarketAssets, filterMarketAssets, marketAssetSwapUrl, type MarketAsset } from './market-assets';
-import { readMarketBalances, readMarketSwapQuote, sendMarketApproval, sendMarketSwap, getMarketTransaction, subscribeMarketTransactions, refreshMarketTransaction, type MarketSwapQuote } from './market-swap';
+import { buildMarketAssets, filterMarketAssets, marketAssetQuote, type MarketAsset } from './market-assets';
+import { readMarketBalances, readMarketSwapQuote, sendMarketApproval, sendMarketSwap, getMarketTransaction, subscribeMarketTransactions, refreshMarketTransaction, marketActorWallet, marketActorOwner, type MarketActor, type MarketSwapQuote } from './market-swap';
 import './market.css';
 
 type Side = 'buy' | 'sell';
@@ -24,10 +24,13 @@ function TokenImage({ token }: { token: Pick<MarketAsset, 'imageUrl' | 'symbol'>
     : <span aria-hidden="true">{token.symbol.slice(0, 2).toUpperCase()}</span>}</span>;
 }
 
-export function MarketDialog({ session, close }: { session: PetWalletSession; close: () => void }) {
+export function MarketDialog({ session, actor, close }: { session: PetWalletSession; actor?: MarketActor; close: () => void }) {
   const wallet = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const account = wallet.status === 'connected' && wallet.account ? wallet.account as Address : null;
-  const transaction = useSyncExternalStore(subscribeMarketTransactions, () => getMarketTransaction(account));
+  const sourceAccount = actor ? marketActorWallet(actor) : account;
+  const friendMode = actor?.kind === 'friend';
+  const actorReady = !!account && (!actor || marketActorOwner(actor).toLowerCase() === account.toLowerCase());
+  const transaction = useSyncExternalStore(subscribeMarketTransactions, () => getMarketTransaction(sourceAccount));
   const unresolved = transaction && ['awaiting-wallet', 'pending', 'unverified'].includes(transaction.status) ? transaction : null;
   const dialog = useRef<HTMLDialogElement>(null), alive = useRef(true), writeLock = useRef(false), work = useRef(0);
   const catalogueAbort = useRef<AbortController | null>(null), catalogueWork = useRef(0), catalogueLock = useRef(false);
@@ -38,7 +41,8 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
   const [query, setQuery] = useState(''), [category, setCategory] = useState<'all' | 'crypto' | 'stocks' | 'launch'>('all');
   const [pickerOpen, setPickerOpen] = useState(false), [activeOption, setActiveOption] = useState(-1);
   const [selectedAsset, setSelectedAsset] = useState<MarketAsset | null>(null), [side, setSide] = useState<Side>('buy');
-  const selected = selectedAsset?.source === 'launch' ? selectedAsset.launch : null;
+  const selected = selectedAsset;
+  const pairedAsset = selected ? marketAssetQuote(selected) : null;
   const [amount, setAmount] = useState(''), [slippage, setSlippage] = useState('0.5');
   const [quote, setQuote] = useState<MarketSwapQuote | null>(null), [busy, setBusy] = useState('');
   const [error, setError] = useState(''), [status, setStatus] = useState(''), [lastHash, setLastHash] = useState<Hex | null>(null);
@@ -73,29 +77,29 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
   useEffect(() => {
     work.current++; setQuote(null); setError('');
     if (!writeLock.current) { setBusy(''); setStatus(''); }
-  }, [wallet.revision, wallet.status, wallet.account]);
+  }, [wallet.revision, wallet.status, wallet.account, sourceAccount]);
   useEffect(() => {
     setBalances(null); setBalanceError(''); setBalanceLoading(false);
-    if (!selected || !account) return;
+    if (!selected || !sourceAccount) return;
     let active = true; setBalanceLoading(true);
-    void readMarketBalances(selected, account).then(value => { if (active) setBalances(value); })
+    void readMarketBalances(selected, sourceAccount, undefined, actor).then(value => { if (active) setBalances(value); })
       .catch(cause => { if (active) setBalanceError(problem(cause)); }).finally(() => { if (active) setBalanceLoading(false); });
     return () => { active = false; };
-  }, [selected, account, wallet.revision, balanceRefresh]);
+  }, [selected, sourceAccount, actor, wallet.revision, balanceRefresh]);
 
   const assets = useMemo(() => buildMarketAssets(tokens), [tokens]);
   const visible = useMemo(() => filterMarketAssets(assets, { query, category }), [assets, category, query]);
   const options = useMemo(() => filterMarketAssets(assets, { query }), [assets, query]);
   const frozen = !!busy || !!unresolved;
-  const inputSymbol = selected ? side === 'buy' ? selected.quote.symbol : selected.symbol : '';
-  const outputSymbol = selected ? side === 'buy' ? selected.symbol : selected.quote.symbol : '';
-  const inputDecimals = selected ? side === 'buy' ? selected.quote.decimals : selected.decimals : 18;
-  const inputBalance = quote && quote.account?.toLowerCase() === account?.toLowerCase() && quote.balance !== null ? quote.balance : balances ? side === 'buy' ? balances.quote : balances.asset : null;
+  const inputSymbol = selected ? side === 'buy' ? pairedAsset!.symbol : selected.symbol : '';
+  const outputSymbol = selected ? side === 'buy' ? selected.symbol : pairedAsset!.symbol : '';
+  const inputDecimals = selected ? side === 'buy' ? pairedAsset!.decimals : selected.decimals : 18;
+  const inputBalance = quote && quote.account?.toLowerCase() === sourceAccount?.toLowerCase() && quote.balance !== null ? quote.balance : balances ? side === 'buy' ? balances.quote : balances.asset : null;
   const outputBalance = balances ? side === 'buy' ? balances.asset : balances.quote : null;
-  const outputDecimals = selected ? side === 'buy' ? selected.decimals : selected.quote.decimals : 18;
+  const outputDecimals = selected ? side === 'buy' ? selected.decimals : pairedAsset!.decimals : 18;
   const expired = !!quote && quote.expiresAt <= now;
   const enough = !!quote && quote.balance !== null && quote.balance >= quote.amountIn;
-  const quoteOwned = !!quote && !!account && quote.account?.toLowerCase() === account.toLowerCase();
+  const quoteOwned = !!quote && actorReady && !!sourceAccount && quote.account?.toLowerCase() === sourceAccount.toLowerCase();
 
   function invalidateQuote() { work.current++; setQuote(null); setError(''); setStatus(''); setLastHash(null); }
   function selectToken(token: MarketAsset) {
@@ -124,11 +128,11 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
     event?.preventDefault();
     if (!selected || writeLock.current || unresolved || busy) return;
     const task = ++work.current;
-    setBusy('quote'); setError(''); setStatus('Checking this pool and your exact input…'); setQuote(null);
+    setBusy('quote'); setError(''); setStatus('Finding and checking a route for your exact input…'); setQuote(null);
     try {
-      const next = await readMarketSwapQuote({ market: selected, side, amount, slippageBps: slippageBps(), ...(account ? { account } : {}) });
+      const next = await readMarketSwapQuote({ market: selected, side, amount, slippageBps: slippageBps(), ...(sourceAccount ? { account: sourceAccount } : {}), ...(actor ? { actor } : {}) });
       if (!alive.current || task !== work.current) return;
-      setQuote(next); setStatus('Quote ready. Review what you pay and the minimum you receive.');
+      setNow(Date.now()); setQuote(next); setStatus('Quote ready. Review what you pay and the minimum you receive.');
     } catch (cause) { if (alive.current && task === work.current) { setError(problem(cause)); setStatus(''); } }
     finally { if (alive.current && task === work.current) setBusy(''); }
   }
@@ -147,19 +151,19 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
     };
     try {
       assertActive();
-      const options = { session, account: owner, revision, quote: reviewed, onHash, assertActive };
+      const options = { session, account: owner, revision, quote: reviewed, onHash, assertActive, ...(actor ? { actor } : {}) };
       const result = kind === 'approval' ? await sendMarketApproval(options) : await sendMarketSwap(options);
       if (!alive.current || task !== work.current) return;
       setLastHash(result.transactionHash); setQuote(null); setBalanceRefresh(value => value + 1);
-      setStatus(kind === 'approval' ? 'Approval confirmed. Get a fresh quote to review the next step.' : `${side === 'buy' ? 'Buy' : 'Sell'} confirmed. Your tokens are in your connected wallet.`);
+      setStatus(kind === 'approval' ? 'Approval confirmed. Get a fresh quote to review the next step.' : `${side === 'buy' ? 'Buy' : 'Sell'} confirmed. Your tokens are in ${friendMode ? 'this Friend’s Rare Wallet' : 'your connected wallet'}.`);
     } catch (cause) {
       const text = problem(cause);
       if (alive.current) { setError(text); setStatus(''); }
     } finally { writeLock.current = false; if (alive.current) setBusy(''); }
   }
   async function recheckTransaction() {
-    if (!account || busy || writeLock.current) return;
-    const owner = account; setBusy('recheck'); setError('');
+    if (!sourceAccount || busy || writeLock.current) return;
+    const owner = sourceAccount; setBusy('recheck'); setError('');
     try {
       const checked = await refreshMarketTransaction(owner);
       if (!alive.current) return;
@@ -180,7 +184,8 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
     <header className="dialog-heading"><h2 id={titleId}>BUY / SELL</h2><button type="button" aria-label="Close Buy / Sell" disabled={busy === 'approval' || busy === 'swap'} onClick={requestClose}>×</button></header>
     <div className="market-content">
       <div className="market-intro"><div><span className="market-eyebrow">THE RAREPET MARKET</span><h3>Meet your next rare find.</h3><p>Explore crypto, stocks, ETFs and tokens launched through RarePet.</p></div><span className="market-network">ROBINHOOD</span></div>
-      <div className="market-wallet"><div><b>YOUR TRADING WALLET</b><span>Buys and sells use your connected owner wallet.</span></div>{account ? <button className="market-address" type="button" onClick={() => void copyAddress(account)} aria-label="Copy your trading wallet address">{shortAddress(account)} {copied === account ? '✓' : '⧉'}</button> : <button className="market-connect" type="button" onClick={() => void connect()} disabled={wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET ↗'}</button>}</div>
+      <div className="market-wallet"><div><b>{friendMode ? "RARE FRIEND TRADING WALLET" : "YOUR TRADING WALLET"}</b><span>{friendMode ? "Trades use this Friend’s assets. You sign and pay gas." : "Buy and sell here with your connected wallet."}</span></div>{sourceAccount ? <button className="market-address" type="button" onClick={() => void copyAddress(sourceAccount)} aria-label="Copy your trading wallet address">{shortAddress(sourceAccount)} {copied === sourceAccount ? '✓' : '⧉'}</button> : <button className="market-connect" type="button" onClick={() => void connect()} disabled={wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET ↗'}</button>}</div>
+      {friendMode && !actorReady && <p className="market-error" role="alert">Connect the current owner of this Rare Friend to trade from its wallet.</p>}
       {wallet.error && <p className="market-error" role="alert">{wallet.error}</p>}
       {unresolved && <div className="market-pending" role="status"><b>{unresolved.kind === 'swap' ? 'SWAP' : 'APPROVAL'} {unresolved.status === 'awaiting-wallet' ? 'AWAITING YOUR WALLET' : 'AWAITING VERIFICATION'}</b><p>{unresolved.error || (unresolved.status === 'awaiting-wallet' ? 'Review the request in your connected wallet.' : 'Your transaction was submitted. Its result must be verified before another trade.')}</p>{unresolved.hash && <a href={`${PET_DEPLOYMENT.explorer}/tx/${unresolved.hash}`} target="_blank" rel="noreferrer">VIEW TRANSACTION ↗</a>}{unresolved.status !== 'awaiting-wallet' && <button type="button" disabled={!!busy} onClick={() => void recheckTransaction()}>{busy === 'recheck' ? 'CHECKING…' : 'CHECK TRANSACTION STATUS'}</button>}</div>}
       {!unresolved && transaction?.status === 'confirmed' && !selected && <p className="market-status" role="status">Your last {transaction.kind === 'swap' ? 'swap' : 'approval'} is confirmed.{transaction.hash && <> <a href={`${PET_DEPLOYMENT.explorer}/tx/${transaction.hash}`} target="_blank" rel="noreferrer">VIEW TRANSACTION ↗</a></>}</p>}
@@ -208,22 +213,14 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
           {!!visible.length && <div className="market-token-grid" role="region" aria-label="Tokens" tabIndex={0}>{visible.map(asset => <article className={`market-token-card${selectedAsset?.address.toLowerCase() === asset.address.toLowerCase() ? ' is-selected' : ''}`} key={asset.address}>
             <button className="market-select-token" type="button" disabled={frozen} aria-pressed={selectedAsset?.address.toLowerCase() === asset.address.toLowerCase()} aria-label={`Select ${asset.name}, ${asset.symbol}`} title={`${asset.name} · ${asset.address}`} onClick={() => selectToken(asset)}><TokenImage token={asset}/><span className="market-card-title"><b>{asset.symbol}</b><span>{asset.name}</span></span><span className="market-card-category">{categoryLabel(asset)}</span><span className="market-card-arrow" aria-hidden="true">↗</span></button>
           </article>)}</div>}
-          <p className="market-catalog-note">Crypto, stocks and ETFs trade on Uniswap when a route is available. RarePet launches use their verified pools here.</p>
+          <p className="market-catalog-note">Trade here using available Uniswap liquidity. A listed token needs an available route before you can swap.</p>
           {!complete && !loading && <button className="market-load-more" type="button" disabled={frozen} onClick={() => void loadCatalogue(false)}>LOAD EARLIER LAUNCHES <span>↓</span></button>}
           {loading && <p className="market-loading" role="status">Checking RarePet launch history…</p>}
           {scanned && <p className="market-scan-note">{complete ? 'RarePet launch history loaded' : 'Catalog includes loaded launches; load earlier history for more.'}<span>Blocks {scanned.from.toLocaleString()}–{scanned.to.toLocaleString()}</span></p>}
         </section>
-        {selectedAsset?.source === 'ecosystem' && <section ref={tradePanel} className="market-trade market-ecosystem-trade" aria-label={`Trade ${selectedAsset.symbol}`}>
-          <div className="market-trade-heading"><TokenImage token={selectedAsset}/><div><h4>{selectedAsset.name}</h4><span>{selectedAsset.symbol} · {categoryLabel(selectedAsset)}</span></div><button type="button" aria-label="Close token trade" disabled={frozen} onClick={closeToken}>×</button></div>
-          <div className="market-token-address"><span>TOKEN CONTRACT · ROBINHOOD CHAIN</span><code>{selectedAsset.address}</code><button type="button" onClick={() => void copyAddress(selectedAsset.address)}>{copied === selectedAsset.address ? 'COPIED ✓' : 'COPY ⧉'}</button><a href={explorer(selectedAsset.address)} target="_blank" rel="noreferrer">EXPLORER ↗</a></div>
-          <p>Buy or sell {selectedAsset.symbol} on Uniswap with your wallet. The token and Robinhood network are preselected.</p>
-          <div className="market-ecosystem-actions"><a className="market-primary" href={marketAssetSwapUrl(selectedAsset, 'buy')} target="_blank" rel="noreferrer">BUY {selectedAsset.symbol} <span>↗</span></a><a className="market-secondary" href={marketAssetSwapUrl(selectedAsset, 'sell')} target="_blank" rel="noreferrer">SELL {selectedAsset.symbol} <span>↗</span></a></div>
-          <p className="market-trade-note">Opens Uniswap. Review its available route, liquidity, price and fees before confirming there. Inclusion in this catalog does not guarantee liquidity. You can change the payment token on Uniswap.</p>
-          {copied === selectedAsset.address && <p className="market-status" role="status">Contract address copied.</p>}
-        </section>}
         {selected && <section ref={tradePanel} className="market-trade" aria-label={`Trade ${selected.symbol}`}>
-          <div className="market-trade-heading"><TokenImage token={selected}/><div><h4>{selected.name}</h4><span>${selected.symbol} / {selected.quote.symbol}</span></div><button type="button" aria-label="Close token trade" disabled={frozen} onClick={closeToken}>×</button></div>
-          <div className="market-token-address"><span>TOKEN CONTRACT</span><code>{selected.asset}</code><button type="button" onClick={() => void copyAddress(selected.asset)}>{copied === selected.asset ? 'COPIED ✓' : 'COPY ⧉'}</button><a href={explorer(selected.asset)} target="_blank" rel="noreferrer">EXPLORER ↗</a></div>
+          <div className="market-trade-heading"><TokenImage token={selected}/><div><h4>{selected.name}</h4><span>${selected.symbol} / {pairedAsset!.symbol}</span></div><button type="button" aria-label="Close token trade" disabled={frozen} onClick={closeToken}>×</button></div>
+          <div className="market-token-address"><span>TOKEN CONTRACT</span><code>{selected.address}</code><button type="button" onClick={() => void copyAddress(selected.address)}>{copied === selected.address ? 'COPIED ✓' : 'COPY ⧉'}</button><a href={explorer(selected.address)} target="_blank" rel="noreferrer">EXPLORER ↗</a></div>
           <div className="market-side" role="group" aria-label="Trade direction"><button type="button" aria-pressed={side === 'buy'} disabled={frozen} onClick={() => switchSide('buy')}>BUY {selected.symbol}</button><button type="button" aria-pressed={side === 'sell'} disabled={frozen} onClick={() => switchSide('sell')}>SELL {selected.symbol}</button></div>
           <form className="market-trade-form" onSubmit={event => void quoteTrade(event)}>
             <label htmlFor={amountId}>YOU PAY <span>{inputSymbol}</span></label><div className="market-amount"><input id={amountId} value={amount} onChange={event => { invalidateQuote(); setAmount(event.target.value); }} inputMode="decimal" maxLength={100} placeholder="0.00" autoComplete="off" spellCheck={false} disabled={frozen} aria-describedby={`${amountId}-balance`}/><b>{inputSymbol}</b></div>
@@ -232,16 +229,15 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
             {account && outputBalance !== null && <p className="market-output-balance" title={formatUnits(outputBalance, outputDecimals)}>You hold {amountText(outputBalance, outputDecimals)} {outputSymbol}</p>}
             <div className="market-slippage"><label htmlFor={slippageId}>SLIPPAGE LIMIT</label><span><input id={slippageId} value={slippage} onChange={event => { invalidateQuote(); setSlippage(event.target.value); }} inputMode="decimal" maxLength={5} autoComplete="off" disabled={frozen} aria-label="Slippage limit percentage"/>%</span></div>
             <div className="market-slippage-presets">{['0.5', '1', '2'].map(value => <button type="button" key={value} aria-pressed={slippage === value} disabled={frozen} onClick={() => { invalidateQuote(); setSlippage(value); }}>{value}%</button>)}</div>
-            {quote && <dl className="market-quote-review"><div><dt>EXACT INPUT</dt><dd>{formatUnits(quote.amountIn, quote.tokenIn.decimals)} {quote.tokenIn.symbol}</dd></div><div><dt>MINIMUM RECEIVED</dt><dd>{formatUnits(quote.minimumAmountOut, quote.tokenOut.decimals)} {quote.tokenOut.symbol}</dd></div><div><dt>POOL TRADING FEE</dt><dd>{selected.fee / 10_000}%</dd></div><div><dt>QUOTE</dt><dd>{expired ? 'EXPIRED · REFRESH' : `${Math.max(0, Math.ceil((quote.expiresAt - now) / 1000))}s REMAINING`}</dd></div></dl>}
-            {quoteOwned && !enough && <p className="market-error" role="alert">Your connected wallet has insufficient {inputSymbol} for this amount.</p>}
+            {quote && <dl className="market-quote-review"><div><dt>EXACT INPUT</dt><dd>{formatUnits(quote.amountIn, quote.tokenIn.decimals)} {quote.tokenIn.symbol}</dd></div><div><dt>MINIMUM RECEIVED</dt><dd>{formatUnits(quote.minimumAmountOut, quote.tokenOut.decimals)} {quote.tokenOut.symbol}</dd></div><div><dt>{quote.route ? 'ROUTE' : 'POOL TRADING FEE'}</dt><dd>{quote.route ? `Uniswap V${quote.route.version} · ${quote.route.legs.length} pool${quote.route.legs.length === 1 ? '' : 's'}` : selected.source === 'launch' ? `${selected.launch.fee / 10_000}%` : '—'}</dd></div>{quote.route && <div><dt>POOL FEES</dt><dd>{quote.route.legs.map(leg => leg.fee === 8388608 ? 'Dynamic' : `${leg.fee / 10_000}%`).join(' → ')}</dd></div>}{sourceAccount && <div><dt>RECEIVING WALLET</dt><dd title={sourceAccount}>{friendMode ? 'RF · ' : ''}{shortAddress(sourceAccount)}</dd></div>}<div><dt>QUOTE</dt><dd>{expired ? 'EXPIRED · REFRESH' : `${Math.max(0, Math.ceil((quote.expiresAt - now) / 1000))}s REMAINING`}</dd></div></dl>}
+            {quoteOwned && !enough && <p className="market-error" role="alert">{friendMode ? "This Friend’s Rare Wallet" : "Your connected wallet"} has insufficient {inputSymbol} for this amount.</p>}
             <button className={quote && !expired ? 'market-secondary market-quote-button' : 'market-primary'} type="submit" disabled={frozen || !amount.trim()}>{busy === 'quote' ? 'GETTING QUOTE…' : quote ? 'REFRESH QUOTE ↻' : 'GET QUOTE ↗'}</button>
           </form>
           {quote && !expired && <div className="market-trade-actions">{!account ? <button className="market-primary" type="button" disabled={wallet.status === 'connecting' || wallet.status === 'switching-network'} onClick={() => void connect()}>{wallet.status === 'wrong-network' ? 'SWITCH NETWORK TO TRADE' : 'CONNECT WALLET TO TRADE'}</button> : <>
-            <ol className="market-steps" aria-label="Trade steps"><li className={quote.approval ? 'is-current' : 'is-complete'}><span>01</span><div><b>AUTHORIZE {inputSymbol}</b><small>{quote.approval === 'token' ? 'Approve this amount. Trading authorization may follow.' : quote.approval === 'router' ? 'Enable this amount for the trading router.' : 'Allowance ready for this trade.'}</small></div></li><li className={!quote.approval ? 'is-current' : ''}><span>02</span><div><b>CONFIRM {side.toUpperCase()}</b><small>Your wallet confirms the swap separately.</small></div></li></ol>
+            <ol className="market-steps" aria-label="Trade steps"><li className={quote.approval ? 'is-current' : 'is-complete'}><span>01</span><div><b>AUTHORIZE {inputSymbol}</b><small>{quote.approval === 'token' ? 'Approve this amount. Trading authorization may follow.' : quote.approval === 'router' ? 'Enable this amount for the trading router.' : 'Allowance ready for this trade.'}</small></div></li><li className={!quote.approval ? 'is-current' : ''}><span>02</span><div><b>CONFIRM {side.toUpperCase()}</b><small>{friendMode ? "You sign; this Friend’s wallet makes the swap." : "Your wallet confirms the swap separately."}</small></div></li></ol>
             {quote.approval ? <button className="market-primary" type="button" disabled={frozen || !quoteOwned || !enough} onClick={() => void send('approval')}>{busy === 'approval' ? 'CONFIRMING APPROVAL…' : quote.approval === 'token' ? `APPROVE ${inputSymbol}` : `ENABLE ${inputSymbol} TRADING`} <span>↗</span></button> : <button className="market-primary" type="button" disabled={frozen || !quoteOwned || !enough} onClick={() => void send('swap')}>{busy === 'swap' ? 'CONFIRMING SWAP…' : `${side.toUpperCase()} ${selected.symbol}`} <span>↗</span></button>}
           </>}</div>}
-          <p className="market-trade-note">{selected.quote.kind === 'weth' ? 'This pool trades WETH. ' : ''}Keep ETH in your connected wallet for network fees.</p>
-          <a className="market-external-route" href={`https://app.uniswap.org/swap?chain=robinhood&inputCurrency=${side === 'buy' ? selected.quote.address : selected.asset}&outputCurrency=${side === 'buy' ? selected.asset : selected.quote.address}`} target="_blank" rel="noreferrer">OPEN THIS PAIR ON UNISWAP ↗ <small>External app · route availability may vary</small></a>
+          <p className="market-trade-note">{pairedAsset!.kind === 'weth' ? 'Pay with WETH when buying; receive WETH when selling. ' : ''}{friendMode ? 'Tokens stay in this Friend’s Rare Wallet. Keep ETH in your owner wallet for gas.' : 'Keep ETH in your connected wallet for gas.'}</p>
           {status && <p className="market-status" role="status">{status}</p>}{error && <p className="market-error" role="alert">{error}</p>}
           {lastHash && <a className="market-transaction" href={`${PET_DEPLOYMENT.explorer}/tx/${lastHash}`} target="_blank" rel="noreferrer">VIEW TRANSACTION ↗</a>}
         </section>}

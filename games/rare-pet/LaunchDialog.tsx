@@ -10,6 +10,7 @@ import { createRareLaunchSalt, prepareRareLaunch, readRareLaunchConfig, sendRare
 import { getRareLaunchTransaction, subscribeRareLaunchTransactions, setRareLaunchTransaction, refreshRareLaunchTransaction } from './launch-transactions';
 import { LaunchHistory } from './LaunchHistory';
 import { LaunchStockPicker } from './LaunchStockPicker';
+import { getMarketTransaction, subscribeMarketTransactions } from './market-swap';
 import './launch.css';
 
 const message = (cause: unknown) => cause instanceof Error ? cause.message : 'The launch could not be prepared. Please try again.';
@@ -39,6 +40,9 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
   const creator = mode === 'self' ? account : pet?.walletAddress ?? null;
   const transaction = useSyncExternalStore(subscribeRareLaunchTransactions, () => getRareLaunchTransaction(creator));
   const unresolved = !!transaction && ['awaiting-wallet', 'pending', 'unverified'].includes(transaction.status);
+  const marketRecord = useSyncExternalStore(subscribeMarketTransactions, () => getMarketTransaction(creator));
+  const marketBlocked = !!marketRecord && ['awaiting-wallet', 'pending', 'unverified'].includes(marketRecord.status);
+  const writesBlocked = unresolved || marketBlocked;
   const [rechecking, setRechecking] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null), alive = useRef(true), operation = useRef(0), lock = useRef(false);
   const abort = useRef(new AbortController()), imageRef = useRef<LaunchImage | null>(null), imageGeneration = useRef(0);
@@ -72,6 +76,8 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
     if (!alive.current || task !== operation.current) throw new Error('This launch review is no longer active.');
     const current = session.getSnapshot();
     if (current.revision !== revision || current.status !== 'connected' || current.account?.toLowerCase() !== (mode === 'self' ? account : pet?.owner)?.toLowerCase()) throw new Error('Your wallet changed. Open Launch again.');
+    const market = getMarketTransaction(creator);
+    if (market && ['awaiting-wallet', 'pending', 'unverified'].includes(market.status)) throw new Error('Finish this wallet’s pending trading transaction before launching.');
   }
   async function selectImage(file?: File) {
     if (!file || lock.current) return;
@@ -94,7 +100,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
     } catch (cause) { setError(message(cause)); }
   }
   async function prepare() {
-    if (!review || !creator || !launchpadContract || !enabled || lock.current || unresolved) return;
+    if (!review || !creator || !launchpadContract || !enabled || lock.current || writesBlocked) return;
     const task = ++operation.current; lock.current = true; setBusy(true); setError('');
     try {
       assertActive(task);
@@ -114,7 +120,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
     finally { lock.current = false; if (alive.current) setBusy(false); }
   }
   async function send() {
-    if (!prepared || !creator || lock.current || unresolved) return;
+    if (!prepared || !creator || lock.current || writesBlocked) return;
     const task = ++operation.current; lock.current = true; setBusy(true); setError(''); setStatus('Confirm the launch in your wallet.');
     let submitted: Hex | null = null; let requested = false, recorded = false;
     try {
@@ -156,18 +162,18 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
         {quote.kind === 'rarefriends' && <p className="launch-fine launch-pair-note">Uses a 30-minute RareFriends pool price and Chainlink ETH/USD. Recent onchain pool activity is required. Launch preparation stops if the price cannot be verified.</p>}</fieldset>
         <fieldset><legend>TRADING FEE</legend><div className="launch-options launch-fees">{([3000,10000,20000] as const).map(value => <button type="button" key={value} aria-pressed={fee === value} onClick={() => setFee(value)}><b>{value / 10000}%</b></button>)}</div><p className="launch-fine">Collected on swaps, in both pool tokens.</p></fieldset>
         <div className="launch-split"><span>FEES THAT GIVE BACK</span><b>{config ? `${percent(config.friendShares)} ${mode === 'friend' ? 'YOUR RF' : 'YOU'} · ${percent(config.treasuryShares)} PRIZES · 5% DOPPLER` : `85% ${mode === 'friend' ? 'YOUR RF' : 'YOU'} · 10% PRIZES · 5% DOPPLER`}</b><small>{config ? mode === 'friend' ? 'Creator fees belong to your Rare Friend’s wallet.' : 'Creator fees belong to your connected wallet.' : 'The creator keeps 85%. 10% funds RarePet prizes. Doppler receives 5%.'}</small></div>
-        <button className="launch-primary" disabled={imageBusy || unresolved} type="submit">REVIEW {preview || !enabled ? 'PREVIEW' : 'LAUNCH'} <span>↗</span></button>
+        <button className="launch-primary" disabled={imageBusy || writesBlocked} type="submit">REVIEW {preview || !enabled ? 'PREVIEW' : 'LAUNCH'} <span>↗</span></button>
         <p className="launch-fine launch-center">1 billion tokens · 100% to liquidity · no creator allocation</p>
       </form> : <div className="launch-review">
         {!asset && !unresolved && <button className="launch-back" disabled={busy} onClick={() => { setReview(null); setPrepared(null); setError(''); setStatus(''); }}>← EDIT TOKEN</button>}
         <div className="launch-token"><img src={review.image.previewUrl} alt={`${review.name} token artwork`}/><div><h4>{review.name}</h4><span>${review.symbol} / {quote.symbol}</span></div></div>
         <dl><div><dt>NETWORK / PAIR</dt><dd>Robinhood · {quote.symbol}<a href={explorer(quote.address)} target="_blank" rel="noreferrer">{quote.address} ↗</a></dd></div><div><dt>TRADING FEE</dt><dd>{review.fee / 10000}% of each swap</dd></div><div><dt>SUPPLY / LIQUIDITY</dt><dd>1,000,000,000 tokens · 100% in the pool</dd></div><div><dt>STARTING VALUE</dt><dd>{prepared ? `Approximately $${Math.round(prepared.review.approximateStartMarketCapUSD).toLocaleString()}` : 'Approximately $10,000'} fully diluted value<small>Fixed launch curve. Price changes as people trade.</small></dd></div><div><dt>CREATOR WALLET</dt><dd>{creator ?? (mode === 'friend' ? 'Choose a Friend you own to launch.' : 'Connect your wallet to launch.')}</dd></div><div><dt>FEE SPLIT</dt><dd>{config ? <>{percent(config.friendShares)} {mode === 'friend' ? 'RF' : 'creator'} · {percent(config.treasuryShares)} prize treasury · 5% Doppler<small>Treasury: {config.treasury}</small><small>Doppler: {config.protocol}</small></> : <>85% creator · 10% RarePet treasury · 5% Doppler<small>Treasury: {launchTreasury}</small></>}</dd></div>{prepared && <><div><dt>PRICE REFERENCE</dt><dd>{prepared.draft.quote.usdPrice} USD / {quote.symbol}<small>{prepared.draft.quote.source === 'chainlink' ? 'Chainlink observation' : prepared.draft.quote.source === 'rarefriends-pool' ? '30-minute RareFriends pool price × Chainlink ETH/USD' : 'Robinhood bid/ask midpoint × onchain multiplier'}: {new Date((prepared.draft.quote.source === 'rarefriends-pool' ? prepared.draft.quote.pool!.windowEnd : prepared.draft.quote.updatedAt) * 1000).toLocaleString()}</small>{prepared.draft.quote.source === 'rarefriends-pool' && <small>ETH/USD feed updated {new Date(prepared.draft.quote.updatedAt * 1000).toLocaleString()}. The price is checked again before signing; a change above 1% requires a new review.</small>}<small>Review expires in {Math.max(0, prepared.draft.quote.expiresAt - now)}s. Refresh to use a new quote.</small></dd></div><div><dt>NETWORK FEE</dt><dd>Paid by your connected owner wallet<small>{prepared.gasEstimate ? `${prepared.gasEstimate.toLocaleString()} estimated gas units. ` : ''}Your wallet shows the final ETH cost.</small></dd></div></>}</dl>
         <p className="launch-fine">The token starts with one-sided liquidity. Buyers add {quote.symbol}; liquidity and a starting value do not guarantee buyers or a market value. Token details, artwork and fee settings are public.</p>
-        {asset ? <a className="launch-primary" href={`${PET_DEPLOYMENT.explorer}/token/${asset}`} target="_blank" rel="noreferrer">VIEW YOUR TOKEN ↗</a> : preview ? <><p className="launch-note">This is a preview. Nothing has been uploaded or launched.</p><button className="launch-primary" onClick={() => mode === 'friend' ? chooseFriend() : snapshot.status === 'wrong-network' ? void session.switchNetwork() : void session.connect()}>{mode === 'friend' ? 'CHOOSE MY FRIEND ↗' : snapshot.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : 'CONNECT WALLET ↗'}</button></> : !enabled ? <p className="launch-note">Launch preview is ready. Live launches open after the reviewed launch contract is deployed and activated.{mode === 'friend' && !pet?.walletAddress && ' This Friend needs an active Rare Wallet.'}</p> : unresolved ? <p className="launch-note">The launch was submitted. Check its confirmation before starting another launch.</p> : prepared && !expired ? <button className="launch-primary" disabled={busy || unresolved} onClick={() => void send()}>{busy ? 'CONFIRMING…' : 'CONFIRM LAUNCH IN WALLET ↗'}</button> : <><p className="launch-fine">{expired ? 'This quote expired. Refresh the review before signing.' : 'Next: sign a message to publish your image, then review the verified launch. This step does not launch the token.'}</p><button className="launch-primary" disabled={busy || wait > 0 || unresolved} onClick={() => void prepare()}>{busy ? 'PREPARING…' : wait > 0 ? `NEXT LAUNCH IN ${Math.ceil(wait / 3600)}H` : prepared ? 'REFRESH LAUNCH REVIEW ↻' : 'PUBLISH IMAGE & VERIFY LAUNCH ↗'}</button></>}
+        {asset ? <a className="launch-primary" href={`${PET_DEPLOYMENT.explorer}/token/${asset}`} target="_blank" rel="noreferrer">VIEW YOUR TOKEN ↗</a> : preview ? <><p className="launch-note">This is a preview. Nothing has been uploaded or launched.</p><button className="launch-primary" onClick={() => mode === 'friend' ? chooseFriend() : snapshot.status === 'wrong-network' ? void session.switchNetwork() : void session.connect()}>{mode === 'friend' ? 'CHOOSE MY FRIEND ↗' : snapshot.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : 'CONNECT WALLET ↗'}</button></> : !enabled ? <p className="launch-note">Launch preview is ready. Live launches open after the reviewed launch contract is deployed and activated.{mode === 'friend' && !pet?.walletAddress && ' This Friend needs an active Rare Wallet.'}</p> : unresolved ? <p className="launch-note">The launch was submitted. Check its confirmation before starting another launch.</p> : prepared && !expired ? <button className="launch-primary" disabled={busy || writesBlocked} onClick={() => void send()}>{busy ? 'CONFIRMING…' : 'CONFIRM LAUNCH IN WALLET ↗'}</button> : <><p className="launch-fine">{expired ? 'This quote expired. Refresh the review before signing.' : 'Next: sign a message to publish your image, then review the verified launch. This step does not launch the token.'}</p><button className="launch-primary" disabled={busy || wait > 0 || writesBlocked} onClick={() => void prepare()}>{busy ? 'PREPARING…' : wait > 0 ? `NEXT LAUNCH IN ${Math.ceil(wait / 3600)}H` : prepared ? 'REFRESH LAUNCH REVIEW ↻' : 'PUBLISH IMAGE & VERIFY LAUNCH ↗'}</button></>}
       </div>}
       {asset && <button className="launch-back" onClick={() => { setAsset(null); setReview(null); setPrepared(null); setName(''); setSymbol(''); setStatus(''); setError(''); }}>START A NEW LAUNCH ↗</button>}
       {transaction && !busy && <div className="launch-note" role="status"><p>{transaction.status === 'confirmed' ? 'Last launch confirmed.' : transaction.status === 'failed' ? 'Last launch reverted.' : transaction.error || 'A launch is pending. Check it before launching again.'}</p>{unresolved && hash && <button disabled={rechecking} onClick={() => void recheck()}>{rechecking ? 'CHECKING…' : 'RECHECK TRANSACTION'}</button>}{unresolved && !hash && transaction.status === 'unverified' && <><a href={explorer(mode === 'self' ? creator! : pet!.owner)} target="_blank" rel="noreferrer">CHECK WALLET ACTIVITY ↗</a><p>If you cancelled the wallet request and no transaction was sent, clear it to try again.</p><button onClick={() => creator && setRareLaunchTransaction(creator, null)}>CLEAR CANCELLED REQUEST</button></>}</div>}
-      {configError && <p className="launch-error" role="alert">{configError}</p>}{error && <p className="launch-error" role="alert">{error}</p>}
+      {marketBlocked && <p className="launch-note" role="status">This wallet has a trading transaction awaiting confirmation. Check it in Buy / Sell before launching.</p>}{configError && <p className="launch-error" role="alert">{configError}</p>}{error && <p className="launch-error" role="alert">{error}</p>}
       {hash && <p className="launch-fine"><a href={`${PET_DEPLOYMENT.explorer}/tx/${hash}`} target="_blank" rel="noreferrer">VIEW LAUNCH TRANSACTION ↗</a></p>}
       <p className="launch-status" role="status">{status}</p>
       {creator && launchpadContract && <LaunchHistory key={`${mode}:${creator}`} mode={mode} creator={creator} pet={pet} session={session} revision={revision} router={launchpadContract} refresh={transaction?.status === 'confirmed' ? transaction.hash : null}/>}

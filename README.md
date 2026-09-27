@@ -91,9 +91,11 @@ These are the initial shares of collected trading fees. Fees accrue when swaps h
 
 Open **Buy / Sell** below Rare Wallet to explore WETH, RAREFRIENDS, USDG, cbBTC, all 195 supported Robinhood stock/ETF tokens, and confirmed RarePet launches. **Find a Token** opens a searchable dropdown for the entire catalog. Browse compact horizontal cards in a scrollable four-column desktop grid, with category filters and a responsive mobile layout. You do not need to own a Rare Friend to browse or trade.
 
-RarePet launches trade here from **your connected wallet** using the token's existing Doppler pool. Review the input, quoted output, minimum received and slippage, approve the displayed amount when needed, then confirm the swap. WETH pairs use WETH; ETH pays network gas. Trading has **no trait effect or care cooldown** and keeps the launch's existing fee split.
+Buy and sell **inside RarePet**. The main market uses your connected wallet. Open **Buy / Sell inside Rare Wallet** to trade with that Friend’s assets: its wallet pays and receives the tokens, while you sign and pay gas as the NFT owner.
 
-For ecosystem assets, Buy/Sell opens Uniswap with the exact token and Robinhood network preselected. Uniswap checks routes and liquidity; catalog inclusion does not guarantee a market. These external trades use the wallet connected to Uniswap.
+Ecosystem assets use available Uniswap V3/V4 routes; RarePet launches use their existing Doppler pools and actual launch pairs. Review the exact input, estimate, minimum received and slippage, approve the displayed amount when needed, then confirm the swap. Ecosystem pairs default to WETH, with USDG for WETH itself. ETH pays network gas. A catalog listing does not guarantee liquidity or a supported route.
+
+Trading has **no trait effect or care cooldown** and preserves the launch’s existing fee split. RarePet adds no trading fee. Routing credentials stay on the server; swaps use the existing onchain routers without a new RarePet trading contract.
 
 ## Permanent care. Room to grow.
 
