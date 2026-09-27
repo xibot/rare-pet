@@ -2,7 +2,7 @@
 
 **Your Rare Friend, every day.**
 
-[Meet Your Pet](https://rarepet.app) · [Care Guide](https://rarepet.app/docs/) · [Rare Rush](https://rarerush.app) · [Vibeathon Entry](https://github.com/spokesz/rarefriends-vibeathon/pull/76)
+[Meet Your Pet](https://rarepet.app) · [Care Guide](https://rarepet.app/docs/) · [Vibeathon Entry](https://github.com/spokesz/rarefriends-vibeathon/pull/76)
 
 Every Rare Friend is a Rare Pet. Give your Genesis or Generations Friend a little love, a good meal, a game together, and a floating home of their own.
 
@@ -20,9 +20,9 @@ Created by **XIBOT** for the [Rare Friends Vibeathon](https://github.com/spokesz
 | **Wallet features** | Explore the interface | Manage eligible Friends' wallets and launch tokens |
 | **Transactions** | None | Care actions, wallet sends, launches and fee claims require confirmation and gas |
 
-**Preview** is the Vibeathon care demo. Choose a Friend, try the actions, change islands, and play Rare Rush. Care points and game rewards are simulated. Reset Preview clears only the selected sample's care.
+**Preview** is the Vibeathon care demo. Choose a Friend, try the actions, change islands, and try the in-app arcade. Care points and game rewards are simulated. Reset Preview clears only the selected sample's care.
 
-**My Wallet** verifies real ownership and preserves your Friend's original artwork. Rare Wallet and owned Rare Rush play support Genesis and hardwired Generations. Wallet features use Robinhood Chain, chain `4663`; connecting a wallet does not convert Preview progress into onchain records. On mobile, use a supported wallet's built-in browser. WalletConnect is not included.
+**My Wallet** verifies real ownership and preserves your Friend's original artwork. Rare Wallet and Play with owned Friends support Genesis and hardwired Generations. Wallet features use Robinhood Chain, chain `4663`; connecting a wallet does not convert Preview progress into onchain records. On mobile, use a supported wallet's built-in browser. WalletConnect is not included.
 
 ## A little care. Every day.
 
@@ -49,13 +49,13 @@ RarePet traits are separate from the NFT's original traits and collection rarity
 
 Your island, Genesis body and last Preview Friend are remembered on this device. These choices are cosmetic.
 
-## Playtime means Rare Rush
+## Play with your Friend
 
-Open **Play** and take the same Friend into [Rare Rush](https://rarerush.app). Run, climb, fall and occasionally reverse through connected courses, with spinning Friends, flying bonus coins, shields and magnets along the way.
+Open **Play** and take your selected Friend into RarePet's in-app arcade. Run, climb, fall and occasionally reverse through connected courses, with spinning Friends, flying bonus coins, shields and magnets along the way.
 
 Choose Easy, Normal or Degen. Space / ↑ / W jumps; press again to double jump. Hold ↓ / S to slide. Use ← / → to adjust pace on horizontal tracks and steer in vertical sections. Touch controls, pause and sound controls are built in.
 
-The embedded game uses Rare Rush's actual engine. Its displayed RF/$RUSH economy is simulated, and RarePet's Preview XP is awarded only when a run completes. Playing with an owned Friend does not yet award onchain XP.
+The arcade's displayed currency and rewards are simulated. RarePet's Preview XP is awarded only when a run completes. Playing with an owned Friend does not yet award onchain XP.
 
 ## Share a rare moment
 
@@ -136,15 +136,13 @@ RarePet uses **TypeScript, React, SVG rendering, FriendSDK and viem**. Solidity 
 | Path | Purpose |
 | --- | --- |
 | [`games/rare-pet/`](games/rare-pet/) | Habitat, care model, sharing, Rare Wallet, launchpad and guide |
-| [`games/rare-rush/`](games/rare-rush/) | Embedded game engine, canonical artwork, bodies and fonts |
+| [Embedded game](games/rare-rush/) | Game engine, canonical artwork, bodies and fonts |
 | [`contracts/rare-pet/`](contracts/rare-pet/) | Deployed care ledger, permanent history and future completion-signature rules |
 | [`contracts/rare-launchpad/`](contracts/rare-launchpad/) | Deployed launch router, tests and verification records |
 | [`api/`](api/) | Launch-image publication and quote pricing |
 | [`tests/`](tests/) | Care, gameplay, identity, launch and wallet checks |
 | [`scripts/`](scripts/) | Build tools, browser checks and read-only activation verification |
 | [`docs/`](docs/) | Developer setup and implementation notes |
-
-This is the standalone RarePet repository. The retained Rare Rush code supplies the embedded game; the separate Rare Rush website, Testnet services and community infrastructure live in [xibot/rare-rush](https://github.com/xibot/rare-rush).
 
 ## Documentation
 
@@ -155,8 +153,8 @@ This is the standalone RarePet repository. The retained Rare Rush code supplies 
 - [Launch router](contracts/rare-launchpad/README.md) — launch policy, fee split and verification limits.
 - [Launch deployment](contracts/rare-launchpad/deployments/4663-0xc6a4b2d4d369747b26e4ff805a79a57da2505dc3.json) — current Robinhood contract and configuration.
 - [Genesis bodies](games/rare-rush/genesis/BODIES.md) — canonical body artwork and provenance.
-- [Rare Rush integration](games/rare-rush/UPSTREAM.md) — retained game code and update notes.
-- [Vibeathon submission](https://github.com/spokesz/rarefriends-vibeathon/pull/76) — RarePet's separate entry, submitted September 25, 2026.
+- [Embedded game notes](games/rare-rush/UPSTREAM.md) — game code and update notes.
+- [Vibeathon submission](https://github.com/spokesz/rarefriends-vibeathon/pull/76) — RarePet's entry, submitted September 25, 2026.
 
 ## Feedback welcome
 
@@ -168,6 +166,6 @@ For playtest reports, include Preview or My Wallet, your collection, device/brow
 
 App design and development by **XIBOT**, building on the **Rare Friends** ecosystem. Rare Friends retains ownership of its character artwork.
 
-Canonical Friends, body frames and Worlds artwork come from Rare Friends/FriendSDK. Rare Rush supplies the embedded game; Doppler supplies the launch modules and SDK. Credits and permissions are documented in [third-party notices](THIRD_PARTY_NOTICES.md), [FriendSDK notices](licenses/FRIENDSDK-NOTICE.md) and [font provenance](games/rare-rush/assets/fonts/provenance.md).
+Canonical Friends, body frames and Worlds artwork come from Rare Friends/FriendSDK. Doppler supplies the launch modules and SDK. Credits and permissions are documented in [third-party notices](THIRD_PARTY_NOTICES.md), [FriendSDK notices](licenses/FRIENDSDK-NOTICE.md) and [font provenance](games/rare-rush/assets/fonts/provenance.md).
 
 **Take care. Play. Stay rare.**
