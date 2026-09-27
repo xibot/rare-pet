@@ -5,21 +5,19 @@ import type { GenerationSprites } from '@rarefriends/friendsdk/sprites';
 import { PetSprite, GenesisPetSprite } from './art';
 import { Heart, Snack, Spark } from './habitat';
 import { getIsland, IslandArt, islandPetRatio, type Island } from './islands';
+import { resolveShareSpeech, type ShareAction } from './share-message';
 
-export type ShareAction = 'pet' | 'feed' | 'poop';
+export type { ShareAction } from './share-message';
 /** Both the public preview and verified wallet identity are accepted unchanged. */
 export type ShareFriend = Readonly<{
   collection: 'genesis' | 'generations'; tokenId: string; label: string;
   image: string; sprites?: GenerationSprites;
 }>;
 export type ShareImageOptions = Readonly<{
-  friend: ShareFriend; island: Island; bodyId?: string; action: ShareAction; variant?: number;
+  friend: ShareFriend; island: Island; bodyId?: string; action: ShareAction; variant?: number; speech?: string;
 }>;
 export const SHARE_IMAGE_SIZE = 2000;
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const speech: Record<ShareAction, string> = {
-  pet: '♡ right back at you.', feed: 'rare food. good mood.', poop: 'ahh. much better.',
-};
 
 function Glyph({ x, y, size, color, children }: {
   x: number; y: number; size: number; color?: string; children: ReactNode;
@@ -107,7 +105,7 @@ async function drawSvg(context: CanvasRenderingContext2D, markup: string, signal
 }
 
 /** Local, fixed-resolution export. No wallet request, care update or social post occurs here. */
-export async function renderShareCanvas({ friend, island, bodyId, action, variant = 0 }: ShareImageOptions, { size = SHARE_IMAGE_SIZE, phase, signal }: { size?: number; phase?: number; signal?: AbortSignal } = {}): Promise<HTMLCanvasElement> {
+export async function renderShareCanvas({ friend, island, bodyId, action, variant = 0, speech }: ShareImageOptions, { size = SHARE_IMAGE_SIZE, phase, signal }: { size?: number; phase?: number; signal?: AbortSignal } = {}): Promise<HTMLCanvasElement> {
   signal?.throwIfAborted();
   if (friend.collection === 'generations' && !friend.sprites) throw new Error('Your Friend’s sprites are still loading. Please try again.');
   const option = getIsland(island);
@@ -122,7 +120,7 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   context.scale(size / SHARE_IMAGE_SIZE, size / SHARE_IMAGE_SIZE);
   const mono = '"Sometype Mono Variable", "Courier New", monospace';
   context.font = `500 46px ${mono}`;
-  const words = speech[action], bubbleWidth = Math.ceil(context.measureText(words).width + 102), bubbleHeight = 132;
+  const words = resolveShareSpeech(action, speech), bubbleWidth = Math.min(1640, Math.ceil(context.measureText(words).width + 102)), bubbleHeight = 132;
   // Keep exactly the same relative island / Friend proportions as the main habitat.
   const floorWidth = 1640;
   const [aspectWidth, aspectHeight] = option.aspectRatio.split('/').map(Number);
@@ -175,7 +173,7 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   context.translate(offsetX, offsetY); context.scale(scale, scale);
   context.fillStyle = '#10110e'; context.font = `500 46px ${mono}`;
   context.textAlign = 'center'; context.textBaseline = 'middle';
-  context.fillText(words, bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2 + 1);
+  context.fillText(words, bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2 + 1, bubbleWidth - 102);
   context.restore();
   context.fillStyle = '#fff'; context.font = '400 58px Silkscreen, "Courier New", monospace';
   context.textAlign = 'left'; context.textBaseline = 'middle';
@@ -195,7 +193,9 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   return canvas;
 }
 
-export async function renderShareImage(options: ShareImageOptions): Promise<Blob> {
-  const canvas = await renderShareCanvas(options);
-  return new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not save the image. Please try again.')), 'image/png'));
+export async function renderShareImage(options: ShareImageOptions, signal?: AbortSignal): Promise<Blob> {
+  const canvas = await renderShareCanvas(options, { signal });
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not save the image. Please try again.')), 'image/png'));
+  signal?.throwIfAborted();
+  return blob;
 }

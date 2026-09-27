@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './art';
 import { renderShareImage, type ShareAction, type ShareFriend } from './share-image';
 import { renderShareGif, SHARE_GIF_SIZE } from './share-gif';
+import { limitShareSpeech, resolveShareSpeech, SHARE_SPEECH, SHARE_SPEECH_MAX_LENGTH } from './share-message';
 import type { Island } from './islands';
 import './share.css';
 
@@ -23,11 +24,13 @@ export function ShareDialog({ friend, island, bodyId, initialAction, initialVari
   const [format, setFormat] = useState<'png' | 'gif'>('png');
   const [progress, setProgress] = useState(0);
   const [post, setPost] = useState(() => postText(friend.label, initialAction));
+  const [message, setMessage] = useState('');
+  const speech = resolveShareSpeech(action, message);
   const [image, setImage] = useState<{ key: object; url: string } | null>(null);
   const [error, setError] = useState(''), [status, setStatus] = useState('');
   const [retry, setRetry] = useState(0);
   // Returning to a previous action/format must never revive its revoked URL.
-  const key = useMemo(() => ({}), [friend, island, bodyId, action, variant, format, retry]);
+  const key = useMemo(() => ({}), [friend, island, bodyId, action, variant, format, speech, retry]);
   const ready = image?.key === key ? image : null;
   const size = format === 'gif' ? SHARE_GIF_SIZE : 2000;
   const filename = `rarepet-${friend.collection}-${friend.tokenId}-${island}-${action}-${size}.${format}`;
@@ -40,16 +43,19 @@ export function ShareDialog({ friend, island, bodyId, initialAction, initialVari
     let active = true, url: string | undefined;
     const controller = new AbortController();
     setError(''); setStatus(''); setProgress(0);
-    const options = { friend, island, bodyId, action, variant };
-    const render = format === 'gif'
-      ? renderShareGif(options, controller.signal, value => { if (active) setProgress(value); })
-      : renderShareImage(options);
-    render.then(blob => {
-      if (!active) return;
-      url = URL.createObjectURL(blob); setImage({ key, url });
-    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Your image could not be prepared. Try again.'); });
-    return () => { active = false; controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [friend, island, bodyId, action, variant, format, retry, key]);
+    // Invalidate the previous download immediately, but let typing settle before encoding.
+    const timer = window.setTimeout(() => {
+      const options = { friend, island, bodyId, action, variant, speech };
+      const render = format === 'gif'
+        ? renderShareGif(options, controller.signal, value => { if (active) setProgress(value); })
+        : renderShareImage(options, controller.signal);
+      render.then(blob => {
+        if (!active) return;
+        url = URL.createObjectURL(blob); setImage({ key, url });
+      }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Your image could not be prepared. Try again.'); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); controller.abort(); if (url) URL.revokeObjectURL(url); };
+  }, [friend, island, bodyId, action, variant, format, speech, retry, key]);
   function choose(next: ShareAction) { setAction(next); setPost(postText(friend.label, next)); }
   function download() {
     if (!ready) return;
@@ -62,7 +68,8 @@ export function ShareDialog({ friend, island, bodyId, initialAction, initialVari
     <div className="share-content">
       <div className="share-moments" role="group" aria-label="Image action">{moments.map(moment => <button key={moment.action} aria-pressed={action === moment.action} onClick={() => choose(moment.action)}><Icon name={moment.action}/>{moment.name}</button>)}</div>
       <div className="share-formats" role="group" aria-label="Download format"><button aria-pressed={format === 'png'} onClick={() => setFormat('png')}>STILL PNG</button><button aria-pressed={format === 'gif'} onClick={() => setFormat('gif')}>ANIMATED GIF</button></div>
-      <div className="share-image" aria-busy={!ready && !error}>{ready ? <img src={ready.url} alt={`${friend.label} on the ${island} island, ${action === 'pet' ? 'receiving love' : action === 'feed' ? 'enjoying a meal' : 'taking a healthy break'}, with a speech bubble.`} width={size} height={size}/> : <p role="status">{error ? 'Let’s try that again.' : format === 'gif' ? `Making your GIF… ${progress}%` : 'Making your rare moment…'}</p>}</div>
+      <div className="share-message"><div className="share-message-heading"><label htmlFor="share-speech">SPEECH BUBBLE</label><span id="share-speech-count">{Array.from(message).length} / {SHARE_SPEECH_MAX_LENGTH}</span></div><input id="share-speech" type="text" value={message} placeholder={SHARE_SPEECH[action]} onChange={event => setMessage(limitShareSpeech(event.target.value))} aria-describedby="share-speech-hint share-speech-count"/><p id="share-speech-hint">Your message in the PNG or GIF. {SHARE_SPEECH_MAX_LENGTH} characters max. Leave blank for the original.</p></div>
+      <div className="share-image" aria-busy={!ready && !error}>{ready ? <img src={ready.url} alt={`${friend.label} on the ${island} island, ${action === 'pet' ? 'receiving love' : action === 'feed' ? 'enjoying a meal' : 'taking a healthy break'}. Speech bubble: ${speech}`} width={size} height={size}/> : <p role="status">{error ? 'Let’s try that again.' : format === 'gif' ? `Making your GIF… ${progress}%` : 'Making your rare moment…'}</p>}</div>
       <div className="share-image-meta"><span>{size} × {size} {format.toUpperCase()}{format === 'gif' ? ' · 2.4s LOOP' : ''}</span><button onClick={() => setVariant(value => (value + 1) % 3)}>ANOTHER POSE <span aria-hidden="true">↻</span></button></div>
       {error && <div className="share-error" role="alert"><p>{error}</p><button onClick={() => setRetry(value => value + 1)}>TRY AGAIN</button></div>}
       <label className="share-caption">YOUR POST<textarea value={post} onChange={event => setPost(event.target.value)} maxLength={230} rows={3}/></label>
