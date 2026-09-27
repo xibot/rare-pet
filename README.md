@@ -89,9 +89,11 @@ These are the initial shares of collected trading fees. Fees accrue when swaps h
 
 ## Buy / Sell
 
-Open **Buy / Sell** below Rare Wallet to discover tokens launched through RarePet. Browse the token grid, search by name, ticker or contract, and filter by the actual launch pair. You do not need to own a Rare Friend to browse or trade.
+Open **Buy / Sell** below Rare Wallet to explore WETH, RAREFRIENDS, USDG, cbBTC, all 195 supported Robinhood stock/ETF tokens, and confirmed RarePet launches. **Find a Token** opens a searchable dropdown for the entire catalog. Browse compact horizontal cards in a scrollable four-column desktop grid, with category filters and a responsive mobile layout. You do not need to own a Rare Friend to browse or trade.
 
-Buy and sell from **your connected wallet** using the token's existing Doppler pool. Review the input, quoted output, minimum received and slippage, approve the displayed amount when needed, then confirm the swap. WETH pairs use WETH; ETH pays network gas. Trading has **no trait effect or care cooldown** and keeps the launch's existing fee split.
+RarePet launches trade here from **your connected wallet** using the token's existing Doppler pool. Review the input, quoted output, minimum received and slippage, approve the displayed amount when needed, then confirm the swap. WETH pairs use WETH; ETH pays network gas. Trading has **no trait effect or care cooldown** and keeps the launch's existing fee split.
+
+For ecosystem assets, Buy/Sell opens Uniswap with the exact token and Robinhood network preselected. Uniswap checks routes and liquidity; catalog inclusion does not guarantee a market. These external trades use the wallet connected to Uniswap.
 
 ## Permanent care. Room to grow.
 

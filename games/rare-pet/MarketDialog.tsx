@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type
 import { formatUnits, type Address, type Hex } from 'viem';
 import { PET_DEPLOYMENT, type PetWalletSession } from './wallet';
 import { readRareMarketPage, type RareMarketCursor, type RareMarketToken } from './market-catalog';
+import { buildMarketAssets, filterMarketAssets, marketAssetSwapUrl, type MarketAsset } from './market-assets';
 import { readMarketBalances, readMarketSwapQuote, sendMarketApproval, sendMarketSwap, getMarketTransaction, subscribeMarketTransactions, refreshMarketTransaction, type MarketSwapQuote } from './market-swap';
 import './market.css';
 
@@ -15,7 +16,7 @@ function amountText(amount: bigint, decimals: number, digits = 8) {
   if (amount > 0n && whole === '0' && !/[1-9]/.test(fraction.slice(0, digits))) return `<0.${'0'.repeat(digits - 1)}1`;
   return `${whole}.${fraction.slice(0, digits).replace(/0+$/, '')}`.replace(/\.$/, '');
 }
-function TokenImage({ token }: { token: RareMarketToken }) {
+function TokenImage({ token }: { token: Pick<MarketAsset, 'imageUrl' | 'symbol'> }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [token.imageUrl]);
   return <span className="market-token-image">{token.imageUrl && !failed
@@ -30,12 +31,14 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
   const unresolved = transaction && ['awaiting-wallet', 'pending', 'unverified'].includes(transaction.status) ? transaction : null;
   const dialog = useRef<HTMLDialogElement>(null), alive = useRef(true), writeLock = useRef(false), work = useRef(0);
   const catalogueAbort = useRef<AbortController | null>(null), catalogueWork = useRef(0), catalogueLock = useRef(false);
-  const titleId = useId(), queryId = useId(), pairId = useId(), amountId = useId(), slippageId = useId();
+  const titleId = useId(), queryId = useId(), categoryId = useId(), pickerId = useId(), amountId = useId(), slippageId = useId();
   const [tokens, setTokens] = useState<readonly RareMarketToken[]>([]), [cursor, setCursor] = useState<RareMarketCursor | null>(null);
   const [complete, setComplete] = useState(false), [loading, setLoading] = useState(false), [catalogueError, setCatalogueError] = useState('');
   const [scanned, setScanned] = useState<{ from: bigint; to: bigint } | null>(null);
-  const [query, setQuery] = useState(''), [pair, setPair] = useState('all');
-  const [selected, setSelected] = useState<RareMarketToken | null>(null), [side, setSide] = useState<Side>('buy');
+  const [query, setQuery] = useState(''), [category, setCategory] = useState<'all' | 'crypto' | 'stocks' | 'launch'>('all');
+  const [pickerOpen, setPickerOpen] = useState(false), [activeOption, setActiveOption] = useState(-1);
+  const [selectedAsset, setSelectedAsset] = useState<MarketAsset | null>(null), [side, setSide] = useState<Side>('buy');
+  const selected = selectedAsset?.source === 'launch' ? selectedAsset.launch : null;
   const [amount, setAmount] = useState(''), [slippage, setSlippage] = useState('0.5');
   const [quote, setQuote] = useState<MarketSwapQuote | null>(null), [busy, setBusy] = useState('');
   const [error, setError] = useState(''), [status, setStatus] = useState(''), [lastHash, setLastHash] = useState<Hex | null>(null);
@@ -80,12 +83,9 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
     return () => { active = false; };
   }, [selected, account, wallet.revision, balanceRefresh]);
 
-  const pairs = useMemo(() => [...new Map(tokens.map(token => [token.quote.id, token.quote])).values()].sort((a, b) => a.symbol.localeCompare(b.symbol)), [tokens]);
-  const visible = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    return tokens.filter(token => (pair === 'all' || token.quote.id === pair) && (!search || token.name.toLowerCase().includes(search)
-      || token.symbol.toLowerCase().includes(search.replace(/^\$/, '')) || token.asset.toLowerCase().includes(search)));
-  }, [tokens, pair, query]);
+  const assets = useMemo(() => buildMarketAssets(tokens), [tokens]);
+  const visible = useMemo(() => filterMarketAssets(assets, { query, category }), [assets, category, query]);
+  const options = useMemo(() => filterMarketAssets(assets, { query }), [assets, query]);
   const frozen = !!busy || !!unresolved;
   const inputSymbol = selected ? side === 'buy' ? selected.quote.symbol : selected.symbol : '';
   const outputSymbol = selected ? side === 'buy' ? selected.symbol : selected.quote.symbol : '';
@@ -98,10 +98,16 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
   const quoteOwned = !!quote && !!account && quote.account?.toLowerCase() === account.toLowerCase();
 
   function invalidateQuote() { work.current++; setQuote(null); setError(''); setStatus(''); setLastHash(null); }
-  function selectToken(token: RareMarketToken) {
+  function selectToken(token: MarketAsset) {
     if (frozen) return;
-    invalidateQuote(); setSelected(token); setAmount(''); setSide('buy');
+    invalidateQuote(); setSelectedAsset(token); setAmount(''); setSide('buy'); setQuery(''); setPickerOpen(false); setActiveOption(-1);
     window.requestAnimationFrame(() => tradePanel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  }
+  function closeToken() { invalidateQuote(); setSelectedAsset(null); }
+  const categoryLabel = (asset: MarketAsset) => asset.source === 'launch' ? 'RAREPET' : asset.category === 'stocks' ? 'STOCK / ETF' : 'CRYPTO';
+  function focusOption(index: number) {
+    setActiveOption(index);
+    window.requestAnimationFrame(() => document.getElementById(`${pickerId}-${index}`)?.scrollIntoView({ block: 'nearest' }));
   }
   function switchSide(next: Side) { if (frozen || next === side) return; invalidateQuote(); setSide(next); setAmount(''); }
   async function copyAddress(address: string) {
@@ -173,28 +179,50 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
     onCancel={event => { event.preventDefault(); requestClose(); }} onClick={event => { if (event.target === dialog.current) requestClose(); }}>
     <header className="dialog-heading"><h2 id={titleId}>BUY / SELL</h2><button type="button" aria-label="Close Buy / Sell" disabled={busy === 'approval' || busy === 'swap'} onClick={requestClose}>×</button></header>
     <div className="market-content">
-      <div className="market-intro"><div><span className="market-eyebrow">THE RAREPET MARKET</span><h3>Meet your next rare find.</h3><p>Explore tokens launched by Rare Friends and their people.</p></div><span className="market-network">ROBINHOOD</span></div>
+      <div className="market-intro"><div><span className="market-eyebrow">THE RAREPET MARKET</span><h3>Meet your next rare find.</h3><p>Explore crypto, stocks, ETFs and tokens launched through RarePet.</p></div><span className="market-network">ROBINHOOD</span></div>
       <div className="market-wallet"><div><b>YOUR TRADING WALLET</b><span>Buys and sells use your connected owner wallet.</span></div>{account ? <button className="market-address" type="button" onClick={() => void copyAddress(account)} aria-label="Copy your trading wallet address">{shortAddress(account)} {copied === account ? '✓' : '⧉'}</button> : <button className="market-connect" type="button" onClick={() => void connect()} disabled={wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET ↗'}</button>}</div>
       {wallet.error && <p className="market-error" role="alert">{wallet.error}</p>}
       {unresolved && <div className="market-pending" role="status"><b>{unresolved.kind === 'swap' ? 'SWAP' : 'APPROVAL'} {unresolved.status === 'awaiting-wallet' ? 'AWAITING YOUR WALLET' : 'AWAITING VERIFICATION'}</b><p>{unresolved.error || (unresolved.status === 'awaiting-wallet' ? 'Review the request in your connected wallet.' : 'Your transaction was submitted. Its result must be verified before another trade.')}</p>{unresolved.hash && <a href={`${PET_DEPLOYMENT.explorer}/tx/${unresolved.hash}`} target="_blank" rel="noreferrer">VIEW TRANSACTION ↗</a>}{unresolved.status !== 'awaiting-wallet' && <button type="button" disabled={!!busy} onClick={() => void recheckTransaction()}>{busy === 'recheck' ? 'CHECKING…' : 'CHECK TRANSACTION STATUS'}</button>}</div>}
       {!unresolved && transaction?.status === 'confirmed' && !selected && <p className="market-status" role="status">Your last {transaction.kind === 'swap' ? 'swap' : 'approval'} is confirmed.{transaction.hash && <> <a href={`${PET_DEPLOYMENT.explorer}/tx/${transaction.hash}`} target="_blank" rel="noreferrer">VIEW TRANSACTION ↗</a></>}</p>}
-      <div className={`market-layout${selected ? ' has-selection' : ''}`}>
-        <section className="market-browser" aria-label="RarePet launched tokens">
-          <div className="market-filters"><label htmlFor={queryId}>FIND A TOKEN<input id={queryId} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Name, ticker or contract address" autoComplete="off"/></label><label htmlFor={pairId}>PAIRED WITH<select id={pairId} value={pair} onChange={event => setPair(event.target.value)}><option value="all">All pairs</option>{pairs.map(asset => <option key={asset.id} value={asset.id}>{asset.symbol}</option>)}</select></label></div>
-          <div className="market-results"><span>{visible.length} TOKEN{visible.length === 1 ? '' : 'S'}{!complete && tokens.length ? ' LOADED' : ''}</span><button type="button" disabled={loading || frozen} onClick={() => void loadCatalogue(true)}>REFRESH ↻</button></div>
-          {loading && !tokens.length && <div className="market-empty" role="status"><span className="market-empty-mark" aria-hidden="true">✦</span><h4>Finding RarePet launches…</h4><p>Checking the launch history on Robinhood Chain.</p></div>}
-          {catalogueError && <div className="market-error" role="alert"><p>{catalogueError}</p><button type="button" disabled={loading} onClick={() => void loadCatalogue(!cursor)}>RETRY LOADING</button></div>}
-          {!loading && !catalogueError && !visible.length && <div className="market-empty"><span className="market-empty-mark" aria-hidden="true">✦</span><h4>{tokens.length ? 'No matching tokens.' : complete ? 'A new market starts here.' : 'More history to explore.'}</h4><p>{tokens.length ? 'Try another name, ticker, contract address or pair.' : complete ? 'RarePet tokens will appear here after their launches confirm.' : 'No launches in this range. Load earlier history to keep looking.'}</p>{!!tokens.length && <button type="button" onClick={() => { setQuery(''); setPair('all'); }}>CLEAR FILTERS</button>}{!tokens.length && complete && <a href="/launch/">LAUNCH A TOKEN ↗</a>}</div>}
-          {!!visible.length && <div className="market-token-grid">{visible.map(token => <article className={`market-token-card${selected?.asset.toLowerCase() === token.asset.toLowerCase() ? ' is-selected' : ''}`} key={token.asset}>
-            <button className="market-select-token" type="button" disabled={frozen} aria-pressed={selected?.asset.toLowerCase() === token.asset.toLowerCase()} aria-label={`Trade ${token.name}, ${token.symbol}, paired with ${token.quote.symbol}`} onClick={() => selectToken(token)}><TokenImage token={token}/><span className="market-card-title"><b>{token.name}</b><span>${token.symbol}</span></span><span className="market-card-meta"><span>{token.quote.symbol} PAIR</span><span>{token.fee / 10_000}% FEE</span></span><span className="market-card-creator">{token.mode === 'friend' ? `RARE FRIEND #${token.tokenId}` : 'WALLET LAUNCH'}<span aria-hidden="true">↗</span></span></button>
-            <div className="market-card-links"><button type="button" onClick={() => void copyAddress(token.asset)} aria-label={`Copy ${token.symbol} contract address`}>{copied === token.asset ? 'COPIED ✓' : `${shortAddress(token.asset)} ⧉`}</button><a href={explorer(token.asset)} target="_blank" rel="noreferrer" aria-label={`View ${token.symbol} on Blockscout`}>EXPLORER ↗</a></div>
+      <div className={`market-layout${selectedAsset ? ' has-selection' : ''}`}>
+        <section className="market-browser" aria-label="All supported tokens">
+          <div className="market-filters">
+            <div className="market-token-picker" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setPickerOpen(false); setActiveOption(-1); } }}>
+              <label htmlFor={queryId}>FIND A TOKEN</label>
+              <div className="market-picker-input"><input id={queryId} role="combobox" aria-autocomplete="list" aria-controls={pickerId} aria-expanded={pickerOpen} aria-activedescendant={pickerOpen && activeOption >= 0 && options[activeOption] ? `${pickerId}-${activeOption}` : undefined} value={query}
+                onFocus={() => setPickerOpen(true)} onChange={event => { setQuery(event.target.value); setPickerOpen(true); setActiveOption(-1); }}
+                onKeyDown={event => {
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setPickerOpen(true); if (options.length) focusOption(event.key === 'ArrowDown' ? Math.min(activeOption + 1, options.length - 1) : activeOption < 0 ? options.length - 1 : Math.max(activeOption - 1, 0)); }
+                  else if (event.key === 'Enter' && pickerOpen) { event.preventDefault(); const choice = options[activeOption >= 0 ? activeOption : 0]; if (choice) selectToken(choice); }
+                  else if (event.key === 'Escape' && pickerOpen) { event.preventDefault(); event.stopPropagation(); setPickerOpen(false); setActiveOption(-1); }
+                }} placeholder="All tokens · search name, ticker or address" autoComplete="off" disabled={frozen}/>
+                <button type="button" aria-label={pickerOpen ? 'Hide token dropdown' : 'Show all tokens'} aria-expanded={pickerOpen} aria-controls={pickerId} disabled={frozen} onClick={() => { setPickerOpen(value => !value); setActiveOption(-1); }}><span aria-hidden="true">⌄</span></button>
+              </div>
+              {pickerOpen && <div className="market-picker-menu" id={pickerId} role="listbox" aria-label="Find a token">{options.length ? options.map((asset, index) => <button type="button" role="option" tabIndex={-1} id={`${pickerId}-${index}`} key={asset.address} aria-selected={selectedAsset?.address.toLowerCase() === asset.address.toLowerCase()} className={`market-picker-option${activeOption === index ? ' is-active' : ''}`} onMouseDown={event => event.preventDefault()} onClick={() => selectToken(asset)}><TokenImage token={asset}/><span className="market-card-title"><b>{asset.symbol}</b><span>{asset.name}</span></span><span className="market-card-category">{categoryLabel(asset)}</span></button>) : <p className="market-picker-empty">No matching tokens.</p>}</div>}
+            </div>
+            <label htmlFor={categoryId}>SHOW<select id={categoryId} className="market-category" value={category} disabled={frozen} onChange={event => setCategory(event.target.value as typeof category)}><option value="all">All tokens</option><option value="crypto">Crypto</option><option value="stocks">Stocks &amp; ETFs</option><option value="launch">RarePet launches</option></select></label>
+          </div>
+          <div className="market-results"><span>{visible.length} TOKEN{visible.length === 1 ? '' : 'S'}</span><button type="button" disabled={loading || frozen} onClick={() => void loadCatalogue(true)}>REFRESH ↻</button></div>
+          {catalogueError && <div className="market-error" role="alert"><p>RarePet launch history is unavailable: {catalogueError}</p><button type="button" disabled={loading} onClick={() => void loadCatalogue(!cursor)}>RETRY LAUNCH HISTORY</button></div>}
+          {!visible.length && <div className="market-empty"><span className="market-empty-mark" aria-hidden="true">✦</span><h4>{category === 'launch' && !query && !tokens.length ? loading ? 'Finding RarePet launches…' : complete ? 'A new market starts here.' : 'Launch history is incomplete.' : 'No matching tokens.'}</h4><p>{category === 'launch' && !query && !tokens.length ? complete ? 'RarePet tokens will appear here after their launches confirm.' : 'Load the launch history to see confirmed tokens.' : 'Try another name, ticker, contract address or category.'}</p><button type="button" onClick={() => { setQuery(''); setCategory('all'); }}>SHOW ALL TOKENS</button></div>}
+          {!!visible.length && <div className="market-token-grid" role="region" aria-label="Tokens" tabIndex={0}>{visible.map(asset => <article className={`market-token-card${selectedAsset?.address.toLowerCase() === asset.address.toLowerCase() ? ' is-selected' : ''}`} key={asset.address}>
+            <button className="market-select-token" type="button" disabled={frozen} aria-pressed={selectedAsset?.address.toLowerCase() === asset.address.toLowerCase()} aria-label={`Select ${asset.name}, ${asset.symbol}`} title={`${asset.name} · ${asset.address}`} onClick={() => selectToken(asset)}><TokenImage token={asset}/><span className="market-card-title"><b>{asset.symbol}</b><span>{asset.name}</span></span><span className="market-card-category">{categoryLabel(asset)}</span><span className="market-card-arrow" aria-hidden="true">↗</span></button>
           </article>)}</div>}
-          {!complete && !loading && <button className="market-load-more" type="button" onClick={() => void loadCatalogue(false)}>LOAD EARLIER LAUNCHES <span>↓</span></button>}
-          {loading && !!tokens.length && <p className="market-loading" role="status">Loading more launch history…</p>}
-          {scanned && <p className="market-scan-note">{complete ? 'Launch history loaded' : 'Search covers loaded tokens; load earlier launches for more.'}<span>Blocks {scanned.from.toLocaleString()}–{scanned.to.toLocaleString()}</span></p>}
+          <p className="market-catalog-note">Crypto, stocks and ETFs trade on Uniswap when a route is available. RarePet launches use their verified pools here.</p>
+          {!complete && !loading && <button className="market-load-more" type="button" disabled={frozen} onClick={() => void loadCatalogue(false)}>LOAD EARLIER LAUNCHES <span>↓</span></button>}
+          {loading && <p className="market-loading" role="status">Checking RarePet launch history…</p>}
+          {scanned && <p className="market-scan-note">{complete ? 'RarePet launch history loaded' : 'Catalog includes loaded launches; load earlier history for more.'}<span>Blocks {scanned.from.toLocaleString()}–{scanned.to.toLocaleString()}</span></p>}
         </section>
+        {selectedAsset?.source === 'ecosystem' && <section ref={tradePanel} className="market-trade market-ecosystem-trade" aria-label={`Trade ${selectedAsset.symbol}`}>
+          <div className="market-trade-heading"><TokenImage token={selectedAsset}/><div><h4>{selectedAsset.name}</h4><span>{selectedAsset.symbol} · {categoryLabel(selectedAsset)}</span></div><button type="button" aria-label="Close token trade" disabled={frozen} onClick={closeToken}>×</button></div>
+          <div className="market-token-address"><span>TOKEN CONTRACT · ROBINHOOD CHAIN</span><code>{selectedAsset.address}</code><button type="button" onClick={() => void copyAddress(selectedAsset.address)}>{copied === selectedAsset.address ? 'COPIED ✓' : 'COPY ⧉'}</button><a href={explorer(selectedAsset.address)} target="_blank" rel="noreferrer">EXPLORER ↗</a></div>
+          <p>Buy or sell {selectedAsset.symbol} on Uniswap with your wallet. The token and Robinhood network are preselected.</p>
+          <div className="market-ecosystem-actions"><a className="market-primary" href={marketAssetSwapUrl(selectedAsset, 'buy')} target="_blank" rel="noreferrer">BUY {selectedAsset.symbol} <span>↗</span></a><a className="market-secondary" href={marketAssetSwapUrl(selectedAsset, 'sell')} target="_blank" rel="noreferrer">SELL {selectedAsset.symbol} <span>↗</span></a></div>
+          <p className="market-trade-note">Opens Uniswap. Review its available route, liquidity, price and fees before confirming there. Inclusion in this catalog does not guarantee liquidity. You can change the payment token on Uniswap.</p>
+          {copied === selectedAsset.address && <p className="market-status" role="status">Contract address copied.</p>}
+        </section>}
         {selected && <section ref={tradePanel} className="market-trade" aria-label={`Trade ${selected.symbol}`}>
-          <div className="market-trade-heading"><TokenImage token={selected}/><div><h4>{selected.name}</h4><span>${selected.symbol} / {selected.quote.symbol}</span></div><button type="button" aria-label="Close token trade" disabled={frozen} onClick={() => { invalidateQuote(); setSelected(null); }}>×</button></div>
+          <div className="market-trade-heading"><TokenImage token={selected}/><div><h4>{selected.name}</h4><span>${selected.symbol} / {selected.quote.symbol}</span></div><button type="button" aria-label="Close token trade" disabled={frozen} onClick={closeToken}>×</button></div>
           <div className="market-token-address"><span>TOKEN CONTRACT</span><code>{selected.asset}</code><button type="button" onClick={() => void copyAddress(selected.asset)}>{copied === selected.asset ? 'COPIED ✓' : 'COPY ⧉'}</button><a href={explorer(selected.asset)} target="_blank" rel="noreferrer">EXPLORER ↗</a></div>
           <div className="market-side" role="group" aria-label="Trade direction"><button type="button" aria-pressed={side === 'buy'} disabled={frozen} onClick={() => switchSide('buy')}>BUY {selected.symbol}</button><button type="button" aria-pressed={side === 'sell'} disabled={frozen} onClick={() => switchSide('sell')}>SELL {selected.symbol}</button></div>
           <form className="market-trade-form" onSubmit={event => void quoteTrade(event)}>
@@ -219,7 +247,7 @@ export function MarketDialog({ session, close }: { session: PetWalletSession; cl
         </section>}
       </div>
       {!selected && error && <p className="market-error" role="alert">{error}</p>}
-      <div className="market-footer"><span>RAREPET LAUNCHES · REAL ONCHAIN POOLS</span><a href="/launch/">LAUNCH YOUR TOKEN ↗</a></div>
+      <div className="market-footer"><span>ROBINHOOD TOKENS · RAREPET LAUNCHES</span><a href="/launch/">LAUNCH YOUR TOKEN ↗</a></div>
     </div>
   </dialog>;
 }
