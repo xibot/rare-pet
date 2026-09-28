@@ -371,3 +371,35 @@ test('self account changes during signing or image serialization stop publicatio
     assert.equal(uploads, 0);
   } finally { globalThis.fetch = originalFetch; if (originalLocation) Object.defineProperty(globalThis, 'location', originalLocation); else delete globalThis.location; }
 });
+
+test('upload failures explain the failed image step without JSON parser errors or a launch transaction', async () => {
+  const { uploadSelfLaunchImage } = await loadUploadClient();
+  const originalFetch = globalThis.fetch, originalLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  const requests: string[] = [];
+  const provider = { request: async ({ method, params }) => {
+    requests.push(method);
+    if (method === 'eth_chainId') return '0x1237';
+    if (method === 'eth_accounts') return [OWNER];
+    if (method === 'personal_sign') return signer.signMessage({ message: Buffer.from(params[0].slice(2), 'hex').toString('utf8') });
+    assert.fail(`Image publishing must not request ${method}`);
+  } };
+  const session = { getProvider: () => provider, getSnapshot: () => ({ status: 'connected', revision: 1, chainId: 4663, account: OWNER }) };
+  try {
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: { origin: ORIGIN } });
+    for (const [response, expected] of [
+      [new Response('A server error has occurred', { status: 500 }), /temporarily unavailable.*did not submit a token launch/],
+      [new Response('<html>Gateway timeout</html>', { status: 504 }), /temporarily unavailable.*did not submit a token launch/],
+      [Response.json(null), /invalid response.*did not submit a token launch/],
+      [Response.json({ error: 'Image authorization expired. Please try again.' }, { status: 400 }), /Image authorization expired/],
+    ] as const) {
+      globalThis.fetch = async () => response;
+      await assert.rejects(uploadSelfLaunchImage({ session, owner: OWNER, revision: 1, image: { blob: new Blob([png()]), sha256: SHA(png()) } }), expected);
+    }
+    assert.equal(requests.filter(method => method === 'personal_sign').length, 4);
+    assert(!requests.includes('eth_sendTransaction'));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalLocation) Object.defineProperty(globalThis, 'location', originalLocation);
+    else delete globalThis.location;
+  }
+});

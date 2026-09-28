@@ -115,7 +115,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
       const common = { session, revision, router: launchpadContract, draft, assertActive: () => assertActive(task) };
       const value = await (mode === 'self' ? prepareRareSelfLaunch({ ...common, account: creator }) : prepareRareLaunch({ ...common, pet: pet! }));
       assertActive(task); setPrepared(value); setStatus('Launch verified. Check the final details before confirming.');
-    } catch (cause) { if (alive.current) setError(message(cause)); }
+    } catch (cause) { if (alive.current) { setStatus(''); setError(message(cause)); } }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   }
   async function send() {

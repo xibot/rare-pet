@@ -49,13 +49,21 @@ async function publishImage(context: ReturnType<typeof uploadContext>, authoriza
   const bytes = new Uint8Array(await image.blob.arrayBuffer()); check();
   const response = await fetch('/api/launch-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...authorization, signature, image: base64(bytes) }), signal });
   check();
-  const result = await response.json(); check();
-  if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'The token image could not be published.');
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch {
+    check();
+    throw new Error('The image-publishing service is temporarily unavailable. This step did not submit a token launch. Please try again shortly.');
+  }
+  check();
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('The image-publishing service returned an invalid response. This step did not submit a token launch.');
+  const result = payload as Record<string, unknown>;
+  if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'The token image could not be published. This step did not submit a token launch.');
   if (typeof result.url !== 'string' || result.sha256 !== image.sha256) throw new Error('The uploaded image did not match your selection.');
   const prefix = authorization.mode === 'friend'
     ? `/rare-launchpad/4663/${authorization.collection.toLowerCase()}/${authorization.tokenId}`
     : `/rare-launchpad/4663/self/${authorization.owner.toLowerCase()}`;
-  validatedImageURL(result, prefix);
+  validatedImageURL({ url: result.url, sha256: image.sha256 }, prefix);
   return { url: result.url as string, sha256: image.sha256 };
 }
 export async function uploadLaunchImage({ session, pet, revision, image, signal, assertActive = () => {} }: {

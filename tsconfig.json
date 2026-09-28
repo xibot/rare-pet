@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "resolveJsonModule": true,
     "esModuleInterop": true
   },

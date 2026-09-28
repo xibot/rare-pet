@@ -201,7 +201,8 @@ export default async function handler(req: IncomingMessage & { body?: unknown },
   try {
     const client = createPublicClient({ transport: http(RPC, { timeout: 12_000, retryCount: 0, fetchOptions: { signal: abort.signal } }), cacheTime: 0 });
     const upload = createLaunchImageUploader({ client, storage: createLaunchImageStorage(abort.signal) });
-    res.writeHead(200).end(JSON.stringify(await upload(await readBody(req), origin)));
+    const result = await upload(await readBody(req), origin);
+    res.writeHead(200).end(JSON.stringify(result));
   } catch (cause) {
     const text = cause instanceof Error && !/https?:|Authorization|token/i.test(cause.message) ? cause.message : 'The token image could not be prepared. Please retry.';
     res.writeHead(400).end(JSON.stringify({ error: text.slice(0, 240) }));
