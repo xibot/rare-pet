@@ -82,7 +82,7 @@ export function Docs({ petGraceHours = 24 }: DocsProps) {
             <div className="guide-mode-card owned"><span className="guide-chip">YOUR NFT. YOUR FRIEND.</span><h3>My Wallet</h3><p>Bring a Genesis or Generations Friend you own.</p><ul><li>Connect at the top right.</li><li>Open My Wallet or Choose Friend.</li><li>{careContract ? 'Confirm care in your wallet. It stays onchain.' : 'Onchain care is not enabled in this build.'}</li></ul><a href="/" className="guide-text-link">BRING YOUR FRIEND ↗</a></div>
           </div>
           <div className="guide-inline-tip"><Icon name="wallet"/><p><b>Need to disconnect?</b> Click your wallet address at the top right. <b>Choose Friend</b> is for selecting and refreshing your Friends.</p></div>
-          <More title="Preview and wallet care stay separate"><p>Preview points live only on this device and have no onchain value. You can use Preview while your wallet is connected. Reset Preview only clears the selected sample. Connecting a wallet does not perform care, transfer your NFT or grant preview points to an owned Friend.</p></More>
+          <More title="Preview and wallet care stay separate"><p>Preview points live only on this device and have no onchain value. Connecting opens My Wallet. Your selected Friend is remembered on this device and verified again after a refresh. Disconnecting returns you to Preview. Reset Preview only clears the selected sample. Connecting a wallet does not perform care, transfer your NFT or grant preview points to an owned Friend.</p></More>
         </section>
         <section id="friends">
           <SectionHead number="03" eyebrow="A HOME WITH PERSONALITY" title="Same Friend. Your kind of space.">11 islands. 36 cosmetic bodies for Genesis. All you.</SectionHead>

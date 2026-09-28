@@ -34,25 +34,31 @@ async function fixture(width = 1100, height = 900) {
   page.on('pageerror', error => state.errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') state.consoleErrors.push(message.text()); });
   await page.addInitScript(({ account }) => {
-    let current = null, chain = '0x1237';
-    const listeners = new Map(), methods = [];
+    // Browser reloads preserve the fake extension's authorization and network.
+    // This fixture is isolated to its own browser context and never touches a real wallet.
+    const key = 'rarepet:test-wallet:v1';
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch { /* Fresh fixture. */ }
+    let current = saved?.account ?? null, chain = saved?.chain ?? '0x1237';
+    const listeners = new Map(), methods = Array.isArray(saved?.methods) ? saved.methods : [];
+    const persist = () => localStorage.setItem(key, JSON.stringify({ account: current, chain, methods }));
     const emit = (name, data) => [...(listeners.get(name) ?? [])].forEach(fn => fn(data));
     window.ethereum = {
       on(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
       removeListener(name, fn) { listeners.get(name)?.delete(fn); },
       async request({ method, params }) {
-        methods.push(method);
+        methods.push(method); persist();
         if (method === 'eth_accounts') return current ? [current] : [];
-        if (method === 'eth_requestAccounts') { current = account; return [current]; }
+        if (method === 'eth_requestAccounts') { current = account; persist(); return [current]; }
         if (method === 'eth_chainId') return chain;
-        if (method === 'wallet_switchEthereumChain') { chain = params[0].chainId; emit('chainChanged', chain); return null; }
+        if (method === 'wallet_switchEthereumChain') { chain = params[0].chainId; persist(); emit('chainChanged', chain); return null; }
         throw new Error(`Unexpected wallet method: ${method}`);
       },
     };
     window.testWallet = {
       methods,
-      change(next) { current = next; emit('accountsChanged', next ? [next] : []); },
-      network(next) { chain = next; emit('chainChanged', next); },
+      change(next) { current = next; persist(); emit('accountsChanged', next ? [next] : []); },
+      network(next) { chain = next; persist(); emit('chainChanged', next); },
     };
   }, { account });
   await page.route('**/*', async route => {
@@ -108,10 +114,18 @@ function card(page) { return page.locator('.friend-picker:not(.preview-picker)')
 function accountDialog(page) { return page.getByRole('dialog', { name: 'Your wallet', exact: true }); }
 function friendDialog(page) { return page.getByRole('dialog', { name: 'Choose your Rare Friend', exact: true }); }
 async function assertSelectedGenesis(page) {
+  await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Genesis #1');
   assert.equal(await page.locator('.habitat-heading h2').innerText(), 'Genesis #1', 'Closing wallet management preserves the selected Friend');
   assert.equal(await page.locator('.pet-portrait image[data-genesis-art]').getAttribute('href'), portrait);
   assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).getAttribute('aria-pressed'), 'true');
 }
+async function assertPreview(page) {
+  await page.waitForFunction(() => document.querySelector('.mode-tag')?.textContent === 'PREVIEW MODE');
+  assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('button', { name: /RESET PREVIEW/ }).count(), 1, 'Disconnected mode exposes device preview care');
+  assert.equal(await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).count(), 0);
+}
+async function connectPrompts(page) { return page.evaluate(() => window.testWallet.methods.filter(method => method === 'eth_requestAccounts').length); }
 async function chooseGenesis(page, state) {
   if (!await page.getByRole('dialog').count()) await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
   await card(page).waitFor();
@@ -160,6 +174,10 @@ try {
     await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
     assert.equal(await friendDialog(page).getByRole('button', { name: /DISCONNECT/ }).count(), 0, 'Friend selection contains no disconnect action');
     assert.equal(await friendDialog(page).getByRole('button', { name: 'REFRESH', exact: true }).count(), 1);
+    await friendDialog(page).getByRole('button', { name: 'REFRESH', exact: true }).click();
+    await assertSelectedGenesis(page);
+    await page.getByText('Finding your Friends on Robinhood…', { exact: true }).waitFor({ state: 'detached' });
+    await assertSelectedGenesis(page);
     await friendDialog(page).getByRole('button', { name: 'Close dialog', exact: true }).click();
     await assertSelectedGenesis(page);
     for (const dismissal of ['KEEP CONNECTED', 'Close dialog', 'Escape']) {
@@ -178,6 +196,15 @@ try {
     await page.getByRole('button', { name: /CHANGE BODY/ }).click();
     const bodyId = await page.locator('.pet-portrait [data-genesis-body]').getAttribute('data-genesis-body');
     assert.notEqual(bodyId, oldBody, 'Owned Genesis can change its cosmetic body');
+    const promptsBeforeReload = await connectPrompts(page), readsBeforeReload = state.ownerReads;
+    await page.reload();
+    await assertSelectedGenesis(page);
+    assert.equal(await connectPrompts(page), promptsBeforeReload, 'Reload restores the authorized wallet without eth_requestAccounts');
+    assert(state.ownerReads > readsBeforeReload, 'Reload freshly verifies the saved Friend before selecting it');
+    assert.equal(await page.getByRole('dialog').count(), 0, 'Successful saved Friend restoration needs no chooser');
+    assert.equal(await page.locator('.pet-portrait [data-genesis-body]').getAttribute('data-genesis-body'), bodyId, 'Cosmetic body survives owned Friend restoration');
+    assert.deepEqual(await page.evaluate(owner => JSON.parse(localStorage.getItem(`rarepet:owned-friend:v1:4663:${owner}`)), account),
+      { collection: 'genesis', tokenId: '1' }, 'Restoration stores only a collection and token hint');
     await page.getByRole('button', { name: /^Play,/ }).click();
     const rush = page.getByRole('dialog');
     await rush.getByRole('button', { name: /LET.S RUSH/ }).waitFor();
@@ -190,14 +217,29 @@ try {
     assert.equal(await rush.locator('[data-genesis-body]').first().getAttribute('data-genesis-body'), bodyId, 'The selected body survives run start');
     await rush.getByRole('button', { name: 'Close Rare Rush' }).click();
     await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).click();
-    assert.equal(await page.locator('.mode-tag').innerText(), 'PREVIEW MODE');
-    assert.equal(await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).getAttribute('aria-pressed'), 'true');
+    await accountDialog(page).waitFor();
+    await assertSelectedGenesis(page);
+    assert.equal(await page.getByRole('button', { name: /RESET PREVIEW/ }).count(), 0, 'Connected Preview control cannot expose preview care');
+    await accountDialog(page).getByRole('button', { name: 'KEEP CONNECTED', exact: true }).click();
+    await assertSelectedGenesis(page);
+    await page.locator('.mode-switch').getByRole('button', { name: 'PREVIEW', exact: true }).click();
+    await accountDialog(page).getByRole('button', { name: 'DISCONNECT WALLET', exact: true }).click();
+    await assertPreview(page);
     const previewRequests = state.requests.length;
     await page.getByRole('button', { name: /RESET PREVIEW/ }).click();
     await page.getByRole('button', { name: /^Pet,/ }).click();
-    assert.equal(state.requests.length, previewRequests, 'A connected wallet can still use preview without RPC or signing');
-    await page.locator('.mode-switch').getByRole('button', { name: 'MY WALLET', exact: true }).click();
-    await chooseGenesis(page, state);
+    assert.equal(state.requests.length, previewRequests, 'Disconnected preview care needs no RPC or signing');
+    const disconnectedPrompts = await connectPrompts(page);
+    await page.reload();
+    await assertPreview(page);
+    assert.equal(await connectPrompts(page), disconnectedPrompts, 'Explicit disconnect survives reload without a new connection request');
+    assert.equal(state.requests.length, previewRequests, 'Remembering a disconnect prevents silent onchain discovery');
+    const reconnectReads = state.ownerReads;
+    await page.locator('.nav-arcade').filter({ hasText: 'CONNECT WALLET' }).click();
+    await assertSelectedGenesis(page);
+    assert.equal(await connectPrompts(page), disconnectedPrompts + 1, 'Only explicit reconnect prompts for authorization');
+    assert(state.ownerReads > reconnectReads, 'Reconnect restores the saved Friend through fresh ownership checks');
+    assert.equal(await friendDialog(page).count(), 0, 'Saved Friend returns without manual reselection');
 
     if (width === 1100) {
       await page.evaluate(() => window.testWallet.network('0x1'));
@@ -206,26 +248,25 @@ try {
       await accountDialog(page).getByRole('button', { name: 'SWITCH TO ROBINHOOD ↗', exact: true }).click();
       await page.waitForFunction(() => document.querySelector('.nav-arcade')?.textContent.includes('0x1111'));
       await accountDialog(page).getByRole('button', { name: 'KEEP CONNECTED', exact: true }).click();
-      await chooseGenesis(page, state);
+      await assertSelectedGenesis(page);
 
       await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).click();
       await accountDialog(page).getByRole('button', { name: 'DISCONNECT WALLET', exact: true }).click();
-      await assertInvalidated(page);
+      await assertPreview(page);
       assert.equal(await page.getByRole('dialog').count(), 0, 'Disconnect closes wallet management without opening the chooser');
       await page.locator('.nav-arcade').filter({ hasText: 'CONNECT WALLET' }).click();
-      await friendDialog(page).waitFor();
-      await chooseGenesis(page, state);
+      await assertSelectedGenesis(page);
 
       await page.getByRole('button', { name: 'Manage connected wallet', exact: true }).click();
       await page.evaluate(() => window.testWallet.change(null));
-      await assertInvalidated(page);
+      await assertPreview(page);
       await accountDialog(page).waitFor({ state: 'detached' });
       await page.locator('.nav-arcade').filter({ hasText: 'CONNECT WALLET' }).click();
-      await card(page).waitFor();
+      await assertSelectedGenesis(page);
       assert.equal(await accountDialog(page).count(), 0, 'An external disconnect cannot resurrect an old account modal after reconnecting');
-      await chooseGenesis(page, state);
 
       await page.getByRole('button', { name: /CHOOSE FRIEND/ }).click();
+      await card(page).waitFor();
       let release;
       state.nextOwnerGate = new Promise(resolve => { release = resolve; });
       const priorReads = state.ownerReads;
@@ -241,15 +282,14 @@ try {
       await page.waitForTimeout(150);
       await assertInvalidated(page);
       await page.evaluate(next => window.testWallet.change(next), account);
-      await card(page).waitFor();
-      assert.equal(await card(page).isEnabled(), true, 'Returning wallet remains selectable after an interrupted check');
-      await chooseGenesis(page, state);
+      await assertSelectedGenesis(page);
+      assert.equal(await friendDialog(page).count(), 0, 'Returning account restores its own saved Friend after an interrupted check');
     }
     await assertClean(page, state);
     await page.close();
-    console.log(`${width}px: preview needs no wallet; verified Genesis, canonical art, undeployed care gates and read-only wallet flow passed`);
+    console.log(`${width}px: disconnected preview, silent owned Friend reload, canonical art, undeployed care gates and read-only wallet flow passed`);
   }
-  console.log('Wrong-network invalidation, reconnect, stale pending-selection rejection and recovery passed');
+  console.log('Wrong-network invalidation, automatic Friend restoration, persistent disconnect and stale pending-selection rejection passed');
 } finally {
   await browser.close();
 }

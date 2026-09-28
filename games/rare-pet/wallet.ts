@@ -1,4 +1,4 @@
-import { createFriendWalletSession } from '@rarefriends/friendsdk/wallet';
+import { createPetWalletSession } from './wallet-session';
 import {
   decodeGenerationSprites, FAMILIES_REGISTRY_ABI, GENERATION_SPRITE_MANIFEST, spriteFrame, type GenerationSprites,
 } from '@rarefriends/friendsdk/sprites';
@@ -39,8 +39,8 @@ export const RARE_PET_CHAIN = defineChain({
   blockExplorers: { default: { name: 'Blockscout', url: PET_DEPLOYMENT.explorer } },
 });
 
-/** FriendSDK owns provider discovery, connection, network changes and invalidation. */
-export const createPetWalletSession = createFriendWalletSession;
+/** FriendSDK owns connection and invalidation; the adapter remembers provider choice. */
+export { createPetWalletSession };
 export type PetWalletSession = ReturnType<typeof createPetWalletSession>;
 export type PetReadClient = GenesisClient;
 

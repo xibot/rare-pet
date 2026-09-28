@@ -205,9 +205,16 @@ async function fixture(width, height) {
 }
 
 async function openOwned(page) {
-  await page.locator('.nav-arcade').click();
-  await page.locator('.friend-picker:not(.preview-picker)').getByRole('button').filter({ has: page.locator('b', { hasText: /^Genesis #1$/ }) }).click();
-  await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Genesis #1');
+  if (await page.locator('.habitat-heading h2').innerText() !== 'Genesis #1') {
+    await page.locator('.nav-arcade').click();
+    await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Genesis #1' ||
+      [...document.querySelectorAll('.friend-picker:not(.preview-picker) button')].some(button =>
+        button.querySelector('b')?.textContent === 'Genesis #1' && !button.disabled));
+    if (await page.locator('.habitat-heading h2').innerText() !== 'Genesis #1') {
+      await page.locator('.friend-picker:not(.preview-picker)').getByRole('button').filter({ has: page.locator('b', { hasText: /^Genesis #1$/ }) }).click();
+      await page.waitForFunction(() => document.querySelector('.habitat-heading h2')?.textContent === 'Genesis #1');
+    }
+  }
   await page.getByRole('button', { name: 'Rare Wallet', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'RARE WALLET', exact: true });
   await dialog.getByText('Rare Token', { exact: true }).waitFor();

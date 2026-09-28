@@ -7,6 +7,7 @@ import { PetBrand, Icon, PetSprite, GenesisPetSprite, previewFriends, GENESIS_BO
 import { IslandPicker, HabitatIsland, FriendMotion } from './habitat';
 import { getIsland, restoreIsland, type Island } from './islands';
 import { createPetWalletSession, listOwnedPets, verifyPet, PetDiscoveryError, type PetCollection, type PetIdentity } from './wallet';
+import { isWalletMode, readSavedFriend, saveSelectedFriend } from './selection';
 import { applyCare, blankCare, DAY, PET_GRACE, actionAvailability, duration, projectCare, readPreview, savePreview, type CareAction, type CareState } from './care';
 import { readCare, writeCare } from './chain';
 import { CARE_ACTIONS, DEFAULT_CARE_RULES, actionGain, actionSchedule } from './care-policy';
@@ -103,12 +104,13 @@ function App() {
   const playCelebration = useRef(false);
   const op = useRef(0), selectionOp = useRef(0), lock = useRef(false), careRef = useRef(care);
   careRef.current = care;
-  const preview = selected.kind === 'preview', art = preview ? previewFriends[selected.index] : null;
+  const preview = !isWalletMode(wallet), art = preview ? previewFriends[lastPreview] : null;
   const live = selected.kind === 'owned' && selected.revision === wallet.revision && wallet.status === 'connected' ? selected.pet : null;
   const invalid = !preview && !live;
   const isGenesis = (art?.collection ?? live?.collection) === 'genesis';
-  const label = art?.label ?? live?.label ?? 'Choose your Friend';
-  const state = invalid ? blankCare() : preview ? projectCare(care, now) : care;
+  const reconnecting = wallet.status === 'connecting' || wallet.status === 'switching-network';
+  const label = art?.label ?? live?.label ?? (reconnecting ? 'Connecting your wallet…' : selecting ? 'Bringing your Friend home…' : 'Choose your Friend');
+  const state = preview ? projectCare(selected.kind === 'preview' ? care : readPreview(previewKey(art!)), now) : invalid ? blankCare() : care;
   const activeRules = state.policy?.rules ?? DEFAULT_CARE_RULES;
   const careKnown = preview || (!!state.policy && loadedCare);
   const careActions = actions.map(action => action.id === 'launch' ? action : { ...action,
@@ -135,8 +137,33 @@ function App() {
   }, [wallet.status]);
   useEffect(() => {
     op.current++; selectionOp.current++; lock.current = false; setPending(''); setSelecting(false); setConfirmation(null); setPlaying(false); setSharing(false); setRareWallet(false); setLaunching(false); playCelebration.current = false; setOwned([]); setDiscoveryError(''); clearReaction();
+    setError(''); setTx(''); setLoadedCare(false);
+    if (!isWalletMode(wallet)) {
+      const next = readPreview(previewKey(previewFriends[lastPreview]));
+      setSelected({ kind: 'preview', index: lastPreview }); careRef.current = next; setCare(next);
+      setPickerMode('preview');
+      if (wallet.status !== 'error') setPicker(false);
+      setNotice('Preview care is saved on this device.');
+      return;
+    }
+    setPickerMode('wallet');
+    if (wallet.status !== 'connected' || !wallet.account) return;
+    const saved = readSavedFriend(wallet.account);
+    if (!saved) { setPicker(true); setNotice('Choose a Rare Friend to bring home.'); return; }
+    const controller = new AbortController(), revision = wallet.revision, task = selectionOp.current;
+    setSelecting(true); setNotice('Restoring your Rare Friend and its onchain care…');
+    void verifyPet(saved.collection, saved.tokenId, wallet.account, controller.signal).then(pet => {
+      if (controller.signal.aborted || task !== selectionOp.current || session.getSnapshot().revision !== revision) return;
+      acceptOwned(pet, revision);
+    }).catch(() => {
+      if (controller.signal.aborted || task !== selectionOp.current) return;
+      setPicker(true); setError('Could not restore your last Friend. Refresh your Friends or choose one to verify again.');
+    }).finally(() => { if (!controller.signal.aborted && task === selectionOp.current) setSelecting(false); });
+    return () => controller.abort();
+  }, [wallet.revision, wallet.status, wallet.account]);
+  useEffect(() => {
     if (wallet.status !== 'connected' || !wallet.account) { setLoading(false); return; }
-    const controller = new AbortController(); setLoading(true);
+    const controller = new AbortController(); setLoading(true); setDiscoveryError('');
     listOwnedPets(wallet.account, controller.signal).then(pets => { if (!controller.signal.aborted) setOwned(pets); }).catch(cause => {
       if (controller.signal.aborted) return;
       if (cause instanceof PetDiscoveryError) setOwned([...cause.partialPets]);
@@ -181,12 +208,12 @@ function App() {
   }, [live, launchRefresh]);
 
   function choosePreview(index: number) {
-    if (lock.current) return;
+    if (lock.current || isWalletMode(session.getSnapshot())) return;
     setLastPreview(index); setPreviewCollection(previewFriends[index].collection); saveChoice('rarepet:friend:v1', `${previewFriends[index].collection}:${previewFriends[index].tokenId}`);
     const next = readPreview(previewKey(previewFriends[index]));
     op.current++; selectionOp.current++; setSelecting(false); setConfirmation(null); setSelected({ kind: 'preview', index }); careRef.current = next; setCare(next); setPicker(false); setPlaying(false); setError(''); setTx(''); clearReaction(); setNotice('Preview care is saved on this device.');
   }
-  function openPicker(mode: 'preview' | 'wallet') { setPickerMode(mode); setPicker(true); }
+  function openPicker(mode: 'preview' | 'wallet') { setPickerMode(isWalletMode(session.getSnapshot()) ? 'wallet' : mode); setPicker(true); }
   function openWallet() {
     if (lock.current) return;
     if (wallet.account) { setWalletAccount(true); return; }
@@ -196,6 +223,7 @@ function App() {
   function disconnectWallet() {
     setWalletAccount(false);
     session.disconnect();
+    choosePreview(lastPreview);
   }
   function clearReaction() { clearTimeout(reactionTimer.current); setReaction(''); }
   function animate(action: CareAction) {
@@ -215,6 +243,11 @@ function App() {
   }
   function chooseIsland(next: Island) { setIsland(next); saveChoice('rarepet:island:v1', next); }
   function changeBody() { const next = pickGenesisBody(bodyId); setBodyId(next); saveChoice('rarepet:body:v1', next); }
+  function acceptOwned(pet: PetIdentity, revision: number) {
+    saveSelectedFriend(pet.owner, pet);
+    op.current++; setSelected({ kind: 'owned', pet, revision }); careRef.current = blankCare(); setCare(careRef.current); setLoadedCare(false); setPicker(false); setPlaying(false); setTx(''); clearReaction();
+    setNotice(careContract ? 'Your Friend is home. Make today a rare one.' : 'Friend verified. Onchain care is not configured in this build.');
+  }
   async function chooseOwned(which: PetCollection, tokenId: string) {
     if (lock.current) return;
     if (!wallet.account || wallet.status !== 'connected') return;
@@ -222,8 +255,7 @@ function App() {
     try {
       const pet = await verifyPet(which, tokenId, wallet.account);
       if (session.getSnapshot().revision !== revision || task !== selectionOp.current) return;
-      op.current++; setSelected({ kind: 'owned', pet, revision }); careRef.current = blankCare(); setCare(careRef.current); setPicker(false); setPlaying(false); setTx(''); clearReaction();
-      setNotice(careContract ? 'Your Friend is home. Make today a rare one.' : 'Friend verified. Onchain care is not configured in this build.');
+      acceptOwned(pet, revision);
     } catch (cause) { if (task === selectionOp.current) setError(cause instanceof Error ? cause.message : 'Could not verify this Friend.'); }
     finally { if (task === selectionOp.current) setSelecting(false); }
   }
@@ -252,7 +284,7 @@ function App() {
   async function beforeRun() {
     if (preview && !actionAvailability(careRef.current, 'play', Math.floor(Date.now() / 1000)).remaining) throw new Error('All three preview Play slots are used. A slot returns 24 hours after its completed run.');
     if (preview) return;
-    if (!live || !session.getSnapshot().account || session.getSnapshot().revision !== selected.revision) throw new Error('Select your Friend again.');
+    if (!live || selected.kind !== 'owned' || !session.getSnapshot().account || session.getSnapshot().revision !== selected.revision) throw new Error('Select your Friend again.');
     const check = await verifyPet(live.collection, live.tokenId, live.owner);
     if (!check.rushEligible || session.getSnapshot().revision !== selected.revision) throw new Error('This Friend is not currently eligible for Rare Rush.');
   }
@@ -261,7 +293,7 @@ function App() {
     <div className="site-header-shell"><header className="site-header"><a className="site-logo" href="/" aria-label="RarePet home"><PetBrand/></a><nav aria-label="Main navigation"><button className="nav-how-to-play" onClick={() => setRules(true)}>HOW TO CARE</button><a className="nav-docs" href="/docs/">DOCS</a><button className="nav-arcade" onClick={openWallet} aria-haspopup="dialog" aria-label={wallet.account ? 'Manage connected wallet' : undefined} disabled={!!pending || wallet.status === 'connecting' || wallet.status === 'switching-network'}>{wallet.status === 'connected' && wallet.account ? `${wallet.account.slice(0, 6)}…${wallet.account.slice(-4)}` : wallet.status === 'wrong-network' ? 'SWITCH NETWORK' : wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET'} <span aria-hidden="true">↗</span></button></nav></header></div>
     <main>
       <div className="page-title"><div><span className="eyebrow">A FRIEND FOR EVERY DAY</span><h1>My RarePet<span>.</span></h1></div><button className="change-button" disabled={!!pending} onClick={() => openPicker(preview ? 'preview' : 'wallet')}>CHOOSE FRIEND <span>⇄</span></button></div>
-      <div className="mode-bar"><div className="mode-switch" role="group" aria-label="Pet mode"><button aria-pressed={preview} disabled={!!pending} onClick={() => { if (!preview) choosePreview(lastPreview); }}>PREVIEW</button><button aria-pressed={!preview} disabled={!!pending} onClick={() => openPicker('wallet')}>MY WALLET <span aria-hidden="true">↗</span></button></div><p>{preview ? 'Try the daily routine. No wallet needed.' : 'Your own Friend. Your daily ritual.'}</p>{preview && <button className="reset-preview" onClick={resetPreview}>RESET PREVIEW ↻</button>}</div>
+      <div className="mode-bar"><div className="mode-switch" role="group" aria-label="Pet mode"><button aria-pressed={preview} disabled={!!pending || reconnecting} title={preview ? undefined : 'Disconnect your wallet to use Preview'} onClick={() => { if (!preview) setWalletAccount(true); }}>PREVIEW</button><button aria-pressed={!preview} disabled={!!pending} onClick={() => openPicker('wallet')}>MY WALLET <span aria-hidden="true">↗</span></button></div><p>{preview ? 'Try the daily routine. No wallet needed.' : reconnecting ? 'Reconnecting your wallet…' : selecting ? 'Bringing your Friend home…' : 'Your own Friend. Your daily ritual.'}</p>{preview && <button className="reset-preview" onClick={resetPreview}>RESET PREVIEW ↻</button>}</div>
       <section className="pet-shell" aria-label="RarePet dashboard">
         <div className="shell-bar"><span><span className="tiny-cross">✦</span> {preview ? 'PREVIEW HABITAT' : 'YOUR FRIEND’S HABITAT'}</span><span className="mode-tag">{preview ? 'PREVIEW MODE' : careContract ? 'ONCHAIN CARE' : 'CARE NOT CONFIGURED'}</span></div>
         <div className="care-layout">
@@ -275,14 +307,14 @@ function App() {
             return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id === 'launch' ? setLaunching(true) : act(a.id)} aria-label={`${a.name}, ${practice ? 'practice only, no onchain XP' : a.gain}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{practice ? 'XP VERIFIER COMING SOON' : a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && !practice && availability.remaining > 0 && availability.remaining < activeRules.actions.play.dailyLimit && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
           })}<button className="care-action rare-wallet-action" disabled={!!pending || invalid} onClick={() => setRareWallet(true)} aria-label="Rare Wallet"><span className="action-icon"><Icon name="wallet"/></span><span className="action-text"><strong>Rare Wallet</strong><small>YOUR FRIEND’S ASSETS</small></span><span className="action-timing"><b>OPEN WALLET ↗</b></span></button><button className="care-action rare-wallet-action market-action" disabled={!!pending} onClick={() => setMarket(true)} aria-label="Buy / Sell"><span className="action-icon"><Icon name="trade"/></span><span className="action-text"><strong>Buy / Sell</strong><small>RAREPET TOKENS</small></span><span className="action-timing"><b>OPEN MARKET ↗</b></span></button><div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
           <div className={`habitat ${reaction ? `reaction-${reaction}` : ''}`}>
-            <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'WALLET CHANGED'}</span><h2>{label}</h2></div><div className="friend-status-actions"><span className="friend-status">{due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span><button className="habitat-share-button" disabled={invalid || !!pending} onClick={() => setSharing(true)} aria-label="Share your Rare Friend">SHARE <span aria-hidden="true">↗</span></button></div></div>
-            <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
+            <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'MY WALLET'}</span><h2>{label}</h2></div><div className="friend-status-actions"><span className="friend-status">{!careKnown ? invalid ? 'CHOOSE FRIEND' : 'LOADING CARE' : due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span><button className="habitat-share-button" disabled={invalid || !!pending} onClick={() => setSharing(true)} aria-label="Share your Rare Friend">SHARE <span aria-hidden="true">↗</span></button></div></div>
+            <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={invalid ? reconnecting ? 'welcome back. one moment…' : selecting ? 'on my way home…' : 'choose your rare friend.' : reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
             <div className="habitat-customize"><IslandPicker value={island} onChange={chooseIsland}/>{isGenesis && <button className="change-body" onClick={changeBody} title="Try one of 36 cosmetic bodies">CHANGE BODY <span aria-hidden="true">↻</span><small>36 COSMETIC BODIES</small></button>}</div>
-            <div className="bond-status"><span className="bond-heart">♡</span><div><b>{due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. This streak’s grace deadline: ${new Date(graceDeadline * 1000).toLocaleString()}.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{due > 0 ? duration(due) : 'PET ME'}</span></div>
+            <div className="bond-status"><span className="bond-heart">♡</span><div><b>{!careKnown ? 'Your care stays with your Friend.' : due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{!careKnown ? invalid ? 'Choose your Friend to see its bond and countdowns.' : 'Loading your onchain bond and countdowns…' : due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. This streak’s grace deadline: ${new Date(graceDeadline * 1000).toLocaleString()}.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{!careKnown ? '—' : due > 0 ? duration(due) : 'PET ME'}</span></div>
           </div>
         </div>
-        <div className="trait-grid" aria-label="Pet traits">{statNames.map((name, i) => <div className={`trait ${name === 'Rarity' ? 'rarity-trait' : ''}`} key={name}><span>{name}</span><strong>{invalid ? '—' : name === 'Brain' && !preview ? launchpadContract ? launchConfig?.brain.toLocaleString() ?? '—' : '0' : state[name.toLowerCase() as TraitKey].toLocaleString()}{name === 'Experience' && <small>XP</small>}</strong><div className="trait-meter" aria-hidden="true">{Array.from({ length: 10 }, (_, j) => <i key={j} className={j < ((name === 'Brain' && !preview ? Number(launchConfig?.brain ?? 0n) : state[name.toLowerCase() as TraitKey]) === 0 ? 0 : Math.max(1, Math.min(10, (name === 'Brain' && !preview ? Number(launchConfig?.brain ?? 0n) : state[name.toLowerCase() as TraitKey]) / (i === 3 ? 10 : 2)))) ? 'filled' : ''}/>)}</div></div>)}</div>
-        <div className="streak-row"><div className="streak-heading"><span>✦</span><div><strong>{state.streak} PET{state.streak !== 1 ? 'S' : ''} IN A ROW</strong><small>Keep the bond. Grow your rarity.</small></div></div><div className="streak-days" aria-label={`${rarityRemaining} more pets toward the next rarity reward`}>{Array.from({ length: Math.min(7, nextRarityAt) }, (_, i) => <span key={i} className={i < Math.max(0, Math.min(7, nextRarityAt) - rarityRemaining) ? 'complete' : ''}>{i === Math.min(7, nextRarityAt) - 1 ? '✦' : String(i + 1).padStart(2, '0')}</span>)}</div><span className="streak-prize">{careKnown ? `${rarityRemaining} MORE PET${rarityRemaining === 1 ? '' : 'S'}` : 'AWAITING POLICY'} <b>{careKnown ? `+${nextRarityPoints} RARITY` : '—'}</b></span></div>
+        <div className="trait-grid" aria-label="Pet traits">{statNames.map((name, i) => <div className={`trait ${name === 'Rarity' ? 'rarity-trait' : ''}`} key={name}><span>{name}</span><strong>{invalid || !preview && !careKnown && name !== 'Brain' ? '—' : name === 'Brain' && !preview ? launchpadContract ? launchConfig?.brain.toLocaleString() ?? '—' : '0' : state[name.toLowerCase() as TraitKey].toLocaleString()}{name === 'Experience' && <small>XP</small>}</strong><div className="trait-meter" aria-hidden="true">{Array.from({ length: 10 }, (_, j) => <i key={j} className={j < ((name === 'Brain' && !preview ? Number(launchConfig?.brain ?? 0n) : state[name.toLowerCase() as TraitKey]) === 0 ? 0 : Math.max(1, Math.min(10, (name === 'Brain' && !preview ? Number(launchConfig?.brain ?? 0n) : state[name.toLowerCase() as TraitKey]) / (i === 3 ? 10 : 2)))) ? 'filled' : ''}/>)}</div></div>)}</div>
+        <div className="streak-row"><div className="streak-heading"><span>✦</span><div><strong>{careKnown ? `${state.streak} PET${state.streak !== 1 ? 'S' : ''} IN A ROW` : 'LOADING YOUR STREAK'}</strong><small>Keep the bond. Grow your rarity.</small></div></div><div className="streak-days" aria-label={`${rarityRemaining} more pets toward the next rarity reward`}>{Array.from({ length: Math.min(7, nextRarityAt) }, (_, i) => <span key={i} className={i < Math.max(0, Math.min(7, nextRarityAt) - rarityRemaining) ? 'complete' : ''}>{i === Math.min(7, nextRarityAt) - 1 ? '✦' : String(i + 1).padStart(2, '0')}</span>)}</div><span className="streak-prize">{careKnown ? `${rarityRemaining} MORE PET${rarityRemaining === 1 ? '' : 'S'}` : 'AWAITING POLICY'} <b>{careKnown ? `+${nextRarityPoints} RARITY` : '—'}</b></span></div>
         <details className="care-ledger"><summary>{preview ? 'PREVIEW CARE HISTORY' : 'PERMANENT CARE RECORD'} <span>{preview ? 'THIS DEVICE' : state.policy ? `RULES V${state.policy.version}` : 'ONCHAIN'}</span></summary>
           {careKnown && state.lifetime ? <div className="care-ledger-content"><p>{preview ? 'Practice totals saved on this device. Reset Preview clears them; they are not onchain.' : 'Lifetime earned points and action records stay with this Friend. Missed care can reduce current kinship and reset streak rarity; it never erases earned totals.'}</p>
             {!state.lifetime.complete && <p className="care-ledger-note">Your older preview traits are preserved. Totals below track new actions since this history feature was added; older lifetime totals are unknown.</p>}
@@ -294,7 +326,7 @@ function App() {
           </div> : <div className="care-ledger-content"><p>{careContract ? 'Select a Friend and load its verified care record.' : 'Onchain care history is not configured in this build. Preview totals stay on this device.'}</p></div>}
         </details>
       </section>
-      <div className="activity-line"><span className="activity-label">{pending ? 'PENDING' : error ? 'NOTICE' : 'PET LOG'}</span><p role={error ? 'alert' : 'status'}>{pending || error || (invalid ? 'Your wallet changed. Choose your Friend again.' : notice)}</p><a className="activity-docs" href="/docs/">DOCS ↗</a></div>
+      <div className="activity-line"><span className="activity-label">{pending ? 'PENDING' : error ? 'NOTICE' : 'PET LOG'}</span><p role={error ? 'alert' : 'status'}>{pending || error || (reconnecting ? 'Reconnecting your wallet…' : selecting ? 'Restoring your Rare Friend and its onchain care…' : wallet.status === 'wrong-network' ? 'Switch your wallet to Robinhood to load your Friend.' : invalid ? 'Choose a Rare Friend from your wallet.' : notice)}</p><a className="activity-docs" href="/docs/">DOCS ↗</a></div>
       {tx && <p className="transaction-link"><a href={`https://robinhoodchain.blockscout.com/tx/${tx}`} target="_blank" rel="noreferrer">View care transaction ↗</a></p>}
       {wallet.error && <p className="inline-error" role="alert">{wallet.error}</p>}
       {wallet.status === 'unavailable' && !preview && <p className="inline-note">Use a browser with a wallet extension, or open RarePet in your wallet’s browser. The preview works without a wallet.</p>}
@@ -313,11 +345,11 @@ function App() {
     {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => setLaunchRefresh(value => value + 1)}/>}
     {rareWallet && (art ?? live) && <RareWalletDialog key={`${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setRareWallet(false)} chooseFriend={() => { setRareWallet(false); openPicker('wallet'); }}/>}
     {picker && <Dialog title="Choose your Rare Friend" className="friend-picker-dialog" close={() => setPicker(false)}><div className="picker-content">
-      <div className="picker-mode-switch" role="group" aria-label="Choose Friend source"><button aria-pressed={pickerMode === 'preview'} onClick={() => setPickerMode('preview')}>PREVIEW FRIENDS</button><button aria-pressed={pickerMode === 'wallet'} onClick={() => setPickerMode('wallet')}>MY WALLET</button></div>
-      {pickerMode === 'preview' ? <>
+      <div className="picker-mode-switch" role="group" aria-label="Choose Friend source"><button aria-pressed={preview && pickerMode === 'preview'} disabled={!preview} title={preview ? undefined : 'Disconnect your wallet to choose a preview Friend'} onClick={() => setPickerMode('preview')}>PREVIEW FRIENDS</button><button aria-pressed={!preview || pickerMode === 'wallet'} onClick={() => setPickerMode('wallet')}>MY WALLET</button></div>
+      {preview && pickerMode === 'preview' ? <>
         <p>Meet a Genesis or Generations Friend. Try care and Rare Rush without connecting a wallet.</p>
         <div className="collection-switch" role="group" aria-label="Preview collection">{(['generations', 'genesis'] as const).map(which => <button key={which} aria-pressed={previewCollection === which} onClick={() => setPreviewCollection(which)}>{which === 'genesis' ? 'Genesis' : 'Generations'}</button>)}</div>
-        <div className="friend-picker preview-picker">{previewFriends.map((friend, index) => friend.collection === previewCollection && <button key={`${friend.collection}:${friend.tokenId}`} onClick={() => choosePreview(index)} aria-pressed={preview && selected.index === index}>{friend.collection === 'genesis' ? <GenesisPetSprite portraitUrl={friend.image} bodyId={bodyId}/> : <PetSprite sprites={friend.sprites} frame={0}/>}<b>{friend.label}</b><span>PREVIEW</span></button>)}</div>
+        <div className="friend-picker preview-picker">{previewFriends.map((friend, index) => friend.collection === previewCollection && <button key={`${friend.collection}:${friend.tokenId}`} onClick={() => choosePreview(index)} aria-pressed={preview && lastPreview === index}>{friend.collection === 'genesis' ? <GenesisPetSprite portraitUrl={friend.image} bodyId={bodyId}/> : <PetSprite sprites={friend.sprites} frame={0}/>}<b>{friend.label}</b><span>PREVIEW</span></button>)}</div>
         <p className="inline-note">Preview care stays on this device. Genesis bodies and island floors are cosmetic.</p>
       </> : <>
         <p>Connect your wallet and bring home a Genesis or Generations Rare Friend.</p>
