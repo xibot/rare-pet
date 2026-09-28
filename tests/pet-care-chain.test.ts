@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { decodeFunctionData, encodeFunctionResult, encodeEventTopics, encodeAbiParameters, zeroAddress } from 'viem';
+import { createPublicClient, http, decodeFunctionData, encodeFunctionResult, encodeEventTopics, encodeAbiParameters, zeroAddress } from 'viem';
 import { DEFAULT_CARE_RULES, CARE_ACTIONS } from '../games/rare-pet/care-policy.ts';
 
 // Exercise the actual reader with a transport fixture; no wallet or live RPC is used.
@@ -45,13 +45,14 @@ function fixture({ reorg = false, wrongPolicy = false } = {}) {
     } else throw new Error(`Unexpected RPC method ${request.method}`);
     return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }), { headers: { 'content-type': 'application/json' } });
   };
-  return { calls, restore() { globalThis.fetch = original; } };
+  const client = createPublicClient({ cacheTime: 0, transport: http('https://rpc.rarepet.test', { retryCount: 0 }) });
+  return { calls, client, restore() { globalThis.fetch = original; } };
 }
 
 test('live reader pins rules, traits, availability, lifetime and history to one canonical block', async () => {
   const f = fixture();
   try {
-    const state = await chain.readCare({ contract: collection, tokenId: '1', owner });
+    const state = await chain.readCare({ contract: collection, tokenId: '1', owner }, undefined, f.client);
     assert.equal(state.policy.version, 2);
     assert.equal(state.policy.blockNumber, '100');
     assert.equal(state.policy.petSchedule.graceDeadline, 173700);
@@ -69,7 +70,7 @@ test('live reader pins rules, traits, availability, lifetime and history to one 
 test('reader rejects incompatible policy and reorg snapshots without granting default traits', async () => {
   for (const options of [{ wrongPolicy: true }, { reorg: true }]) {
     const f = fixture(options);
-    try { await assert.rejects(() => chain.readCare({ contract: collection, tokenId: '1', owner })); }
+    try { await assert.rejects(() => chain.readCare({ contract: collection, tokenId: '1', owner }, undefined, f.client)); }
     finally { f.restore(); }
   }
 });

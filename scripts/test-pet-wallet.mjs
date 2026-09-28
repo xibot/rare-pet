@@ -3,8 +3,8 @@ import { chromium } from 'playwright';
 import { decodeFunctionData, encodeFunctionResult, encodeEventTopics, parseAbi, zeroAddress } from 'viem';
 
 // Test-only provider and RPC fixtures. The production app still verifies canonical ownership.
-const origin = process.env.RAREPET_TEST_URL || 'http://127.0.0.1:4175';
-const rpc = 'https://rpc.mainnet.chain.robinhood.com';
+const origin = new URL(process.env.RAREPET_TEST_URL || 'http://127.0.0.1:4175').origin;
+const rpc = `${origin}/api/rpc`;
 const account = '0x1111111111111111111111111111111111111111';
 const other = '0x2222222222222222222222222222222222222222';
 const tba = '0x3333333333333333333333333333333333333333';
@@ -57,8 +57,10 @@ async function fixture(width = 1100, height = 900) {
   }, { account });
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (url.origin === origin || url.protocol === 'data:') return route.continue();
-    if (url.origin !== rpc) { state.unexpected.push(url.href); return route.abort(); }
+    if (url.href !== rpc) {
+      if (url.origin === origin || url.protocol === 'data:') return route.continue();
+      state.unexpected.push(url.href); return route.abort();
+    }
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const call = route.request().postDataJSON();

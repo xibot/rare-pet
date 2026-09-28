@@ -120,6 +120,8 @@ npm run dev
 
 Open [localhost:4175](http://localhost:4175). The Preview demo and build need no credentials. Owned-wallet features require a compatible wallet and the documented network/configuration.
 
+Onchain reads use the server-only `RAREPET_RPC_URL` through `/api/rpc`. The existing `RAREPET_SNAPSHOT_RPC_URL` setting is also accepted; `npm run dev` loads the ignored `.env.holder-archive.local` file when present. Keep RPC credentials out of client code and set them as sensitive Vercel environment variables. See the [private RPC setup](docs/DEVELOPMENT.md#private-rpc) for deployment and local checks.
+
 ```sh
 npm run typecheck
 npm run typecheck:server
@@ -131,7 +133,7 @@ The production build is written to `dist-pet/`, including the main app and `/doc
 
 ## Explore the code
 
-RarePet uses **TypeScript, React, SVG rendering, FriendSDK and viem**. Solidity contracts support the care ledger and Doppler launch router; server routes handle launch images and quote pricing.
+RarePet uses **TypeScript, React, SVG rendering, FriendSDK and viem**. Solidity contracts support the care ledger and Doppler launch router; server routes handle onchain reads, launch images, quote pricing and swap routing.
 
 | Path | Purpose |
 | --- | --- |
@@ -139,7 +141,7 @@ RarePet uses **TypeScript, React, SVG rendering, FriendSDK and viem**. Solidity 
 | [Embedded game](games/rare-rush/) | Game engine, canonical artwork, bodies and fonts |
 | [`contracts/rare-pet/`](contracts/rare-pet/) | Deployed care ledger, permanent history and future completion-signature rules |
 | [`contracts/rare-launchpad/`](contracts/rare-launchpad/) | Deployed launch router, tests and verification records |
-| [`api/`](api/) | Launch-image publication and quote pricing |
+| [`api/`](api/) | Private RPC relay, launch-image publication, quote pricing and swap routing |
 | [`tests/`](tests/) | Care, gameplay, identity, launch and wallet checks |
 | [`scripts/`](scripts/) | Build tools, browser checks and read-only activation verification |
 | [`docs/`](docs/) | Developer setup and implementation notes |

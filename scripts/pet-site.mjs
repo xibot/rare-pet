@@ -26,11 +26,12 @@ export async function buildPetSite({ outdir = path.join(project, 'dist-pet'), wa
 }
 export function createPetServer(outdir) {
   const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' };
+  const apiEndpoints = { '/api/rpc': '../api/rpc.ts', '/api/launch-quotes': '../api/launch-quotes.ts', '/api/launch-image': '../api/launch-image.ts', '/api/market-routing': '../api/market-routing.ts' };
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (url.pathname === '/api/launch-quotes' || url.pathname === '/api/launch-image' || url.pathname === '/api/market-routing') {
-        const endpoint = url.pathname === '/api/market-routing' ? '../api/market-routing.ts' : url.pathname === '/api/launch-quotes' ? '../api/launch-quotes.ts' : '../api/launch-image.ts';
+      const endpoint = apiEndpoints[url.pathname];
+      if (endpoint) {
         const handler = (await import(endpoint)).default;
         await handler(req, res); return;
       }

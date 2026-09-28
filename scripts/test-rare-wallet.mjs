@@ -3,9 +3,9 @@ import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { decodeFunctionData, encodeFunctionResult, encodeEventTopics, encodeAbiParameters, parseAbi, padHex, toHex, zeroAddress } from 'viem';
 
-// Every non-local request and every wallet method is intercepted. No real wallet or transaction is used.
-const origin = process.env.RAREPET_TEST_URL || 'http://127.0.0.1:4175';
-const rpc = 'https://rpc.mainnet.chain.robinhood.com';
+// Relay requests and wallet methods are fixtures; all non-local requests are blocked.
+const origin = new URL(process.env.RAREPET_TEST_URL || 'http://127.0.0.1:4175').origin;
+const rpc = `${origin}/api/rpc`;
 const account = '0x1111111111111111111111111111111111111111';
 const other = '0x2222222222222222222222222222222222222222';
 const tba = '0x3333333333333333333333333333333333333333';
@@ -186,8 +186,10 @@ async function fixture(width, height) {
   }
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (url.origin === origin || url.protocol === 'data:') return route.continue();
-    if (url.origin !== rpc) { state.unexpected.push(url.href); return route.abort(); }
+    if (url.href !== rpc) {
+      if (url.origin === origin || url.protocol === 'data:') return route.continue();
+      state.unexpected.push(url.href); return route.abort();
+    }
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const body = route.request().postDataJSON();

@@ -4,8 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createPublicClient, http, parseAbi, type Address, type Hex } from 'viem';
 import { put, head, get, BlobNotFoundError } from '@vercel/blob';
 import { launchImageMessage, type LaunchImageAuthorization } from '../games/rare-pet/launch-upload-message.ts';
+import { getPrivateRpcUrl } from '../server/rarepet-rpc.ts';
 
-const RPC = 'https://rpc.mainnet.chain.robinhood.com';
 const COLLECTIONS = ['0x116eaa62241751e0c98da43d458600c6c17cd361', '0x14c49e6118f46525de9ab41a51cbaa3c6ebf181d'];
 const ABI = parseAbi(['function ownerOf(uint256 id) view returns(address)', 'function tokenBoundAccount(uint256 id) view returns(address)']);
 const MAX_BYTES = 1024 * 1024, MAX_BODY = 1_500_000, DAILY_LIMIT = 5, GLOBAL_DAILY_LIMIT = 100;
@@ -199,7 +199,7 @@ export default async function handler(req: IncomingMessage & { body?: unknown },
   if (!origins.has(origin) || !req.headers['content-type']?.startsWith('application/json')) { res.writeHead(403).end(JSON.stringify({ error: 'Use the RarePet launch form to prepare an image.' })); return; }
   const abort = new AbortController(), timeout = setTimeout(() => abort.abort(), 25_000);
   try {
-    const client = createPublicClient({ transport: http(RPC, { timeout: 12_000, retryCount: 0, fetchOptions: { signal: abort.signal } }), cacheTime: 0 });
+    const client = createPublicClient({ transport: http(getPrivateRpcUrl(), { timeout: 12_000, retryCount: 0, fetchOptions: { signal: abort.signal } }), cacheTime: 0 });
     const upload = createLaunchImageUploader({ client, storage: createLaunchImageStorage(abort.signal) });
     const result = await upload(await readBody(req), origin);
     res.writeHead(200).end(JSON.stringify(result));

@@ -1,6 +1,6 @@
-import { createPublicClient, createWalletClient, custom, http, parseAbi, parseEventLogs, type Address, type Hex, type TransactionReceipt } from 'viem';
+import { createWalletClient, custom, parseAbi, parseEventLogs, type Address, type Hex, type PublicClient, type TransactionReceipt } from 'viem';
 import type { FriendWalletSession } from '@rarefriends/friendsdk/wallet';
-import { RARE_PET_CHAIN, verifyPet, type PetIdentity } from './wallet';
+import { createPetPublicClient, RARE_PET_CHAIN, verifyPet, type PetIdentity } from './wallet';
 import { careContract } from './config';
 import { blankCare, type CareState } from './care';
 import { CARE_ACTIONS, careNumber, decodeCareRules } from './care-policy';
@@ -24,7 +24,8 @@ export const careAbi = parseAbi([
   'function poop(address collection,uint256 tokenId,uint256 expectedRuleVersion)',
   'event CaredFor(address indexed collection,uint256 indexed tokenId,address indexed owner,uint8 action,uint256 timestamp)',
 ]);
-const client = createPublicClient({ chain: RARE_PET_CHAIN, transport: http(undefined, { timeout: 12_000, retryCount: 1 }) });
+const client = createPetPublicClient();
+type CareReadClient = Pick<PublicClient, 'getBlock' | 'getCode' | 'readContract'>;
 type OnchainCareAction = 'pet' | 'feed' | 'poop';
 const actionCode = { pet: 0, feed: 1, poop: 3 } as const;
 const equal = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -54,24 +55,25 @@ export function verifyCareReceipt(receipt: TransactionReceipt, hash: Hex, contra
   }
 }
 
-export async function readCare(pet: PetIdentity, blockNumber?: bigint): Promise<CareState> {
+/** Node verification tools inject an explicit read client instead of resolving a browser URL. */
+export async function readCare(pet: PetIdentity, blockNumber?: bigint, readClient: CareReadClient = client): Promise<CareState> {
   if (!careContract) throw new Error('Onchain care is not configured in this build. You can explore the preview.');
-  const block = await client.getBlock(blockNumber === undefined ? { blockTag: 'latest' } : { blockNumber });
+  const block = await readClient.getBlock(blockNumber === undefined ? { blockTag: 'latest' } : { blockNumber });
   if (!block.hash || block.number === null) throw new Error('The care snapshot block is not confirmed.');
   const fixed = { address: careContract, abi: careAbi, blockNumber: block.number } as const;
   const args = [pet.contract, BigInt(pet.tokenId)] as const;
   const [code, chainId, version, value, lifetime, count, schedule, availability] = await Promise.all([
-    client.getCode({ address: careContract, blockNumber: block.number }),
-    client.readContract({ ...fixed, functionName: 'CHAIN_ID' }),
-    client.readContract({ ...fixed, functionName: 'currentRuleVersion' }),
-    client.readContract({ ...fixed, functionName: 'getPet', args }),
-    client.readContract({ ...fixed, functionName: 'getLifetime', args }),
-    client.readContract({ ...fixed, functionName: 'actionCount', args }),
-    client.readContract({ ...fixed, functionName: 'getPetSchedule', args }),
-    Promise.all(CARE_ACTIONS.map((_, action) => client.readContract({ ...fixed, functionName: 'actionAvailability', args: [...args, action] }))),
+    readClient.getCode({ address: careContract, blockNumber: block.number }),
+    readClient.readContract({ ...fixed, functionName: 'CHAIN_ID' }),
+    readClient.readContract({ ...fixed, functionName: 'currentRuleVersion' }),
+    readClient.readContract({ ...fixed, functionName: 'getPet', args }),
+    readClient.readContract({ ...fixed, functionName: 'getLifetime', args }),
+    readClient.readContract({ ...fixed, functionName: 'actionCount', args }),
+    readClient.readContract({ ...fixed, functionName: 'getPetSchedule', args }),
+    Promise.all(CARE_ACTIONS.map((_, action) => readClient.readContract({ ...fixed, functionName: 'actionAvailability', args: [...args, action] }))),
   ]);
   if (!code || code === '0x' || chainId !== BigInt(RARE_PET_CHAIN.id) || version === 0n) throw new Error('This is not a compatible RarePet care contract.');
-  const rules = decodeCareRules(await client.readContract({ ...fixed, functionName: 'rules', args: [version] }));
+  const rules = decodeCareRules(await readClient.readContract({ ...fixed, functionName: 'rules', args: [version] }));
   const { hasPet, hasFed, hasPooped, hasLaunched, playTimes, playCount, ...scalar } = value;
   const number = (value: unknown) => careNumber(value);
   if (playCount > 32n || playTimes.length !== number(playCount)) throw new Error('The care contract returned an invalid play history.');
@@ -79,7 +81,7 @@ export async function readCare(pet: PetIdentity, blockNumber?: bigint): Promise<
   const total = number(count);
   const history = await Promise.all(Array.from({ length: Math.min(total, 8) }, async (_, index) => {
     const sequence = total - Math.min(total, 8) + index + 1;
-    const record = await client.readContract({ ...fixed, functionName: 'actionRecord', args: [...args, BigInt(sequence)] });
+    const record = await readClient.readContract({ ...fixed, functionName: 'actionRecord', args: [...args, BigInt(sequence)] });
     if (record.action > 3 || record.ruleVersion < 1n || record.ruleVersion > version || record.timestamp > block.timestamp) throw new Error('The care contract returned an invalid action record.');
     return { sequence, action: CARE_ACTIONS[record.action], timestamp: number(record.timestamp), owner: record.owner,
       ruleVersion: number(record.ruleVersion), points: number(record.points), secondaryPoints: number(record.secondaryPoints), rarityPoints: number(record.rarityPoints) };
@@ -89,7 +91,7 @@ export async function readCare(pet: PetIdentity, blockNumber?: bigint): Promise<
     if (remaining > BigInt(rules.actions[action].dailyLimit) || (!enabled && remaining > 0n) || (!rules.actions[action].enabled && enabled)) throw new Error('The care contract returned incompatible availability.');
     return [action, { remaining: number(remaining), readyAt: number(readyAt), enabled }];
   })) as NonNullable<CareState['policy']>['availability'];
-  const check = await client.getBlock({ blockNumber: block.number });
+  const check = await readClient.getBlock({ blockNumber: block.number });
   if (!check.hash || !equal(check.hash, block.hash)) throw new Error('The care snapshot changed. Refresh before taking an action.');
   return { ...blankCare(), ...data,
     lastPetAt: hasPet ? number(value.lastPetAt) : -1,

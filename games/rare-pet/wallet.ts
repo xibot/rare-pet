@@ -44,11 +44,11 @@ export const createPetWalletSession = createFriendWalletSession;
 export type PetWalletSession = ReturnType<typeof createPetWalletSession>;
 export type PetReadClient = GenesisClient;
 
-/** Public reads only. This client never receives a wallet provider or signer. */
+/** Browser reads use the same-origin relay. Wallet network configuration stays public. */
 export function createPetPublicClient(signal?: AbortSignal) {
   return createPublicClient({
     chain: RARE_PET_CHAIN, cacheTime: 0,
-    transport: http(PET_DEPLOYMENT.rpcUrl, { retryCount: 0, timeout: 12_000, fetchOptions: { signal } }),
+    transport: http('/api/rpc', { retryCount: 0, timeout: 12_000, fetchOptions: { signal } }),
   });
 }
 

@@ -26,6 +26,18 @@ npm run dev
 
 This is the standalone RarePet repository. The app lives in `games/rare-pet`; the minimum Rare Rush engine, identity reader, fonts, and canonical preview artwork needed by RarePet are retained under `games/rare-rush`. `npm run build` creates the static distributable in `dist-pet` with the main app and `/docs/` page. The local server supports `/docs`, `/docs/` and direct reloads; both pages load the shared root-level assets. Rare Launchpad opens through the main app’s Daily Care **Launch** action as a modal. Legacy `/launch`, `/launch/` and `/launch/index.html` routes redirect home; no standalone launch page is built. The included `vercel.json` uses `npm ci`, `npm run build`, and that output directory; it does not deploy anything. Live care builds configure the checked care deployment address described below. The deployed launch router is configured in production with the confirmed 85/10/5 fee split; runtime/configuration checks and deployment details are recorded below.
 
+## Private RPC
+
+Set `RAREPET_RPC_URL` to the authenticated Robinhood mainnet HTTPS RPC endpoint in the server environment. The existing `RAREPET_SNAPSHOT_RPC_URL` is accepted as a fallback configuration name. `npm run dev` loads `.env.holder-archive.local` if present; keep that file and all credentials untracked. Preview mode and static builds do not require the credential.
+
+On Vercel, store this variable as **Sensitive**, in each authorized deployment environment. Never use a public frontend environment-variable prefix or inject the URL into an esbuild definition. `wallet.ts` sends app reads to `/api/rpc`; care, ownership, balances, inventory, launch history, quote verification, fee checks and transaction confirmation share this path. Launch-image ownership/signature verification uses the same private endpoint directly from the server. The embedded game reuses the selected Friend's verified sprites.
+
+The relay accepts a fixed set of read/simulation methods and forwards only to the configured endpoint. It rejects signing, transaction submission, arbitrary RPC destinations, state overrides and oversized requests. Responses are not cached; upstream error text and credentials are not exposed to browsers. Its concurrency and request limits are per function instance, not a deployment-wide quota. Configure provider usage limits or edge rate controls separately if needed.
+
+The connected wallet still controls signing, sending and its own network RPC. Wallet asset discovery may also use Blockscout, and external price/routing services retain their existing APIs. There is no automatic public RPC fallback: a private-provider failure is visible so incomplete reads are not mistaken for empty ownership or balances.
+
+Node verification tools should inject an explicit read client into reader factories or `readCare(pet, blockNumber, client)`. Browser clients use a relative same-origin URL, which cannot be fetched directly by Node without an origin. Keep provider URLs out of test output and artifacts.
+
 ## Client implementation
 
 - Explicit Preview and My Wallet modes. Preview offers three canonical Genesis and three Generations Friends, wallet-free Pet, Feed, Poop and actual Rare Rush play. Per-Friend device storage, independent care cooldowns, deadline decay and seven-pet rarity milestones remain separate from wallet care. Reset Preview resets only the selected sample’s care.

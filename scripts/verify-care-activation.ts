@@ -26,7 +26,7 @@ globalThis.fetch = async (input, init) => {
 
 try {
   // Inject the address exactly as the production build does, then execute the
-  // actual application reader. Its internal RPC is covered by the same guard.
+  // actual application reader with the explicit Node read client below.
   const bundled = await build({ entryPoints: [fileURLToPath(new URL('../games/rare-pet/chain.ts', import.meta.url))], bundle: true,
     write: false, platform: 'node', format: 'esm', define: { __RAREPET_CONTRACT__: JSON.stringify(contract) }, logLevel: 'silent' });
   const { readCare } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
@@ -74,7 +74,7 @@ try {
     const pet: PetIdentity = { collection: specimen.collection, chainId: 4663, contract: specimen.address, tokenId: String(specimen.id),
       label: `${specimen.collection} #${specimen.id}`, image: '', owner, walletAddress: null, blockNumber: String(block.number), generation, rushEligible: generation === null || generation >= 1 };
     const readStart = requests.length;
-    const before = await readCare(pet, block.number);
+    const before = await readCare(pet, block.number, client);
     const readCalls = requests.slice(readStart).filter(request => request.method === 'eth_call' || request.method === 'eth_getCode');
     const expectedBlock = `0x${block.number.toString(16)}`;
     assert.ok(readCalls.length >= 12, 'The real reader must load the policy, traits, lifetime, schedule and availability.');
@@ -104,7 +104,7 @@ try {
     }
     const playDisabled = await expectRevert({ ...fixed, functionName: 'play', account: owner,
       args: [specimen.address, specimen.id, `0x${'01'.repeat(32)}`, block.timestamp + 600n, '0x'] }, 'PlayDisabled');
-    const after = await readCare(pet, block.number);
+    const after = await readCare(pet, block.number, client);
     assert.deepEqual(after, before, 'Simulations must leave the care ledger unchanged.');
     const ownerAfter = await client.readContract({ address: specimen.address, abi: identityAbi, functionName: 'ownerOf', args: [specimen.id], blockNumber: block.number });
     assert.equal(ownerAfter.toLowerCase(), owner.toLowerCase());
