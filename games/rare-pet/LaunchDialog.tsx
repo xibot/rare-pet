@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { type Hex } from 'viem';
+import { keccak256, stringToHex, type Address, type Hex } from 'viem';
 import { Icon, GenesisPetSprite, PetSprite, type PreviewFriend } from './art';
 import { type PetIdentity, type PetWalletSession, PET_DEPLOYMENT } from './wallet';
 import { launchpadContract, launchStorageReady, launchTreasury } from './config';
@@ -10,6 +10,8 @@ import { createRareLaunchSalt, prepareRareLaunch, readRareLaunchConfig, sendRare
 import { getRareLaunchTransaction, subscribeRareLaunchTransactions, setRareLaunchTransaction, refreshRareLaunchTransaction } from './launch-transactions';
 import { LaunchHistory } from './LaunchHistory';
 import { LaunchStockPicker } from './LaunchStockPicker';
+import { LaunchSuccess, type LaunchSuccessData } from './LaunchSuccess';
+import { marketMetadataImage } from './market-catalog';
 import { getMarketTransaction, subscribeMarketTransactions } from './market-swap';
 import './launch.css';
 
@@ -55,6 +57,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [status, setStatus] = useState('');
   const hash = transaction?.hash ?? null;
   const [asset, setAsset] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ launch: LaunchSuccessData; revision: number; owner: string } | null>(null);
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const quote = getLaunchQuoteAsset(quoteId), preview = mode === 'self' ? !account : !pet;
   const enabled = !!creator && !!launchpadContract && launchStorageReady && !!config;
@@ -78,6 +81,20 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
     if (current.revision !== revision || current.status !== 'connected' || current.account?.toLowerCase() !== (mode === 'self' ? account : pet?.owner)?.toLowerCase()) throw new Error('Your wallet changed. Open Launch again.');
     const market = getMarketTransaction(creator);
     if (market && ['awaiting-wallet', 'pending', 'unverified'].includes(market.status)) throw new Error('Finish this wallet’s pending trading transaction before launching.');
+  }
+  function resultIsCurrent(task: number) {
+    const current = session.getSnapshot();
+    return alive.current && task === operation.current && current.revision === revision && current.status === 'connected'
+      && current.account?.toLowerCase() === (mode === 'self' ? account : pet?.owner)?.toLowerCase();
+  }
+  function showConfirmedLaunch(confirmed: PreparedRareLaunch | PreparedRareSelfLaunch, hash: Hex, asset: Address, task: number) {
+    if (!resultIsCurrent(task)) return;
+    const owner = confirmed.mode === 'self' ? confirmed.account : confirmed.pet.owner;
+    if (owner.toLowerCase() !== session.getSnapshot().account?.toLowerCase()) return;
+    const imageUrl = marketMetadataImage(confirmed.draft.tokenURI, keccak256(stringToHex(confirmed.draft.tokenURI)));
+    setAsset(asset); setError(''); setStatus(confirmed.mode === 'friend' ? 'Your token is live. +1 Brain.' : 'Your token is live.');
+    setSuccess({ launch: { name: confirmed.draft.name, symbol: confirmed.draft.symbol, asset, hash, imageUrl, mode: confirmed.mode }, revision, owner });
+    onLaunch();
   }
   async function selectImage(file?: File) {
     if (!file || lock.current) return;
@@ -128,11 +145,11 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
       setRareLaunchTransaction(creator, { prepared, hash: null, status: 'awaiting-wallet' }); recorded = true;
       const common = { session, revision, assertActive: () => assertActive(task), onWalletRequest: () => { requested = true; }, onHash: (value: Hex) => {
         submitted = value; setRareLaunchTransaction(creator, { prepared, hash: value, status: 'pending' });
-        if (alive.current) setStatus('Launch submitted. Waiting for confirmation…');
+        if (resultIsCurrent(task)) setStatus('Launch submitted. Waiting for confirmation…');
       } };
       const result = await (prepared.mode === 'self' ? sendRareSelfLaunch({ ...common, account: creator, prepared }) : sendRareLaunch({ ...common, pet: pet!, prepared }));
       setRareLaunchTransaction(creator, { prepared, hash: result.hash, status: 'confirmed' });
-      if (alive.current) { setAsset(result.asset); setStatus(mode === 'friend' ? 'Your token is live. +1 Brain.' : 'Your token is live.'); onLaunch(); }
+      showConfirmedLaunch(prepared, result.hash, result.asset, task);
     } catch (cause) {
       const text = message(cause), rejected = /user rejected|user denied|rejected the request/i.test(text);
       if (recorded) setRareLaunchTransaction(creator, !submitted && (!requested || rejected) ? null : { prepared, hash: submitted, status: cause instanceof RareLaunchTransactionError && cause.code === 'reverted' ? 'failed' : 'unverified', error: text });
@@ -141,10 +158,17 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
     } finally { lock.current = false; if (alive.current) setBusy(false); }
   }
   async function recheck() {
-    if (!creator || rechecking) return;
-    setRechecking(true);
-    try { const result = await refreshRareLaunchTransaction(creator); if (alive.current && result?.status === 'confirmed') { setAsset(result.prepared.doppler.prediction.tokenAddress); setStatus('Launch confirmed.'); onLaunch(); } }
-    catch (cause) { if (alive.current) setError(message(cause)); }
+    if (!creator || rechecking || lock.current) return;
+    const previous = getRareLaunchTransaction(creator);
+    if (!previous?.hash || !['pending', 'unverified'].includes(previous.status)) return;
+    const task = ++operation.current;
+    setRechecking(true); setError('');
+    try {
+      const result = await refreshRareLaunchTransaction(creator);
+      if (result?.status === 'confirmed' && result.hash === previous.hash && result.prepared.data === previous.prepared.data)
+        showConfirmedLaunch(result.prepared, result.hash, result.prepared.doppler.prediction.tokenAddress, task);
+    }
+    catch (cause) { if (resultIsCurrent(task)) setError(message(cause)); }
     finally { if (alive.current) setRechecking(false); }
   }
   const requestClose = () => { if (!lock.current) close(); };
@@ -188,5 +212,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
       <div className="launch-footer"><a href="/docs/#launch">HOW LAUNCHES WORK ↗</a><span>POWERED BY DOPPLER</span></div>
     </div>
   </>;
-  return <dialog ref={dialog} className="pet-dialog launch-dialog" aria-labelledby="launch-heading" onCancel={event => { event.preventDefault(); requestClose(); }} onClick={event => { if (event.target === dialog.current) requestClose(); }}>{content}</dialog>;
+  const visibleSuccess = success && snapshot.status === 'connected' && snapshot.revision === success.revision
+    && snapshot.account?.toLowerCase() === success.owner.toLowerCase() ? success.launch : null;
+  return <dialog ref={dialog} className="pet-dialog launch-dialog" aria-labelledby="launch-heading" onCancel={event => { event.preventDefault(); requestClose(); }} onClick={event => { if (event.target === dialog.current) requestClose(); }}>{content}{visibleSuccess && <LaunchSuccess key={visibleSuccess.hash} launch={visibleSuccess} onDismiss={() => setSuccess(null)}/>}</dialog>;
 }

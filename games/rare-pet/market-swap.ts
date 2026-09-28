@@ -69,11 +69,14 @@ export type MarketTransaction = Readonly<{
   kind: 'token-approval'|'router-approval'|'swap'; status: 'awaiting-wallet'|'pending'|'unverified'|'confirmed'|'failed'; hash: Hex|null;
   account: Address; tokenIn: Currency; tokenOut: Currency; amountIn: bigint; minimumAmountOut: bigint; side: 'buy'|'sell'; error?: string;
   target: Address; data: Hex; poolId: Hex|null; route: MarketRoute|null; createdAt: number;
+  /** Net token movements proven by a successful, canonical swap receipt. Never a quote estimate. */
+  outcome?: Readonly<{amountIn:bigint;amountOut:bigint}>;
 }>;
 type SessionOptions = { session: PetWalletSession; account: Address; actor?:MarketActor; revision: number; quote: MarketSwapQuote; onHash: (hash: Hex) => void; assertActive?: () => void };
 const equal = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const validHash = (v: unknown): v is Hex => typeof v === 'string' && /^0x[0-9a-f]{64}$/i.test(v);
 const issued = new WeakSet<MarketSwapQuote>();
+const reviewedFloors = new WeakMap<MarketSwapQuote,bigint>();
 const nowOf = (deps: MarketSwapDependencies) => (deps.now ?? Date.now)();
 function address(value: unknown): asserts value is Address { if (typeof value !== 'string' || !isAddress(value) || equal(value, zeroAddress)) throw new Error('A valid wallet or token address is required.'); }
 function userRejected(error: unknown) {
@@ -203,6 +206,15 @@ export async function readMarketBalances(market: MarketSelection, account: Addre
 }
 type QuoteInput={market:MarketSelection;side:'buy'|'sell';amount:string;slippageBps:number;account?:Address;actor?:MarketActor};
 export function readMarketSwapQuote(input:QuoteInput,injected?:MarketSwapDependencies):Promise<MarketSwapQuote>{return quoteMarket(input,injected);}
+/** Refresh allowances, timing and the same route without relaxing the output the user reviewed. */
+export async function refreshMarketTradeQuote(reviewed:MarketSwapQuote,injected?:MarketSwapDependencies):Promise<MarketSwapQuote>{
+  if(!issued.has(reviewed))throw new Error('Get a new quote before continuing this trade.');
+  const fresh=await quoteMarket({market:reviewed.market,side:reviewed.side,amount:formatUnits(reviewed.amountIn,reviewed.tokenIn.decimals),
+    slippageBps:reviewed.slippageBps,account:reviewed.account??undefined,actor:reviewed.actor??undefined},injected,reviewed.route);
+  if(fresh.amountOut<reviewed.minimumAmountOut)throw new Error('Price moved beyond your reviewed minimum. Get a fresh quote.');
+  const next=freeze({...fresh,minimumAmountOut:reviewed.minimumAmountOut});
+  issued.add(next);reviewedFloors.set(next,reviewed.minimumAmountOut);return next;
+}
 async function quoteMarket(input:QuoteInput,injected?:MarketSwapDependencies,reviewedRoute?:MarketRoute|null):Promise<MarketSwapQuote>{
   const market = structuredClone(input.market), selected=selection(market);
   if (input.side !== 'buy' && input.side !== 'sell') throw new Error('Choose Buy or Sell.');
@@ -229,7 +241,7 @@ async function quoteMarket(input:QuoteInput,injected?:MarketSwapDependencies,rev
   const approval = tokenAllowance !== null && tokenAllowance < amountIn ? 'token' : permit && (permit[0] < amountIn || permit[1] < Number(block.timestamp)+120) ? 'router' : null;
   const quote: MarketSwapQuote = freeze({actor,market,route:quoted.route,side:input.side,tokenIn,tokenOut,amountIn,amountOut:quoted.amountOut,minimumAmountOut,slippageBps:input.slippageBps,
     account:account??null,balance,tokenAllowance,routerAllowance:permit?.[0]??null,routerAllowanceExpiresAt:permit?.[1]??null,approval,quotedAt,expiresAt:quotedAt+60_000,blockNumber:block.number});
-  issued.add(quote); return quote;
+  issued.add(quote);reviewedFloors.set(quote,minimumAmountOut);return quote;
 }
 
 /** Fixed standard 2.1.1 commands, matched byte-for-byte against the official SDK in tests.
@@ -237,7 +249,7 @@ async function quoteMarket(input:QuoteInput,injected?:MarketSwapDependencies,rev
  * TAKE_ALL pays msg.sender; SETTLE_ALL caps the owner's total input. */
 export function buildMarketSwapCall(quote: MarketSwapQuote, deadline: bigint) {
   const selected=selection(quote.market);
-  if (quote.amountIn <= 0n || quote.amountIn >= 1n<<128n || quote.minimumAmountOut !== marketMinimumOutput(quote.amountOut,quote.slippageBps) || deadline<=0n) throw new Error('Invalid trade bounds.');
+  if (quote.amountIn <= 0n || quote.amountIn >= 1n<<128n || quote.minimumAmountOut !== (reviewedFloors.get(quote)??marketMinimumOutput(quote.amountOut,quote.slippageBps)) || deadline<=0n) throw new Error('Invalid trade bounds.');
   if(!selected.launch){
     if(!quote.route||!equal(quote.route.tokenIn,quote.tokenIn.address)||!equal(quote.route.tokenOut,quote.tokenOut.address))throw new Error('The route does not match the reviewed currencies.');
     return buildMarketRouteCall({route:quote.route,amountIn:quote.amountIn,minimumAmountOut:quote.minimumAmountOut,deadline});
@@ -258,6 +270,13 @@ export function buildMarketSwapCall(quote: MarketSwapQuote, deadline: bigint) {
 const STORE_KEY='rarepet:market-transactions:v1', records=new Map<string,MarketTransaction>(), listeners=new Set<()=>void>();
 let loaded=false;
 const unresolved=(r:MarketTransaction|undefined|null)=>!!r && ['awaiting-wallet','pending','unverified'].includes(r.status);
+function validOutcome(record:MarketTransaction):boolean {
+  const outcome=record.outcome;
+  return !!outcome&&record.kind==='swap'&&record.status==='confirmed'
+    &&typeof outcome==='object'&&Object.keys(outcome).length===2
+    &&typeof outcome.amountIn==='bigint'&&outcome.amountIn===record.amountIn
+    &&typeof outcome.amountOut==='bigint'&&outcome.amountOut>=record.minimumAmountOut&&outcome.amountOut<1n<<256n;
+}
 function load() {
   if(loaded)return; loaded=true;
   try {
@@ -277,7 +296,7 @@ function load() {
         || typeof r.amountIn!=='bigint'||r.amountIn<=0n||r.amountIn>=1n<<128n||typeof r.minimumAmountOut!=='bigint'||r.minimumAmountOut<=0n
         ||!Number.isSafeInteger(r.createdAt)||!['buy','sell'].includes(r.side))continue;
       if(r.route){if(!equal(r.route.tokenIn,r.tokenIn.address)||!equal(r.route.tokenOut,r.tokenOut.address))continue;buildMarketRouteCall({route:r.route,amountIn:r.amountIn,minimumAmountOut:r.minimumAmountOut,deadline:1n});}
-      records.set(r.account.toLowerCase(),freeze({...r,status:r.status==='awaiting-wallet'?'unverified':r.status,
+      records.set(r.account.toLowerCase(),freeze({...r,outcome:validOutcome(r)?r.outcome:undefined,status:r.status==='awaiting-wallet'?'unverified':r.status,
         error:r.status==='awaiting-wallet'?'The wallet request ended without a hash. Check wallet activity before another trade.':undefined}));
     }catch{/* Saved data never authorizes signing. */}}
   }catch{/* Current-tab transaction tracking remains available. */}
@@ -286,7 +305,7 @@ function save(record:MarketTransaction) {
   load();const previous=records.get(record.account.toLowerCase());
   if(previous&&previous.requestId!==record.requestId&&record.status!=='awaiting-wallet')return;
   if(previous?.requestId===record.requestId&&!unresolved(previous)&&unresolved(record))return;
-  record={...record,error:record.error?.slice(0,1000).replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'')};
+  record={...record,outcome:validOutcome(record)?record.outcome:undefined,error:record.error?.slice(0,1000).replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'')};
   records.set(record.account.toLowerCase(),freeze(record));
   if(records.size>32) {for(const [key,r] of records)if(!unresolved(r)&&!equal(key,record.account)){records.delete(key);break;}}
   try{globalThis.sessionStorage?.setItem(STORE_KEY,JSON.stringify([...records.values()],(_k,v)=>typeof v==='bigint'?{$bigint:v.toString()}:v));}catch{/* Do not lose in-memory proof. */}
@@ -299,6 +318,7 @@ class MarketTransactionError extends Error {
   constructor(status:'failed'|'pending'|'unverified',message:string){super(message);this.status=status;}
 }
 async function confirm(record:MarketTransaction,deps:MarketSwapDependencies,wait:boolean) {
+  let outcome:MarketTransaction['outcome'];
   if(!record.hash)throw new MarketTransactionError('unverified','No transaction hash is available. Check your wallet activity; do not repeat the trade.');
   if(await deps.client.getChainId()!==4663)throw new MarketTransactionError('unverified','Reconnect to Robinhood mainnet to check this transaction.');
   let receipt;try{receipt=wait?await deps.client.waitForTransactionReceipt({hash:record.hash,confirmations:1,timeout:120_000}):await deps.client.getTransactionReceipt({hash:record.hash});}
@@ -352,16 +372,18 @@ async function confirm(record:MarketTransaction,deps:MarketSwapDependencies,wait
       if(pools.some(pool=>!pool||swaps.filter(log=>equal(log.args.id,pool)&&equal(log.args.sender,MARKET_SWAP_DEPLOYMENT.router)).length!==1))throw new MarketTransactionError('unverified','The expected pool swap was not found in the receipt.');
     }
     const transfers=parseEventLogs({abi:MARKET_ERC20_ABI,eventName:'Transfer',strict:true,logs:receipt.logs.filter(log=>equal(log.address,record.tokenIn.address)||equal(log.address,record.tokenOut.address))});
-    const paid=transfers.filter(log=>equal(log.address,record.tokenIn.address)&&equal(log.args.from,record.account)).reduce((a,l)=>a+l.args.value,0n);
-    const received=transfers.filter(log=>equal(log.address,record.tokenOut.address)&&equal(log.args.to,record.account)).reduce((a,l)=>a+l.args.value,0n);
+    const netReceived=(token:Address)=>transfers.filter(log=>equal(log.address,token)).reduce((sum,log)=>sum
+      +(equal(log.args.to,record.account)?log.args.value:0n)-(equal(log.args.from,record.account)?log.args.value:0n),0n);
+    const paid=-netReceived(record.tokenIn.address),received=netReceived(record.tokenOut.address);
     if(paid!==record.amountIn||received<record.minimumAmountOut)throw new MarketTransactionError('unverified','The receipt does not prove the reviewed input and minimum output.');
+    outcome={amountIn:paid,amountOut:received};
   }
   if((await deps.client.getBlock({blockNumber:receipt.blockNumber})).hash!==receipt.blockHash||await deps.client.getChainId()!==4663)throw new MarketTransactionError('unverified','The confirmation block changed. Check the transaction again.');
-  return receipt;
+  return {receipt,outcome};
 }
 export async function refreshMarketTransaction(account:Address,injected?:MarketSwapDependencies) {
   const record=getMarketTransaction(account);if(!record||record.status==='awaiting-wallet')return record;
-  try{const receipt=await confirm(record,injected??await defaults(),false);const latest=getMarketTransaction(account);if(latest?.requestId===record.requestId)save({...latest,hash:receipt.transactionHash,status:'confirmed',error:undefined});}
+  try{const {receipt,outcome}=await confirm(record,injected??await defaults(),false);const latest=getMarketTransaction(account);if(latest?.requestId===record.requestId)save({...latest,hash:receipt.transactionHash,status:'confirmed',outcome,error:undefined});}
   catch(error){const latest=getMarketTransaction(account);if(latest?.requestId===record.requestId)save({...latest,status:error instanceof MarketTransactionError?error.status:'unverified',error:error instanceof Error?error.message:'Could not verify this transaction.'});}
   return getMarketTransaction(account);
 }
@@ -415,7 +437,7 @@ async function send(options:SessionOptions,kind:'approval'|'swap',injected?:Mark
     const hash=await signer.writeContract({account,chain:signer.chain,...execution} as never);
     if(!validHash(hash))throw new Error('The wallet did not return a valid transaction hash. Check wallet activity before retrying.');
     record={...record,hash,status:'pending'};save(record);try{options.onHash(hash);}catch{/* UI callbacks cannot interrupt receipt tracking. */}
-    const receipt=await confirm(record,deps,true);save({...record,hash:receipt.transactionHash,status:'confirmed'});return receipt;
+    const {receipt,outcome}=await confirm(record,deps,true);save({...record,hash:receipt.transactionHash,status:'confirmed',outcome});return receipt;
   }catch(error){
     const status=error instanceof MarketTransactionError?error.status:!walletRequested||!record.hash&&userRejected(error)?'failed':'unverified';
     const latest=getMarketTransaction(wallet);if(latest?.requestId===record.requestId)record=latest;

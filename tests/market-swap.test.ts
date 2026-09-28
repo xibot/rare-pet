@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { computePoolId } from '@whetstone-research/doppler-sdk/evm';
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, parseAbi, parseAbiParameters, zeroAddress, type Address, type Hex } from 'viem';
 import { buildMarketSwapCall, getMarketTransaction, MARKET_ERC20_ABI, MARKET_PERMIT2_ABI, MARKET_ROUTER_ABI, MARKET_SWAP_DEPLOYMENT as D, marketMinimumOutput, parseMarketAmount,
-  readMarketBalances, readMarketSwapQuote, refreshMarketTransaction, sendMarketApproval, sendMarketSwap, marketActorWallet,marketActorOwner, type MarketSwapDependencies, type MarketSwapQuote, type MarketActor } from '../games/rare-pet/market-swap.ts';
+  readMarketBalances, readMarketSwapQuote, refreshMarketTradeQuote, refreshMarketTransaction, sendMarketApproval, sendMarketSwap, marketActorWallet,marketActorOwner, type MarketSwapDependencies, type MarketSwapQuote, type MarketActor } from '../games/rare-pet/market-swap.ts';
 import { RARE_LAUNCH_DOPPLER } from '../games/rare-pet/launch-doppler.ts';
 import { LAUNCH_QUOTE_ASSETS, getLaunchQuoteAsset } from '../games/rare-pet/launch-quotes.ts';
 import { RARE_MARKET_ROUTERS, type RareMarketToken } from '../games/rare-pet/market-catalog.ts';
@@ -35,7 +35,8 @@ function fixture(selected=market(),friend=false){
   const session={getProvider:()=>provider,getSnapshot:()=>state} as unknown as PetWalletSession;
   const changes={chain:4663,now:NOW,balance:10n**30n,allowance:10n**30n,permit:10n**30n,expiration:NOW/1000+3600,out:1000000n,code:CODE,launched:true,pool:selected.poolKey,poolStatus:2,decimals:18,
     simulationResult:undefined as unknown,simulationError:null as Error|null,writeError:null as Error|null,waitError:null as Error|null,receiptStatus:'success',missingSwap:false,missingOutput:false,txData:null as Hex|null,
-    afterSimulation:()=>{},afterQuote:()=>{},replacement:false,cancelled:false,identity:pet,walletOwner:owner,binding:[4663n,pet.contract,2n],wrongAssetWallet:false};
+    afterSimulation:()=>{},afterQuote:()=>{},replacement:false,cancelled:false,identity:pet,walletOwner:owner,binding:[4663n,pet.contract,2n],wrongAssetWallet:false,
+    receiptOut:null as bigint|null,outputSpent:0n,inputRefund:0n};
   const writes:Record<string,any>[]=[],simulations:Record<string,any>[]=[],reads:Record<string,any>[]=[];let call:Record<string,any>={};
   const inner=()=>{if(!friend)return call;const decoded=decodeFunctionData({abi:RARE_WALLET_ABI,data:call.data});if(decoded.functionName!=='execute')throw new Error('wrong RF wrapper');const abi=decoded.args[0].toLowerCase()===D.router.toLowerCase()?MARKET_ROUTER_ABI:decoded.args[0].toLowerCase()===D.permit2.toLowerCase()?MARKET_PERMIT2_ABI:MARKET_ERC20_ABI;const target=decodeFunctionData({abi,data:decoded.args[2]});return {address:decoded.args[0],data:decoded.args[2],functionName:target.functionName,args:target.args};};
   const block=()=>({number:20n,hash:BLOCK,timestamp:BigInt(Math.floor(changes.now/1000))});
@@ -51,7 +52,9 @@ function fixture(selected=market(),friend=false){
       const [tokenOut,minOut]=decodeAbiParameters(parseAbiParameters('address,uint256'),params[2]);
       if(!changes.missingSwap)logs.push({...base,address:D.poolManager,logIndex:0,topics:encodeEventTopics({abi:SWAP_ABI,eventName:'Swap',args:{id:selected.poolId,sender:D.router}}),data:encodeAbiParameters(parseAbiParameters('int128,int128,uint160,uint128,int24,uint24'),[-amountIn,changes.out,1n,1n,0,3000])});
       logs.push({...base,address:tokenIn,logIndex:1,topics:encodeEventTopics({abi:MARKET_ERC20_ABI,eventName:'Transfer',args:{from:changes.wrongAssetWallet?owner:source,to:D.poolManager}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[amountIn])});
-      if(!changes.missingOutput)logs.push({...base,address:tokenOut,logIndex:2,topics:encodeEventTopics({abi:MARKET_ERC20_ABI,eventName:'Transfer',args:{from:D.poolManager,to:changes.wrongAssetWallet?owner:source}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[minOut])});
+      if(!changes.missingOutput)logs.push({...base,address:tokenOut,logIndex:2,topics:encodeEventTopics({abi:MARKET_ERC20_ABI,eventName:'Transfer',args:{from:D.poolManager,to:changes.wrongAssetWallet?owner:source}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[changes.receiptOut??minOut])});
+      if(changes.outputSpent)logs.push({...base,address:tokenOut,logIndex:3,topics:encodeEventTopics({abi:MARKET_ERC20_ABI,eventName:'Transfer',args:{from:source,to:D.poolManager}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[changes.outputSpent])});
+      if(changes.inputRefund)logs.push({...base,address:tokenIn,logIndex:4,topics:encodeEventTopics({abi:MARKET_ERC20_ABI,eventName:'Transfer',args:{from:D.poolManager,to:source}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[changes.inputRefund])});
     }
     return {...base,status:changes.receiptStatus,to:changes.cancelled&&changes.replacement?owner:call.address,from:owner,logs};
   };
@@ -124,6 +127,41 @@ test('two separate exact amount approvals then a single simulated swap; no unlim
 });
 test('both buy and sell settle directly to the connected owner and prove exact input/minimum output',async()=>{
   for(const side of ['buy','sell'] as const){const f=fixture();const q=await f.quote(side);const r=await sendMarketSwap(f.options(q),f.deps);assert.equal(r.transactionHash,HASH);assert.equal(f.writes[0].account,f.owner);assert.equal(f.writes[0].address,D.router);}
+});
+test('confirmed swaps expose actual net receipt amounts rather than the estimate for owner and Rare Wallet trades',async()=>{
+  for(const friend of [false,true])for(const side of ['buy','sell'] as const){
+    const f=fixture(market(),friend),q=await f.quote(side);f.changes.receiptOut=1100000n;f.changes.outputSpent=50000n;
+    await sendMarketSwap(f.options(q),f.deps);
+    assert.deepEqual(getMarketTransaction(f.source)?.outcome,{amountIn:q.amountIn,amountOut:1050000n});
+    assert.notEqual(getMarketTransaction(f.source)?.outcome?.amountOut,q.amountOut);
+    assert.ok(Object.isFrozen(getMarketTransaction(f.source)?.outcome));
+  }
+});
+test('approval receipts and invalid, reverted or roundtrip token movements never expose a swap outcome',async()=>{
+  const approval=fixture();approval.changes.allowance=0n;
+  await sendMarketApproval(approval.options(await approval.quote()),approval.deps);
+  assert.equal(getMarketTransaction(approval.source)?.status,'confirmed');assert.equal(getMarketTransaction(approval.source)?.outcome,undefined);
+  for(const mutation of [{missingSwap:true},{missingOutput:true},{receiptStatus:'reverted'},{outputSpent:1n},{inputRefund:1n}]){
+    const f=fixture(),q=await f.quote();Object.assign(f.changes,mutation);
+    await assert.rejects(sendMarketSwap(f.options(q),f.deps));
+    assert.notEqual(getMarketTransaction(f.source)?.status,'confirmed');assert.equal(getMarketTransaction(f.source)?.outcome,undefined);
+    await refreshMarketTransaction(f.source,f.deps);assert.equal(getMarketTransaction(f.source)?.outcome,undefined);
+  }
+});
+test('continuing a trade refreshes its expired quote and approvals without lowering the reviewed minimum',async()=>{
+  const f=fixture();f.changes.allowance=0n;const q=await f.quote();
+  f.changes.now+=70000;f.changes.allowance=10n**30n;f.changes.out=997000n;
+  const next=await refreshMarketTradeQuote(q,f.deps);
+  assert.equal(next.minimumAmountOut,q.minimumAmountOut);assert.equal(next.amountOut,997000n);assert.equal(next.approval,null);
+  assert.equal(next.expiresAt,f.changes.now+60000);assert.equal(next.amountIn,q.amountIn);assert.deepEqual(next.actor,q.actor);
+  assert.equal(f.writes.length,0);await sendMarketSwap(f.options(next),f.deps);assert.equal(f.writes.length,1);
+  const improved=await refreshMarketTradeQuote(next,f.deps);assert.equal(improved.minimumAmountOut,q.minimumAmountOut);
+});
+test('continuing a trade rejects unissued quotes and prices below the original reviewed floor',async()=>{
+  const f=fixture(),q=await f.quote();
+  await assert.rejects(refreshMarketTradeQuote({...q},f.deps),/new quote/);
+  f.changes.out=q.minimumAmountOut-1n;await assert.rejects(refreshMarketTradeQuote(q,f.deps),/reviewed minimum/);
+  assert.equal(f.writes.length,0);
 });
 test('forged or expired quote, changed wallet during simulation, allowance and balance failures do not sign',async()=>{
   const forged=fixture(),q0=await forged.quote();await assert.rejects(sendMarketSwap(forged.options({...q0}),forged.deps),/new quote/);
@@ -217,8 +255,31 @@ test('pending exact transaction survives a module reload; recovery only checks r
   const f=fixture(),q=await f.quote();f.changes.waitError=new Error('timeout');await assert.rejects(sendMarketSwap(f.options(q),f.deps));
   const restored=await import(`../games/rare-pet/market-swap.ts?reload=${Date.now()}`);
   assert.equal(restored.getMarketTransaction(f.owner)?.hash,HASH);assert.equal(restored.getMarketTransaction(f.owner)?.status,'pending');
-  f.changes.waitError=null;await restored.refreshMarketTransaction(f.owner,f.deps);assert.equal(restored.getMarketTransaction(f.owner)?.status,'confirmed');assert.equal(f.writes.length,1);
+  f.changes.waitError=null;f.changes.receiptOut=1200000n;await restored.refreshMarketTransaction(f.owner,f.deps);assert.equal(restored.getMarketTransaction(f.owner)?.status,'confirmed');assert.equal(f.writes.length,1);
+  assert.deepEqual(restored.getMarketTransaction(f.owner)?.outcome,{amountIn:q.amountIn,amountOut:1200000n});
+  const again=await import(`../games/rare-pet/market-swap.ts?reload=${crypto.randomUUID()}`);
+  assert.deepEqual(again.getMarketTransaction(f.owner)?.outcome,{amountIn:q.amountIn,amountOut:1200000n});
   delete (globalThis as Record<string,unknown>).sessionStorage;
+});
+test('stored outcome validation preserves recovery records but rejects malformed or unconfirmed success amounts',async()=>{
+  let raw='';Object.defineProperty(globalThis,'sessionStorage',{configurable:true,value:{getItem:()=>raw,setItem:(_k:string,value:string)=>{raw=value;}}});
+  try{
+    const f=fixture(),q=await f.quote();await sendMarketSwap(f.options(q),f.deps);
+    const stored=JSON.parse(raw).find((r:any)=>r.account.toLowerCase()===f.source.toLowerCase());
+    const invalid=[
+      {outcome:{...stored.outcome,extra:true}},
+      {outcome:{...stored.outcome,amountIn:{$bigint:'1'}}},
+      {outcome:{...stored.outcome,amountOut:{$bigint:'1'}}},
+      {outcome:{...stored.outcome,amountOut:{$bigint:(1n<<256n).toString()}}},
+      {outcome:{...stored.outcome,amountOut:'1000000'}},
+      {kind:'token-approval'}, {status:'pending'},
+    ];
+    for(const mutation of invalid){
+      raw=JSON.stringify([{...stored,...mutation}]);
+      const reloaded=await import(`../games/rare-pet/market-swap.ts?reload=${crypto.randomUUID()}`);
+      assert.equal(reloaded.getMarketTransaction(f.source)?.hash,HASH);assert.equal(reloaded.getMarketTransaction(f.source)?.outcome,undefined);
+    }
+  }finally{delete (globalThis as Record<string,unknown>).sessionStorage;}
 });
 
 
@@ -290,6 +351,15 @@ test('ecosystem native trades quote canonical V3/V4 paths and keep the reviewed 
     assert.equal(f.routeState.fetches,1,'send must recheck the exact quoted path without fetching a different route');
     assert.equal(f.writes[0].address,friend?f.source:D.router);assert.equal(getMarketTransaction(f.source)?.status,'confirmed');
     assert.deepEqual(await readMarketBalances(f.asset,f.source,f.deps,f.actor),{asset:f.changes.balance,quote:f.changes.balance});
+  }
+});
+test('automatic continuation rechecks the reviewed ecosystem route without requesting a replacement route',async()=>{
+  for(const version of [3,4] as const){
+    const f=ecosystemFixture(version,true,2),q=await f.quote();f.changes.now+=70000;f.changes.out=1100000n;
+    const refreshed=await refreshMarketTradeQuote(q,f.deps);
+    assert.deepEqual(refreshed.route,q.route);assert.equal(f.routeState.fetches,1);assert.equal(refreshed.minimumAmountOut,q.minimumAmountOut);
+    await sendMarketSwap(f.options(refreshed),f.deps);assert.equal(f.routeState.fetches,1);
+    assert.equal(getMarketTransaction(f.source)?.outcome?.amountOut,q.minimumAmountOut);
   }
 });
 test('ecosystem approvals remain separate, exact and sourced from the selected RF wallet',async()=>{
