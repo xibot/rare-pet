@@ -49,6 +49,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
   const [name, setName] = useState(''), [symbol, setSymbol] = useState('');
   const [quoteId, setQuoteId] = useState<LaunchQuoteId>('weth'), [fee, setFee] = useState<RareLaunchFee>(10000);
   const [image, setImage] = useState<LaunchImage | null>(null), [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState('');
   const [review, setReview] = useState<DraftReview | null>(null), [prepared, setPrepared] = useState<PreparedRareLaunch | PreparedRareSelfLaunch | null>(null);
   const [config, setConfig] = useState<RareLaunchConfig | null>(null), [configError, setConfigError] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [status, setStatus] = useState('');
@@ -81,13 +82,14 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
   async function selectImage(file?: File) {
     if (!file || lock.current) return;
     const generation = ++imageGeneration.current;
-    setImageBusy(true); setError('');
+    setImageBusy(true); setImageError(''); setError('');
+    if (imageRef.current) URL.revokeObjectURL(imageRef.current.previewUrl);
+    imageRef.current = null; setImage(null); published.current = null;
     try {
       const next = await prepareLaunchImage(file);
       if (!alive.current || generation !== imageGeneration.current) { URL.revokeObjectURL(next.previewUrl); return; }
-      if (imageRef.current) URL.revokeObjectURL(imageRef.current.previewUrl);
       imageRef.current = next; setImage(next); published.current = null;
-    } catch (cause) { if (alive.current && generation === imageGeneration.current) setError(message(cause)); }
+    } catch (cause) { if (alive.current && generation === imageGeneration.current) setImageError(message(cause)); }
     finally { if (alive.current && generation === imageGeneration.current) setImageBusy(false); }
   }
   function reviewDraft(event: FormEvent) {
@@ -153,7 +155,14 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
       <div className="launch-intro"><div><span className="launch-eyebrow">A BIG IDEA. A RARE FRIEND.</span><h3>{asset ? 'Hello, world.' : review ? 'Make it rare.' : 'Launch something rare.'}</h3><p>{mode === 'friend' ? 'Your Friend. Their token. Their trading fees.' : 'Your token. Your wallet. Your trading fees.'}</p></div><span className="launch-mode">{preview ? 'PREVIEW' : enabled ? 'ROBINHOOD' : 'PREVIEW / SETUP'}</span></div>
       {mode === 'friend' ? <div className="launch-friend"><span className="launch-friend-art">{friend.collection === 'genesis' ? <GenesisPetSprite portraitUrl={friend.image} bodyId={bodyId}/> : friend.sprites ? <PetSprite sprites={friend.sprites} frame={0}/> : <img src={friend.image} alt=""/>}</span><div><small>CREATOR / {friend.collection.toUpperCase()}</small><b>{friend.label}</b></div><span>+1 BRAIN<br/><small>1 LAUNCH / 24H</small></span><button className="launch-change-friend" disabled={busy} onClick={chooseFriend}>CHANGE ⇄</button></div> : <div className="launch-self"><span>CREATOR / YOUR WALLET</span>{account ? <b>{account}</b> : <button disabled={snapshot.status === 'connecting' || snapshot.status === 'switching-network'} onClick={() => snapshot.status === 'wrong-network' ? void session.switchNetwork() : void session.connect()}>{snapshot.status === 'wrong-network' ? 'SWITCH TO ROBINHOOD' : 'CONNECT WALLET ↗'}</button>}<small>Creator fees go to your connected wallet. No Rare Friend needed.</small></div>}
       {!review ? <form className="launch-form" onSubmit={reviewDraft}>
-        <div className="launch-specs"><label className="launch-image-label"><span>TOKEN IMAGE</span><span className={`launch-image-box ${image ? 'has-image' : ''}`}>{image ? <img src={image.previewUrl} alt="Token image preview"/> : <><b>+</b><span>ADD IMAGE</span></>}<input aria-label="Token image" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { void selectImage(event.target.files?.[0]); event.target.value = ''; }} disabled={imageBusy}/></span><small>{imageBusy ? 'PREPARING…' : image ? 'CHANGE IMAGE ↗' : 'PNG, JPG, WEBP · UP TO 5 MB'}</small></label><div className="launch-names"><label htmlFor="launch-name">TOKEN NAME<input id="launch-name" placeholder="Rare Ideas" value={name} onChange={event => setName(event.target.value)} maxLength={40} autoComplete="off" required/></label><label htmlFor="launch-symbol">TICKER<span className="launch-ticker"><span>$</span><input id="launch-symbol" placeholder="RARE" value={symbol} onChange={event => setSymbol(event.target.value.toUpperCase())} maxLength={10} autoComplete="off" spellCheck={false} required/></span></label></div></div>
+        <div className="launch-specs">
+          <label className="launch-image-label"><span>TOKEN IMAGE</span><span className={`launch-image-box ${image ? 'has-image' : ''} ${imageError ? 'has-error' : ''}`} aria-busy={imageBusy}>{image ? <img src={image.previewUrl} alt="Token image preview"/> : <><b>{imageBusy ? '…' : '+'}</b><span>{imageBusy ? 'PREPARING…' : 'ADD IMAGE'}</span></>}<input aria-label="Token image" aria-describedby={`launch-image-help${imageError ? ' launch-image-error' : ''}`} aria-invalid={!!imageError} type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { void selectImage(event.target.files?.[0]); event.target.value = ''; }} disabled={imageBusy}/></span><small role="status">{imageBusy ? 'PREPARING…' : image ? 'CHANGE IMAGE ↗' : 'CHOOSE FILE ↗'}</small></label>
+          <div className="launch-names"><label htmlFor="launch-name">TOKEN NAME<input id="launch-name" placeholder="Rare Ideas" value={name} onChange={event => setName(event.target.value)} maxLength={40} autoComplete="off" required/></label><label htmlFor="launch-symbol">TICKER<span className="launch-ticker"><span>$</span><input id="launch-symbol" placeholder="RARE" value={symbol} onChange={event => setSymbol(event.target.value.toUpperCase())} maxLength={10} autoComplete="off" spellCheck={false} required/></span></label></div>
+          <div className="launch-image-feedback">
+            {imageError && <p id="launch-image-error" className="launch-error" role="alert">{imageError}</p>}
+            <div id="launch-image-help" className="launch-image-help"><b>PNG, JPG, WEBP · MAX 5 MB</b><span>Square images: max 4096 × 4096 px.<br/>2000 × 2000 px recommended.</span><small>Any shape: max 8192 px per side and 16,777,216 pixels total. We center-crop and resize to 512 × 512 px.</small></div>
+          </div>
+        </div>
         <fieldset><legend>PAIR WITH</legend><div className="launch-options launch-pairs">
           {tokenPairs.map(asset => <button key={asset.id} type="button" data-quote-id={asset.id} aria-pressed={quote.id === asset.id} onClick={() => setQuoteId(asset.id)}><b>{asset.id === 'weth' ? 'Ξ WETH' : asset.id === 'rarefriends' ? '$RAREFRIENDS' : asset.symbol}</b><small>{asset.name}</small></button>)}
           <button type="button" data-quote-id="stock" aria-pressed={quote.kind === 'stock'} onClick={() => { if (quote.kind !== 'stock') setQuoteId('nvda'); }}><b>↗ STOCKS</b><small>Stock tokens</small></button>
@@ -161,7 +170,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
         {quote.kind === 'rarefriends' && <p className="launch-fine launch-pair-note">Uses a 30-minute RareFriends pool price and Chainlink ETH/USD. Recent onchain pool activity is required. Launch preparation stops if the price cannot be verified.</p>}</fieldset>
         <fieldset><legend>TRADING FEE</legend><div className="launch-options launch-fees">{([3000,10000,20000] as const).map(value => <button type="button" key={value} aria-pressed={fee === value} onClick={() => setFee(value)}><b>{value / 10000}%</b></button>)}</div><p className="launch-fine">Collected on swaps, in both pool tokens.</p></fieldset>
         <div className="launch-split"><span>FEES THAT GIVE BACK</span><b>{config ? `${percent(config.friendShares)} ${mode === 'friend' ? 'YOUR RF' : 'YOU'} · ${percent(config.treasuryShares)} PRIZES · 5% DOPPLER` : `85% ${mode === 'friend' ? 'YOUR RF' : 'YOU'} · 10% PRIZES · 5% DOPPLER`}</b><small>{config ? mode === 'friend' ? 'Creator fees belong to your Rare Friend’s wallet.' : 'Creator fees belong to your connected wallet.' : 'The creator keeps 85%. 10% funds RarePet prizes. Doppler receives 5%.'}</small></div>
-        <button className="launch-primary" disabled={imageBusy || writesBlocked} type="submit">REVIEW {preview || !enabled ? 'PREVIEW' : 'LAUNCH'} <span>↗</span></button>
+        <button className="launch-primary" disabled={imageBusy || !!imageError || writesBlocked} type="submit">REVIEW {preview || !enabled ? 'PREVIEW' : 'LAUNCH'} <span>↗</span></button>
         <p className="launch-fine launch-center">1 billion tokens · 100% to liquidity · no creator allocation</p>
       </form> : <div className="launch-review">
         {!asset && !unresolved && <button className="launch-back" disabled={busy} onClick={() => { setReview(null); setPrepared(null); setError(''); setStatus(''); }}>← EDIT TOKEN</button>}

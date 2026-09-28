@@ -140,8 +140,8 @@ async function invalidInputs(root) {
     [{ name: 'empty.png', mimeType: 'image/png', buffer: Buffer.alloc(0) }, /up to 5 MB/],
     [{ name: 'vector.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') }, /PNG, JPG or WebP/],
     [{ name: 'pretend.png', mimeType: 'image/png', buffer: Buffer.from('this is not an image') }, /PNG, JPG or WebP/],
-    [{ name: 'oversized.png', mimeType: 'image/png', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) }, /up to 5 MB/],
-    [{ name: 'too-wide.png', mimeType: 'image/png', buffer: raster(8193, 1) }, /smaller than 16 megapixels/],
+    [{ name: 'oversized.png', mimeType: 'image/png', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) }, /Maximum file size: 5 MB/],
+    [{ name: 'too-wide.png', mimeType: 'image/png', buffer: raster(8193, 1) }, /8192 px per side/],
   ]) {
     await root.getByLabel('Token image', { exact: true }).setInputFiles(file);
     await root.getByRole('alert').filter({ hasText: expected }).waitFor();

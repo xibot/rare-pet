@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createPublicClient, http, parseAbi, type Address, type Hex } from 'viem';
-import { put, head, get } from '@vercel/blob';
+import { put, head, get, BlobNotFoundError } from '@vercel/blob';
 import { launchImageMessage, type LaunchImageAuthorization } from '../games/rare-pet/launch-upload-message.ts';
 
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
@@ -185,7 +185,7 @@ export function createLaunchImageStorage(signal: AbortSignal, commands = blobCom
           || data.creatorKey !== undefined && (typeof data.creatorKey !== 'string' || data.creatorKey.length > 200)) throw new Error('Could not verify the image reservation.');
         return { url: result.blob.url, imageSha256: data.imageSha256, creatorKey: data.creatorKey as string | undefined };
       }
-      try { return await commands.head(pathname, { abortSignal: signal }); } catch (cause) { if (cause instanceof Error && cause.name === 'BlobNotFoundError') return null; throw cause; }
+      try { return await commands.head(pathname, { abortSignal: signal }); } catch (cause) { if (cause instanceof BlobNotFoundError) return null; throw cause; }
     },
     save: (pathname, content, contentType) => commands.put(pathname, content, { access: 'public', addRandomSuffix: false, allowOverwrite: false, contentType, abortSignal: signal }),
   };

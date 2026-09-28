@@ -77,6 +77,12 @@
 .launch-dialog .launch-content .launch-primary:disabled{color:#8f9983}
 
 /* Reviewed crypto pairs and stocks remain readable without squeezing their symbols. */
+.launch-image-feedback{grid-column:1/-1;margin-top:-8px;min-width:0}
+.launch-dialog .launch-image-feedback .launch-error{margin:0 0 12px;font-size:12px;line-height:1.6}
+.launch-image-help{display:grid;gap:5px;padding:12px 14px;border:1px solid var(--launch-control);background:var(--launch-panel);font:11px/1.6 var(--rush-font-mono);color:var(--launch-text)}
+.launch-image-help>b{color:var(--launch-lime);font-size:10px}
+.launch-image-help>small{font-size:10px;color:var(--launch-muted)}
+.launch-dialog .launch-image-box.has-error{border:2px solid #e5b86e}
 .launch-pairs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 .launch-pairs>button{min-width:0;justify-content:center}
 .launch-pairs b{white-space:nowrap}

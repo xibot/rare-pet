@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { privateKeyToAccount } from 'viem/accounts';
 import { verifyMessage } from 'viem';
+import { BlobNotFoundError } from '@vercel/blob';
 import handler, { createLaunchImageUploader, createLaunchImageStorage } from '../api/launch-image.ts';
 import { launchImageMessage } from '../games/rare-pet/launch-upload-message.ts';
 
@@ -260,7 +261,7 @@ test('storage adapter always disables overwrites/random suffixes, shares abort s
   const quota = `rare-launchpad/4663/${GENESIS}/42/quota/20000/0.json`, image = `rare-launchpad/4663/${GENESIS}/42/images/${hash}.png`;
   const commands = {
     put: async (path: string, bytes: Buffer, options: Record<string, unknown>) => { calls.push({ method: 'put', path, bytes, ...options }); return { url: 'https://fixture.public.blob.vercel-storage.com/image.png' }; },
-    head: async (path: string, options: Record<string, unknown>) => { calls.push({ method: 'head', path, ...options }); throw Object.assign(new Error('Not found'), { name: 'BlobNotFoundError' }); },
+    head: async (path: string, options: Record<string, unknown>) => { calls.push({ method: 'head', path, ...options }); throw new BlobNotFoundError(); },
     get: async (path: string, options: Record<string, unknown>) => { calls.push({ method: 'get', path, ...options }); const bytes = Buffer.from(JSON.stringify({ imageSha256: hash })); return { statusCode: 200, blob: { url: 'https://fixture.public.blob.vercel-storage.com/quota.json', size: bytes.length, contentType: 'application/json' }, stream: new Response(bytes).body }; },
   };
   const storage = createLaunchImageStorage(controller.signal, commands as never);
