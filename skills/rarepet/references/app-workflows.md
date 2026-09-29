@@ -26,6 +26,8 @@ Initial rules (the live contract can change permitted settings):
 
 Pet unlocks after 24h. The initial extra grace is 24h; read the saved schedule for the actual deadline. Missing it can reduce current Kinship and reset current streak/Rarity. Lifetime earnings and action records remain. Initially every seven uninterrupted Pets earns one Rarity. UTC midnight never resets a rolling quota.
 
+Play has its own adaptive soundtrack and separate music and sound-effect controls. After a completed run, close Play to see the controller celebration in the habitat. A confirmed launch as the selected Friend similarly shows a rocket celebration after closing the launch popup. These animations match the Play and Launch sharing moments; they are cosmetic feedback, not proof of a transaction or an onchain XP award. Use receipts and recorded state to verify onchain care.
+
 ## Make it yours and share
 
 Choose Worlds or Classic islands; background islands match the main choice. Genesis cosmetic bodies and island changes do not change NFT ownership or original metadata.

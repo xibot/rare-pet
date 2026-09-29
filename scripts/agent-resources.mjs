@@ -74,7 +74,7 @@ export async function buildAgentResources(project, outdir, { careAddress = '', l
     throw new Error('The skill protocol metadata does not match the tracked deployments.');
   }
   const manifest = {
-    schemaVersion: 1, name: 'rarepet', version: '1.0.0', title: 'RarePet agent skill',
+    schemaVersion: 1, name: 'rarepet', version: '1.0.1', title: 'RarePet agent skill',
     description: 'Read your Rare Friend’s care, prepare unsigned care transactions, and use RarePet with your agent.',
     website: site, page: `${site}/agent/`, documentation: `${site}/docs/`, discovery: `${site}/llms.txt`,
     skill: { entrypoint: `${site}/skills/rarepet/SKILL.md`, archive: `${site}/skills/rarepet.zip`, sha256: sha256(zip),
