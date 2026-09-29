@@ -219,7 +219,7 @@ test('unsupported or blocked audio fails harmlessly and can be retried after a g
 test('choosing a track before unlock stores the choice without enabling or creating audio', async t => {
   const { timers } = environment(t);
   const audio = createPetAudio();
-  audio.setMusicTrack('moon-float');
+  audio.setMusicTrack('pixel-party');
   assert.equal(Context.instances.length, 0);
   assert.equal(timers.size, 0);
   await audio.unlock();
@@ -227,8 +227,8 @@ test('choosing a track before unlock stores the choice without enabling or creat
   assert.equal(context.oscillators.length, 0);
   audio.setMusicEnabled(true);
   assert.equal(timers.size, 1);
-  // Moon Float begins on D, unlike Daydream's C opening.
-  assert.equal(context.oscillators[0].frequency.events[0].values[0], 440 * 2 ** ((38 - 69) / 12));
+  // Pixel Party begins on G, unlike Daydream's C opening.
+  assert.equal(context.oscillators[0].frequency.events[0].values[0], 440 * 2 ** ((43 - 69) / 12));
   audio.dispose();
 });
 
@@ -271,7 +271,7 @@ test('changing tracks respects muted, game-paused and hidden states', async t =>
   audio.setMusicEnabled(true);
   audio.setMusicPaused(true);
   let count = context.oscillators.length;
-  audio.setMusicTrack('moon-float');
+  audio.setMusicTrack('daydream');
   assert.equal(context.oscillators.length, count);
   assert.equal(timers.size, 0);
   audio.setMusicPaused(false);
@@ -280,7 +280,7 @@ test('changing tracks respects muted, game-paused and hidden states', async t =>
   page.dispatchEvent(new Event('visibilitychange'));
   await Promise.resolve();
   count = context.oscillators.length;
-  audio.setMusicTrack('daydream');
+  audio.setMusicTrack('pixel-party');
   assert.equal(context.oscillators.length, count);
   assert.equal(timers.size, 0);
   page.visibilityState = 'visible';
@@ -289,15 +289,15 @@ test('changing tracks respects muted, game-paused and hidden states', async t =>
   assert.equal(timers.size, 1);
   audio.setMusicEnabled(false);
   count = context.oscillators.length;
-  audio.setMusicTrack('moon-float');
+  audio.setMusicTrack('daydream');
   assert.equal(context.oscillators.length, count);
   assert.equal(timers.size, 0);
   audio.dispose();
 });
 
-test('all three scores use their advertised tempos and different musical arrangements', async t => {
+test('both scores use their advertised tempos and different musical arrangements', async t => {
   const { tick } = environment(t);
-  const openingRest: Record<PetMusicTrack, number> = { daydream: 2, 'moon-float': 6, 'pixel-party': 1 };
+  const openingRest: Record<PetMusicTrack, number> = { daydream: 2, 'pixel-party': 1 };
   const signatures: string[] = [];
   const voiceCounts: number[] = [];
   for (const track of PET_MUSIC_TRACKS) {
@@ -315,6 +315,25 @@ test('all three scores use their advertised tempos and different musical arrange
     voiceCounts.push(context.oscillators.length);
     audio.dispose();
   }
-  assert.equal(new Set(signatures).size, 3);
-  assert.ok(voiceCounts[2] > voiceCounts[0] && voiceCounts[0] > voiceCounts[1], 'the party beat is denser than the relaxed and dreamy arrangements');
+  assert.equal(new Set(signatures).size, 2);
+  assert.ok(voiceCounts[1] > voiceCounts[0], 'the party beat is denser than the relaxed arrangement');
+});
+
+test('Pixel Party retains its low synth kick without high descending chirps', async t => {
+  const { tick } = environment(t);
+  const audio = createPetAudio();
+  audio.setMusicTrack('pixel-party');
+  audio.setMusicEnabled(true);
+  await audio.unlock();
+  const context = Context.instances[0];
+  // Cover a complete 64-step phrase, including every former chirp accent.
+  for (let index = 0; index < 610; index++) { context.advance(0.025); tick(); }
+  const glides = context.oscillators.filter(voice => voice.frequency.events.some(event => event.method === 'exponential'));
+  assert.ok(glides.length >= 8, 'the low kick is retained throughout the phrase');
+  for (const voice of glides) {
+    assert.equal(voice.type, 'sine');
+    assert.ok(voice.frequency.events[0].values[0] < 200, 'pitch glides remain in the bass range');
+    assert.ok(voice.frequency.events.find(event => event.method === 'exponential')!.values[0] < 100);
+  }
+  audio.dispose();
 });

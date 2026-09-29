@@ -84,7 +84,7 @@ export function usePetAudio(musicPaused: boolean) {
   }
 
   function chooseTrack(track: PetMusicTrack) {
-    if (!PET_MUSIC_TRACKS.some(option => option.id === track)) return;
+    if (!preferencesRef.current.music || !PET_MUSIC_TRACKS.some(option => option.id === track)) return;
     savePreferences({ ...preferencesRef.current, track });
     engine.current?.setMusicTrack(track);
     if (preferencesRef.current.music) void activate();

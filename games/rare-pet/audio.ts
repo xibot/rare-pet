@@ -3,7 +3,6 @@ export type PetSound = 'pet' | 'feed' | 'poop' | 'play' | 'launch' | 'rarity' | 
 
 export const PET_MUSIC_TRACKS = [
   { id: 'daydream', name: 'Daydream', mood: 'Easygoing', bpm: 84 },
-  { id: 'moon-float', name: 'Moon Float', mood: 'Dreamy', bpm: 62 },
   { id: 'pixel-party', name: 'Pixel Party', mood: 'Playful', bpm: 128 },
 ] as const;
 export type PetMusicTrack = typeof PET_MUSIC_TRACKS[number]['id'];
@@ -40,21 +39,6 @@ const DAYDREAM_MELODY: readonly (number | null)[] = [
 ];
 const DAYDREAM_CHORDS: readonly (readonly number[])[] = [
   [48, 60, 64, 67], [45, 57, 60, 64], [41, 60, 65, 69], [43, 59, 62, 67],
-];
-
-// A separate D-minor lullaby: longer tones, open spaces and distant bell replies.
-const MOON_MELODY: readonly (number | null)[] = [
-  74, null, null, null, null, null, 81, null,
-  null, null, 77, null, null, null, null, null,
-  76, null, null, null, 74, null, null, null,
-  null, null, 72, null, null, null, null, null,
-  77, null, null, null, null, null, 84, null,
-  null, null, 81, null, null, null, null, null,
-  79, null, null, null, 76, null, null, null,
-  74, null, null, null, null, null, null, null,
-];
-const MOON_CHORDS: readonly (readonly number[])[] = [
-  [38, 62, 65, 69], [34, 58, 62, 65], [41, 60, 65, 69], [36, 60, 64, 67],
 ];
 
 // A bouncy G-major call-and-response, with short arpeggios and a tiny synth beat.
@@ -150,17 +134,7 @@ export function createPetAudio(): PetAudio {
   function scheduleStep(at: number) {
     const position = step % 64;
     const chordIndex = Math.floor(position / 16);
-    if (musicTrack === 'moon-float') {
-      const chord = MOON_CHORDS[chordIndex];
-      if (position % 8 === 0) {
-        tone('music', chord[0], at, stepSeconds * 5.5, 0.17, 'triangle');
-        tone('music', chord[1], at, stepSeconds * 3.5, 0.055, 'triangle');
-        tone('music', chord[3], at, stepSeconds * 3.5, 0.04, 'sine');
-      }
-      const lead = MOON_MELODY[position];
-      if (lead !== null) tone('music', lead, at, stepSeconds * 2.5, 0.095, 'triangle');
-      if (position % 16 === 12) tone('music', chord[2] + 24, at, stepSeconds * 2.8, 0.04, 'sine');
-    } else if (musicTrack === 'pixel-party') {
+    if (musicTrack === 'pixel-party') {
       const chord = PARTY_CHORDS[chordIndex];
       if (position % 2 === 0) {
         const bass = chord[0] + (position % 8 === 6 ? 12 : position % 8 === 2 ? 7 : 0);
@@ -171,7 +145,6 @@ export function createPetAudio(): PetAudio {
       const lead = PARTY_MELODY[position];
       if (lead !== null) tone('music', lead, at, stepSeconds * 0.68, 0.07);
       if (position % 8 === 0) tone('music', 48, at, 0.12, 0.13, 'sine', 28);
-      if (position % 8 === 4) tone('music', 93, at, 0.055, 0.035, 'triangle', 81);
     } else {
       const chord = DAYDREAM_CHORDS[chordIndex];
       if (position % 8 === 0) tone('music', chord[0], at, stepSeconds * 3.3, 0.2, 'triangle');

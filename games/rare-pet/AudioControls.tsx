@@ -28,12 +28,6 @@ export function AudioControls({ music, effects, track, onMusic, onEffects, onTra
   const message = status || (!available ? 'Sound is unavailable in this browser.' : '');
   return <div className="pet-audio-controls" role="group" aria-label="RarePet sound">
     <span className={`pet-audio-status${message ? '' : ' pet-audio-status-empty'}`} role="status" aria-live="polite">{message}</span>
-    <label className="pet-audio-track">
-      <span className="pet-audio-track-label">TRACK</span>
-      <select aria-label="Soundtrack" value={track} disabled={!available} onChange={event => onTrack(event.target.value as PetMusicTrack)}>
-        {PET_MUSIC_TRACKS.map(option => <option key={option.id} value={option.id}>{option.name.toUpperCase()} · {option.mood.toUpperCase()} · {option.bpm} BPM</option>)}
-      </select>
-    </label>
     <div className="pet-audio-buttons">
       <button type="button" onClick={onMusic} disabled={!available} aria-pressed={music} aria-label={`Turn music ${music ? 'off' : 'on'}`}>
         <MusicIcon />
@@ -43,6 +37,9 @@ export function AudioControls({ music, effects, track, onMusic, onEffects, onTra
         <EffectsIcon />
         <span>FX {effects ? 'ON' : 'OFF'}</span>
       </button>
+    </div>
+    <div className="pet-audio-tracks" role="group" aria-label="Soundtrack">
+      {PET_MUSIC_TRACKS.map(option => <button type="button" key={option.id} disabled={!available || !music} aria-pressed={track === option.id} title={music ? `${option.mood} · ${option.bpm} BPM` : 'Turn MUSIC on to choose a track'} onClick={() => onTrack(option.id)}>{option.name.toUpperCase()}</button>)}
     </div>
   </div>;
 }
