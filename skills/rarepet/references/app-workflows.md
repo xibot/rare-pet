@@ -30,7 +30,7 @@ Pet unlocks after 24h. The initial extra grace is 24h; read the saved schedule f
 
 Choose Worlds or Classic islands; background islands match the main choice. Genesis cosmetic bodies and island changes do not change NFT ownership or original metadata.
 
-Use **Share ↗**, select Pet/Feed/Poop/Talk, choose Still PNG or Animated GIF, enter an optional speech-bubble message within the shown limit, and review the preview. PNG is 2000 × 2000; GIF is 800 × 800. Talk shows the Friend, island and message without care-action effects or an action label; its GIF keeps the idle animation. Another Pose varies the composition for Pet, Feed and Poop. Download the media and copy/edit the post. The X action opens a composer; the downloaded media must be attached. Do not promise automatic image upload or publish a post without an explicit request.
+Use **Share ↗**, select Pet/Feed/Play/Launch/Poop/Talk, choose Still PNG or Animated GIF, enter an optional speech-bubble message within the shown limit, and review the preview. PNG is 2000 × 2000; GIF is 800 × 800. Talk shows the Friend, island and message without care-action effects or an action label; its GIF keeps the idle animation. Another Pose varies the composition for Pet, Feed, Play, Launch and Poop. Sharing a Play or Launch moment is cosmetic; it does not record care, grant XP or launch a token. Download the media and copy/edit the post. The X action opens a composer; the downloaded media must be attached. Do not promise automatic image upload or publish a post without an explicit request.
 
 ## Rare Wallet
 

@@ -233,7 +233,7 @@ function App() {
   function animate(action: CareAction, rarityAward = false) {
     clearTimeout(reactionTimer.current);
     petAudio.play(rarityAward ? 'rarity' : action);
-    if (action !== 'play') setShareAction(action);
+    setShareAction(action);
     setReactionVariant(reactionCounts.current[action]++ % 3); setReactionSequence(n => n + 1); setReaction(action);
     reactionTimer.current = window.setTimeout(() => setReaction(''), 2400);
   }
@@ -350,7 +350,7 @@ function App() {
     </div></Dialog>}
     {market && <MarketDialog session={session} close={() => setMarket(false)}/>}
     {sharing && (art ?? live) && <ShareDialog friend={(art ?? live)!} island={island} bodyId={bodyId} initialAction={shareAction} initialVariant={reactionVariant} close={() => setSharing(false)}/>}
-    {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => { setLaunchRefresh(value => value + 1); petAudio.play('launch'); }}/>}
+    {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => { setLaunchRefresh(value => value + 1); setShareAction('launch'); petAudio.play('launch'); }}/>}
     {rareWallet && (art ?? live) && <RareWalletDialog key={`${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setRareWallet(false)} chooseFriend={() => { setRareWallet(false); openPicker('wallet'); }}/>}
     {picker && <Dialog title="Choose your Rare Friend" className="friend-picker-dialog" close={() => setPicker(false)}><div className="picker-content">
       <div className="picker-mode-switch" role="group" aria-label="Choose Friend source"><button aria-pressed={preview && pickerMode === 'preview'} disabled={!preview} title={preview ? undefined : 'Disconnect your wallet to choose a preview Friend'} onClick={() => setPickerMode('preview')}>PREVIEW FRIENDS</button><button aria-pressed={!preview || pickerMode === 'wallet'} onClick={() => setPickerMode('wallet')}>MY WALLET</button></div>

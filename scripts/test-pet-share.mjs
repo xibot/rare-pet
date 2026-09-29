@@ -11,6 +11,7 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1050 }, acceptDownloads: true });
 const errors = [], externalRequests = [], intents = [], exports = [];
+const shareMoments = ['Pet', 'Feed', 'Play', 'Launch', 'Poop', 'Talk'];
 await context.route('**/*', route => {
   const url = new URL(route.request().url());
   if (url.origin === origin || ['blob:', 'data:'].includes(url.protocol)) return route.continue();
@@ -88,7 +89,7 @@ async function download(label) {
   await shareDialog().getByRole('button', { name: 'DOWNLOAD PNG' }).click();
   const file = await event;
   assert.equal(await file.failure(), null);
-  assert.match(file.suggestedFilename(), /^rarepet-(genesis|generations)-\d+-(garden|circuit|crystal|rooftop|tidal|orbital|meadow|moon|arcade|beach|rare)-(pet|feed|poop)-2000\.png$/);
+  assert.match(file.suggestedFilename(), /^rarepet-(genesis|generations)-\d+-(garden|circuit|crystal|rooftop|tidal|orbital|meadow|moon|arcade|beach|rare)-(pet|feed|play|launch|poop|talk)-2000\.png$/);
   const path = resolve(output, `${label}.png`);
   await file.saveAs(path);
   const bytes = await readFile(path), hash = verifyPNG(bytes, label);
@@ -118,13 +119,16 @@ try {
   const initial = await state();
   await open();
   assert.equal(await shareDialog().locator('.share-x svg').count(), 1, 'X action carries the X logo');
-  const actionHashes = [];
-  for (const action of ['Pet', 'Feed', 'Poop']) {
+  assert.deepEqual(await shareDialog().getByRole('group', { name: 'Share moment', exact: true }).getByRole('button').allTextContents(), shareMoments, 'Share moments keep the requested order');
+  const actionHashes = new Map();
+  for (const action of shareMoments) {
     await chooseAction(action);
-    actionHashes.push(await download(`generations-${action.toLowerCase()}`));
+    assert.equal(await shareDialog().getByRole('button', { name: /ANOTHER POSE/ }).count(), action === 'Talk' ? 0 : 1, 'Talk has no pose control; action moments offer another pose');
+    actionHashes.set(action, await download(`generations-${action.toLowerCase()}`));
   }
-  assert.equal(new Set(actionHashes).size, 3, 'Pet, Feed, and Poop produce different images');
-  const firstPose = actionHashes[2];
+  assert.equal(new Set(actionHashes.values()).size, shareMoments.length, 'All six moments produce different images');
+  await chooseAction('Poop');
+  const firstPose = actionHashes.get('Poop');
   await shareDialog().getByRole('button', { name: /ANOTHER POSE/ }).click();
   await ready('Poop');
   assert.notEqual(await download('generations-poop-other-pose'), firstPose, 'Another pose actually changes the exported art');
@@ -222,8 +226,9 @@ try {
   await open();
   assert.notEqual(await download('genesis-body-after'), bodyBefore, 'Selected cosmetic body changes the exported image');
   await assertShareIsReadOnly(bodyState, 'Genesis body export');
-  for (const action of ['Feed', 'Poop']) {
+  for (const action of shareMoments) {
     await chooseAction(action);
+    assert.equal(await shareDialog().getByRole('button', { name: /ANOTHER POSE/ }).count(), action === 'Talk' ? 0 : 1);
     await download(`genesis-${action.toLowerCase()}`);
   }
 

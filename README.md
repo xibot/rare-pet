@@ -61,7 +61,7 @@ The arcade's displayed currency and rewards are simulated. RarePet's Preview XP 
 
 ## Share a rare moment
 
-Pick **Pet**, **Feed**, **Poop** or **Talk** and capture your Friend with their chosen island, body and speech bubble. **Talk** keeps the focus on your message, with no care-action effects or action label. Download a **2000 × 2000 PNG** or an **800 × 800 animated GIF** with a 2.4-second loop.
+Pick **Pet**, **Feed**, **Play**, **Launch**, **Poop** or **Talk** and capture your Friend with their chosen island, body and speech bubble. **Talk** keeps the focus on your message, with no care-action effects or action label. Download a **2000 × 2000 PNG** or an **800 × 800 animated GIF** with a 2.4-second loop.
 
 The share dialog prepares your post and offers **Download + Share on X**. Attach the downloaded file and publish when you're ready. Images and GIFs are rendered locally in your browser; exporting a moment does not change care progress.
 

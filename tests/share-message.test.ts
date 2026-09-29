@@ -4,7 +4,7 @@ import { SHARE_SPEECH, SHARE_SPEECH_MAX_LENGTH, limitShareSpeech, resolveShareSp
 
 test('custom speech uses the existing longest message limit and preserves all defaults', () => {
   assert.equal(SHARE_SPEECH_MAX_LENGTH, 21);
-  for (const action of ['pet', 'feed', 'poop', 'talk'] as const) {
+  for (const action of ['pet', 'feed', 'play', 'launch', 'poop', 'talk'] as const) {
     assert.equal(resolveShareSpeech(action), SHARE_SPEECH[action]);
     assert.equal(resolveShareSpeech(action, ' \n\t '), SHARE_SPEECH[action]);
     assert.equal(limitShareSpeech(SHARE_SPEECH[action]), SHARE_SPEECH[action]);

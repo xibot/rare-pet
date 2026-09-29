@@ -11,6 +11,7 @@ const artifact = path.resolve('artifacts/share-gif');
 await mkdir(artifact, { recursive: true });
 let server, browser;
 const errors = [], external = [], downloads = [];
+const shareMoments = ['Pet', 'Feed', 'Play', 'Launch', 'Poop', 'Talk'];
 try {
   await buildPetSite({ outdir });
   server = createPetServer(outdir);
@@ -82,9 +83,11 @@ try {
     if(collection==='Genesis') {await page.getByRole('button',{name:/CHANGE BODY/}).click();await page.getByRole('button',{name:'Classic',exact:true}).click();await page.getByRole('button',{name:'Rare',exact:true}).click();}
     const body=collection==='Genesis'?await page.locator('.pet-portrait [data-genesis-body]').getAttribute('data-genesis-body'):null;
     await open();await ready('PNG');await share().getByRole('button',{name:'ANIMATED GIF',exact:true}).click();
+    assert.deepEqual(await share().getByRole('group',{name:'Share moment',exact:true}).getByRole('button').allTextContents(),shareMoments,'Share moments keep the requested order');
     const storage=await page.evaluate(()=>JSON.stringify(localStorage));
-    for(const action of ['Pet','Feed','Poop']) {
+    for(const action of shareMoments) {
       await share().getByRole('button',{name:action,exact:true}).click();const started=Date.now();await ready();await fits(share());
+      assert.equal(await share().getByRole('button',{name:/ANOTHER POSE/}).count(),action==='Talk'?0:1,'Talk has no pose control; action moments offer another pose');
       const event=page.waitForEvent('download');await share().getByRole('button',{name:'DOWNLOAD GIF',exact:true}).click();const file=await event;
       assert.equal(await file.failure(),null);assert.match(file.suggestedFilename(),new RegExp(`^rarepet-${collection.toLowerCase()}-.*-${action.toLowerCase()}-800\\.gif$`));
       const name=`${collection.toLowerCase()}-${action.toLowerCase()}`,filePath=path.join(artifact,`${name}.gif`);await file.saveAs(filePath);const bytes=await readFile(filePath);
