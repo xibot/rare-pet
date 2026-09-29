@@ -1,0 +1,20 @@
+.rush-audio-controls{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.rush-audio-controls .rush-audio-toggle{font-family:var(--rush-font-mono,monospace);white-space:nowrap;font-size:10px;line-height:1.2;min-height:32px;padding:7px 9px;border:1px solid currentColor;background:#000;color:#fff;cursor:pointer}
+/* Keep audio states readable over each cabinet's existing pressed-button rules. */
+.rush-audio-controls .rush-audio-toggle[type=button][aria-pressed=true]{background:#000;color:#ccff00}
+.rush-audio-controls .rush-audio-toggle[type=button]:hover{color:#000;background:#ccff00;border-color:#ccff00}
+.rush-audio-controls .rush-audio-toggle:focus-visible{outline:2px solid #ccff00;outline-offset:3px}
+@media(max-width:600px){
+  .rare-rush .arcade-top:has(.rush-audio-controls){column-gap:6px}
+  .rare-rush .top-actions:has(.rush-audio-controls){max-width:150px;flex-wrap:wrap;justify-content:flex-end;gap:3px}
+  .rare-rush .top-actions .rush-audio-controls{width:100%;justify-content:flex-end;gap:3px}
+  .rare-rush .top-actions .rush-audio-controls .rush-audio-toggle{font-size:8px;min-height:22px;height:22px;padding:3px 5px}
+  .rare-rush .top-actions:has(.rush-audio-controls)>button{height:22px;min-height:22px;padding:3px 6px}
+}
+@container rush-cabinet (max-width:600px){
+  .testnet-arcade .arcade-top:has(.rush-audio-controls){column-gap:6px}
+  .testnet-arcade .top-actions:has(.rush-audio-controls){max-width:150px;flex-wrap:wrap;justify-content:flex-end;gap:3px}
+  .testnet-arcade .top-actions .rush-audio-controls{width:100%;justify-content:flex-end;gap:3px}
+  .testnet-arcade .top-actions .rush-audio-controls .rush-audio-toggle{font-size:8px;min-height:22px;height:22px;padding:3px 5px}
+  .testnet-arcade .top-actions:has(.rush-audio-controls)>button{height:22px;min-height:22px;padding:3px 6px}
+}

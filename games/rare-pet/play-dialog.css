@@ -48,6 +48,10 @@
   .pet-play-dialog .arcade-logo small{font-size:7px;letter-spacing:1.6px;margin-top:5px}
   .pet-play-dialog .top-actions{gap:5px}
   .pet-play-dialog .top-actions button{font-size:10px;min-width:29px;padding:4px 5px;height:32px}
+  .pet-play-dialog .top-actions:has(.rush-audio-controls){max-width:150px;flex-wrap:wrap;justify-content:flex-end;gap:3px}
+  .pet-play-dialog .rush-audio-controls{width:100%;justify-content:flex-end;gap:3px}
+  .pet-play-dialog .top-actions .rush-audio-toggle{font-size:8px;min-height:22px;height:22px;padding:3px 5px}
+  .pet-play-dialog .top-actions:has(.rush-audio-controls)>button{min-height:22px;height:22px;padding:3px 6px}
   .pet-play-dialog .preview-tag{position:absolute;top:68px;right:14px;font-size:8px;margin:0;padding:2px 4px;border-color:#000}
   .pet-play-dialog .hud{top:60px;height:91px;grid-template-columns:1fr 1fr 1.1fr;padding:26px 15px 10px;gap:10px}
   .pet-play-dialog .hud span{font-size:9px;letter-spacing:.1px}
