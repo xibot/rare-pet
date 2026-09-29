@@ -40,6 +40,8 @@ Pet unlocks 24 hours after the last pet, followed by a **24-hour grace window** 
 
 RarePet traits are separate from the NFT's original traits and collection rarity. Stamina currently accumulates; it is not an entry cost for Play. See the [care guide](https://rarepet.app/docs/) for the full routine.
 
+Turn on **MUSIC** for a soft, original 8-bit habitat loop, or **FX** for care chimes, snack pops, playful bubbles and launch celebrations. Both start off and remember your choices on this device. Audio waits for a tap, pauses when the tab is hidden, and the habitat music steps aside during Play. Onchain care and launch celebrations sound only after confirmation.
+
 ## Your Friend. Your world.
 
 - **11 islands.** Six canonical Worlds and five Classic floors, including black-and-white Rare.

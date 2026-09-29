@@ -87,6 +87,7 @@ export function HowToCare({ actions, preview, invalid, careKnown, careConfigured
       <p><b>Your bond has its own clock.</b> Feed, Play and Poop do not extend the Pet deadline. {known ? `After a missed window, Kinship loses ${hasPet ? state.policy?.petSchedule.decayPoints ?? rules.decayPoints : rules.decayPoints} point(s), then again every ${shortInterval(hasPet ? state.policy?.petSchedule.decayInterval || rules.decayInterval : rules.decayInterval)}, down to zero.` : 'Kinship decay follows the saved care policy.'}</p>
       <p><b>Rules can evolve.</b> Pet stays once every 24 hours. Future reward points and Feed, Play and Poop timers or caps can change after a public 24-hour rule delay. Actions can be paused. Running cooldowns, Pet windows and the next Rarity milestone keep their saved terms. Confirmed rewards and history stay recorded.</p>
       <p><b>Launch is separate.</b> +1 Brain per confirmed Friend launch, once every 24 hours. Yourself launches and preview forms earn no Friend Brain. Playing with an owned Friend is practice until verified onchain XP is connected.</p>
+      <p><b>A little 8-bit company.</b> Switch MUSIC and FX on above the habitat. Each has its own toggle, and your choices are remembered. The habitat music pauses during Play; onchain care and launch celebrations wait for confirmation.</p>
     </div></details>
     <a className="care-guide-docs" href="/docs/">EXPLORE THE FULL GUIDE <span aria-hidden="true">↗</span></a>
   </div>;

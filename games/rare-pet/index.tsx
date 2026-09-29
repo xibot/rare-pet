@@ -23,6 +23,8 @@ import { islandFlights } from './islandFlights';
 import { ShareDialog } from './ShareDialog';
 import { RareWalletDialog } from './RareWalletDialog';
 import { MarketDialog } from './MarketDialog';
+import { AudioControls } from './AudioControls';
+import { usePetAudio } from './usePetAudio';
 import type { ShareAction } from './share-image';
 import '@rarefriends/friendsdk/frame.css';
 import '../rare-rush/fonts.css';
@@ -70,6 +72,7 @@ function App() {
   const [care, setCare] = useState<CareState>(() => readPreview(previewKey(previewFriends[lastPreview])));
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const [frame, setFrame] = useState(0), [picker, setPicker] = useState(false), [rules, setRules] = useState(false), [playing, setPlaying] = useState(false);
+  const petAudio = usePetAudio(playing);
   const [collection, setCollection] = useState<PetCollection>('genesis'), [manual, setManual] = useState('');
   const [pickerMode, setPickerMode] = useState<'preview' | 'wallet'>('preview');
   const [previewCollection, setPreviewCollection] = useState<PetCollection>(() => previewFriends[lastPreview].collection);
@@ -227,8 +230,9 @@ function App() {
     choosePreview(lastPreview);
   }
   function clearReaction() { clearTimeout(reactionTimer.current); setReaction(''); }
-  function animate(action: CareAction) {
+  function animate(action: CareAction, rarityAward = false) {
     clearTimeout(reactionTimer.current);
+    petAudio.play(rarityAward ? 'rarity' : action);
     if (action !== 'play') setShareAction(action);
     setReactionVariant(reactionCounts.current[action]++ % 3); setReactionSequence(n => n + 1); setReaction(action);
     reactionTimer.current = window.setTimeout(() => setReaction(''), 2400);
@@ -242,8 +246,8 @@ function App() {
     const next = blankCare(); careRef.current = next; setCare(next); savePreview(previewKey(art), next); clearReaction(); setError('');
     setNotice('A fresh preview. Try the daily routine again.');
   }
-  function chooseIsland(next: Island) { setIsland(next); saveChoice('rarepet:island:v1', next); }
-  function changeBody() { const next = pickGenesisBody(bodyId); setBodyId(next); saveChoice('rarepet:body:v1', next); }
+  function chooseIsland(next: Island) { setIsland(next); saveChoice('rarepet:island:v1', next); petAudio.play('select'); }
+  function changeBody() { const next = pickGenesisBody(bodyId); setBodyId(next); saveChoice('rarepet:body:v1', next); petAudio.play('select'); }
   function acceptOwned(pet: PetIdentity, revision: number) {
     saveSelectedFriend(pet.owner, pet);
     op.current++; setSelected({ kind: 'owned', pet, revision }); careRef.current = blankCare(); setCare(careRef.current); setLoadedCare(false); setPicker(false); setPlaying(false); setTx(''); clearReaction();
@@ -263,22 +267,24 @@ function App() {
   function reward(action: CareAction) {
     if (!art) return;
     try {
+      const previousRarity = careRef.current.lifetime?.rarity ?? careRef.current.rarity;
       const next = applyCare(careRef.current, action, Math.floor(Date.now() / 1000)); careRef.current = next; setCare(next); savePreview(previewKey(art), next);
-      if (action === 'play') playCelebration.current = true; else animate(action);
+      if (action === 'play') playCelebration.current = true; else animate(action, (next.lifetime?.rarity ?? next.rarity) > previousRarity);
       setNotice({ pet: 'That’s the spot. +1 kinship. Your next pet unlocks in 24 hours.', feed: 'Meal served. +1 strength, +5 stamina.', poop: 'Feeling lighter already. +1 health.', play: 'A rare run, a wiser Friend. +10 preview XP.' }[action]); setError('');
     } catch (cause) { setError((cause as Error).message); }
   }
   function act(action: CareAction) {
-    if (action === 'play') { playCelebration.current = false; clearReaction(); setPlaying(true); setError(''); return; }
+    if (action === 'play') { playCelebration.current = false; clearReaction(); petAudio.play('play'); setPlaying(true); setError(''); return; }
     if (preview) reward(action); else setConfirmation(action);
   }
   async function confirm() {
     if (!confirmation || !live || lock.current) return;
     const action = confirmation, task = ++op.current; lock.current = true; setConfirmation(null); setPending('Confirm in your wallet…'); setError('');
     try {
+      const previousRarity = careRef.current.lifetime?.rarity ?? careRef.current.rarity;
       const result = await writeCare(session, live, action, wallet.revision, hash => { if (task === op.current) { setTx(hash); setPending('Waiting for onchain confirmation…'); } }, () => { if (task !== op.current) throw new Error('Your Friend selection changed. Choose an action again.'); }, care.policy?.version);
       if (task !== op.current) return;
-      setCare(result.care); setNotice(`${actions.find(a => a.id === action)!.name} confirmed onchain. Your Friend’s traits are updated.`); animate(action);
+      setCare(result.care); setNotice(`${actions.find(a => a.id === action)!.name} confirmed onchain. Your Friend’s traits are updated.`); animate(action, (result.care.lifetime?.rarity ?? result.care.rarity) > previousRarity);
     } catch (cause) { if (task === op.current) setError(cause instanceof Error ? cause.message : 'The transaction could not complete.'); }
     finally { if (task === op.current) { setPending(''); lock.current = false; } }
   }
@@ -295,6 +301,7 @@ function App() {
     <main>
       <div className="page-title"><div><span className="eyebrow">A FRIEND FOR EVERY DAY</span><h1>My RarePet<span>.</span></h1></div><button className="change-button" disabled={!!pending} onClick={() => openPicker(preview ? 'preview' : 'wallet')}>CHOOSE FRIEND <span>⇄</span></button></div>
       <div className="mode-bar"><div className="mode-switch" role="group" aria-label="Pet mode"><button aria-pressed={preview} disabled={!!pending || reconnecting} title={preview ? undefined : 'Disconnect your wallet to use Preview'} onClick={() => { if (!preview) setWalletAccount(true); }}>PREVIEW</button><button aria-pressed={!preview} disabled={!!pending} onClick={() => openPicker('wallet')}>MY WALLET <span aria-hidden="true">↗</span></button></div><p>{preview ? 'Try the daily routine. No wallet needed.' : reconnecting ? 'Reconnecting your wallet…' : selecting ? 'Bringing your Friend home…' : 'Your own Friend. Your daily ritual.'}</p>{preview && <button className="reset-preview" onClick={resetPreview}>RESET PREVIEW ↻</button>}</div>
+      <AudioControls music={petAudio.music} effects={petAudio.effects} available={petAudio.available} status={petAudio.status} onMusic={petAudio.onMusic} onEffects={petAudio.onEffects}/>
       <section className="pet-shell" aria-label="RarePet dashboard">
         <div className="shell-bar"><span><span className="tiny-cross">✦</span> {preview ? 'PREVIEW HABITAT' : 'YOUR FRIEND’S HABITAT'}</span><span className="mode-tag">{preview ? 'PREVIEW MODE' : careContract ? 'ONCHAIN CARE' : 'CARE NOT CONFIGURED'}</span></div>
         <div className="care-layout">
@@ -343,7 +350,7 @@ function App() {
     </div></Dialog>}
     {market && <MarketDialog session={session} close={() => setMarket(false)}/>}
     {sharing && (art ?? live) && <ShareDialog friend={(art ?? live)!} island={island} bodyId={bodyId} initialAction={shareAction} initialVariant={reactionVariant} close={() => setSharing(false)}/>}
-    {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => setLaunchRefresh(value => value + 1)}/>}
+    {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => { setLaunchRefresh(value => value + 1); petAudio.play('launch'); }}/>}
     {rareWallet && (art ?? live) && <RareWalletDialog key={`${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setRareWallet(false)} chooseFriend={() => { setRareWallet(false); openPicker('wallet'); }}/>}
     {picker && <Dialog title="Choose your Rare Friend" className="friend-picker-dialog" close={() => setPicker(false)}><div className="picker-content">
       <div className="picker-mode-switch" role="group" aria-label="Choose Friend source"><button aria-pressed={preview && pickerMode === 'preview'} disabled={!preview} title={preview ? undefined : 'Disconnect your wallet to choose a preview Friend'} onClick={() => setPickerMode('preview')}>PREVIEW FRIENDS</button><button aria-pressed={!preview || pickerMode === 'wallet'} onClick={() => setPickerMode('wallet')}>MY WALLET</button></div>
