@@ -55,13 +55,15 @@ Your island, Genesis body and last Preview Friend are remembered on this device.
 
 Open **Play** and take your selected Friend into RarePet's in-app arcade. Run, climb, fall and occasionally reverse through connected courses, with spinning Friends, flying bonus coins, shields and magnets along the way.
 
-Choose Easy, Normal or Degen. Space / ↑ / W jumps; press again to double jump. Hold ↓ / S to slide. Use ← / → to adjust pace on horizontal tracks and steer in vertical sections. Touch controls, pause and sound controls are built in.
+Choose Easy, Normal or Degen. Space / ↑ / W jumps; press again to double jump. Hold ↓ / S to slide. Use ← / → to adjust pace on horizontal tracks and steer in vertical sections. Touch controls, pause, an adaptive game soundtrack and separate music and sound-effect controls are built in.
 
 The arcade's displayed currency and rewards are simulated. RarePet's Preview XP is awarded only when a run completes. Playing with an owned Friend does not yet award onchain XP.
 
 ## Share a rare moment
 
 Pick **Pet**, **Feed**, **Play**, **Launch**, **Poop** or **Talk** and capture your Friend with their chosen island, body and speech bubble. **Talk** keeps the focus on your message, with no care-action effects or action label. Download a **2000 × 2000 PNG** or an **800 × 800 animated GIF** with a 2.4-second loop.
+
+Completed Play runs and confirmed launches as your Friend use those same controller and rocket animations in the habitat. Close the action popup to see the celebration on your island. Practice Play celebrates without awarding onchain XP.
 
 The share dialog prepares your post and offers **Download + Share on X**. Attach the downloaded file and publish when you're ready. Images and GIFs are rendered locally in your browser; exporting a moment does not change care progress.
 
