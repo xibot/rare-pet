@@ -218,7 +218,7 @@ export function createPetAudio(): PetAudio {
           filter.frequency.value = 2400;
           filter.Q.value = 0.35;
           musicBus = context.createGain();
-          musicBus.gain.value = 0.48;
+          musicBus.gain.value = 0.96;
           effectsBus = context.createGain();
           effectsBus.gain.value = 0.34;
           musicBus.connect(filter);
