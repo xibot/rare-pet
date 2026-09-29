@@ -26,6 +26,7 @@ type AudioContextConstructor = new (options?: AudioContextOptions) => AudioConte
 
 const LOOKAHEAD_SECONDS = 0.14;
 const MAX_VOICES = 40;
+const AUDIO_GAIN = 0.96;
 
 // Eight original bars: deliberately spacious, with a softly filtered pulse lead.
 const DAYDREAM_MELODY: readonly (number | null)[] = [
@@ -218,9 +219,9 @@ export function createPetAudio(): PetAudio {
           filter.frequency.value = 2400;
           filter.Q.value = 0.35;
           musicBus = context.createGain();
-          musicBus.gain.value = 0.96;
+          musicBus.gain.value = AUDIO_GAIN;
           effectsBus = context.createGain();
-          effectsBus.gain.value = 0.34;
+          effectsBus.gain.value = AUDIO_GAIN;
           musicBus.connect(filter);
           effectsBus.connect(filter);
           filter.connect(master);
