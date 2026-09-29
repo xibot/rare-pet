@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPetAudio, type PetAudio, type PetSound } from './audio';
+import { createPetAudio, PET_MUSIC_TRACKS, type PetAudio, type PetMusicTrack, type PetSound } from './audio';
 
-type Preferences = { music: boolean; effects: boolean };
+type Preferences = { music: boolean; effects: boolean; track: PetMusicTrack };
 const preferenceKey = 'rarepet:audio:v1';
 function savedPreferences(): Preferences {
   try {
     const value = JSON.parse(localStorage.getItem(preferenceKey) || '{}');
-    return { music: value?.music === true, effects: value?.effects === true };
-  } catch { return { music: false, effects: false }; }
+    const track = PET_MUSIC_TRACKS.find(track => track.id === value?.track)?.id ?? 'daydream';
+    return { music: value?.music === true, effects: value?.effects === true, track };
+  } catch { return { music: false, effects: false, track: 'daydream' }; }
 }
 
 export function usePetAudio(musicPaused: boolean) {
@@ -38,6 +39,7 @@ export function usePetAudio(musicPaused: boolean) {
 
   useEffect(() => {
     const audio = createPetAudio(); engine.current = audio;
+    audio.setMusicTrack(preferencesRef.current.track);
     audio.setMusicEnabled(preferencesRef.current.music);
     audio.setEffectsEnabled(preferencesRef.current.effects);
     setAvailable(audio.getStatus().supported);
@@ -67,15 +69,26 @@ export function usePetAudio(musicPaused: boolean) {
     } else audio?.play(sound);
   }, []);
 
-  function toggle(key: keyof Preferences) {
-    const next = { ...preferencesRef.current, [key]: !preferencesRef.current[key] };
+  function savePreferences(next: Preferences) {
     preferencesRef.current = next; setPreferences(next);
     try { localStorage.setItem(preferenceKey, JSON.stringify(next)); } catch { /* Audio works without storage. */ }
+  }
+
+  function toggle(key: 'music' | 'effects') {
+    const next = { ...preferencesRef.current, [key]: !preferencesRef.current[key] };
+    savePreferences(next);
     engine.current?.setMusicEnabled(next.music);
     engine.current?.setEffectsEnabled(next.effects);
     if (!next.music && !next.effects) setStatus('');
     if (next[key]) void activate().then(ok => { if (ok && key === 'effects' && preferencesRef.current.effects) play('select'); });
   }
 
-  return { ...preferences, available, status, play, onMusic: () => toggle('music'), onEffects: () => toggle('effects') };
+  function chooseTrack(track: PetMusicTrack) {
+    if (!PET_MUSIC_TRACKS.some(option => option.id === track)) return;
+    savePreferences({ ...preferencesRef.current, track });
+    engine.current?.setMusicTrack(track);
+    if (preferencesRef.current.music) void activate();
+  }
+
+  return { ...preferences, available, status, play, onMusic: () => toggle('music'), onEffects: () => toggle('effects'), onTrack: chooseTrack };
 }

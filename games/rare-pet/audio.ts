@@ -1,9 +1,17 @@
 /** Original, locally synthesized RarePet music and care sounds. No audio is fetched. */
 export type PetSound = 'pet' | 'feed' | 'poop' | 'play' | 'launch' | 'rarity' | 'select';
 
+export const PET_MUSIC_TRACKS = [
+  { id: 'daydream', name: 'Daydream', mood: 'Easygoing', bpm: 84 },
+  { id: 'moon-float', name: 'Moon Float', mood: 'Dreamy', bpm: 62 },
+  { id: 'pixel-party', name: 'Pixel Party', mood: 'Playful', bpm: 128 },
+] as const;
+export type PetMusicTrack = typeof PET_MUSIC_TRACKS[number]['id'];
+
 export interface PetAudio {
   unlock(): Promise<boolean>;
   setMusicEnabled(enabled: boolean): void;
+  setMusicTrack(track: PetMusicTrack): void;
   setEffectsEnabled(enabled: boolean): void;
   /** Keep the habitat soundtrack out of the way of Rare Rush's own audio. */
   setMusicPaused(paused: boolean): void;
@@ -16,13 +24,11 @@ type Channel = 'music' | 'effects';
 type Voice = { oscillator: OscillatorNode; envelope: GainNode; channel: Channel; end: number };
 type AudioContextConstructor = new (options?: AudioContextOptions) => AudioContext;
 
-const BPM = 84;
-const STEP_SECONDS = 60 / BPM / 2;
 const LOOKAHEAD_SECONDS = 0.14;
 const MAX_VOICES = 40;
 
 // Eight original bars: deliberately spacious, with a softly filtered pulse lead.
-const MELODY: readonly (number | null)[] = [
+const DAYDREAM_MELODY: readonly (number | null)[] = [
   76, null, null, 79, null, null, 81, null,
   79, null, 74, null, null, null, 72, null,
   76, null, null, null, 79, null, 76, null,
@@ -32,8 +38,38 @@ const MELODY: readonly (number | null)[] = [
   74, null, null, null, 79, null, 74, null,
   72, null, null, null, null, null, null, null,
 ];
-const CHORDS: readonly (readonly number[])[] = [
+const DAYDREAM_CHORDS: readonly (readonly number[])[] = [
   [48, 60, 64, 67], [45, 57, 60, 64], [41, 60, 65, 69], [43, 59, 62, 67],
+];
+
+// A separate D-minor lullaby: longer tones, open spaces and distant bell replies.
+const MOON_MELODY: readonly (number | null)[] = [
+  74, null, null, null, null, null, 81, null,
+  null, null, 77, null, null, null, null, null,
+  76, null, null, null, 74, null, null, null,
+  null, null, 72, null, null, null, null, null,
+  77, null, null, null, null, null, 84, null,
+  null, null, 81, null, null, null, null, null,
+  79, null, null, null, 76, null, null, null,
+  74, null, null, null, null, null, null, null,
+];
+const MOON_CHORDS: readonly (readonly number[])[] = [
+  [38, 62, 65, 69], [34, 58, 62, 65], [41, 60, 65, 69], [36, 60, 64, 67],
+];
+
+// A bouncy G-major call-and-response, with short arpeggios and a tiny synth beat.
+const PARTY_MELODY: readonly (number | null)[] = [
+  79, 83, null, 86, 83, null, 81, 79,
+  null, 74, 79, null, 83, 81, null, 79,
+  76, null, 79, 83, null, 86, 83, 79,
+  78, 79, null, 83, 81, null, 79, null,
+  84, 83, 79, null, 76, null, 79, 83,
+  84, null, 88, 86, null, 84, 83, null,
+  81, 78, null, 74, 78, 81, null, 86,
+  83, null, 81, 78, 79, null, null, null,
+];
+const PARTY_CHORDS: readonly (readonly number[])[] = [
+  [43, 59, 62, 67], [40, 55, 59, 64], [36, 60, 64, 67], [38, 57, 62, 66],
 ];
 
 const frequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
@@ -53,6 +89,8 @@ export function createPetAudio(): PetAudio {
   let musicEnabled = false;
   let effectsEnabled = false;
   let musicPaused = false;
+  let musicTrack: PetMusicTrack = 'daydream';
+  let stepSeconds = 60 / PET_MUSIC_TRACKS[0].bpm / 2;
   let step = 0;
   let nextStepAt = 0;
   let lastEffectAt = -Infinity;
@@ -110,19 +148,44 @@ export function createPetAudio(): PetAudio {
   }
 
   function scheduleStep(at: number) {
-    const position = step % MELODY.length;
-    const chord = CHORDS[Math.floor(position / 16)];
-    if (position % 8 === 0) tone('music', chord[0], at, STEP_SECONDS * 3.3, 0.2, 'triangle');
-    if (position % 8 === 4) tone('music', chord[0] + 7, at, STEP_SECONDS * 2, 0.11, 'triangle');
-    if (position % 4 === 2) {
-      const harmony = chord[1 + Math.floor(position / 4) % 3];
-      tone('music', harmony, at, STEP_SECONDS * 1.7, 0.065, 'triangle');
+    const position = step % 64;
+    const chordIndex = Math.floor(position / 16);
+    if (musicTrack === 'moon-float') {
+      const chord = MOON_CHORDS[chordIndex];
+      if (position % 8 === 0) {
+        tone('music', chord[0], at, stepSeconds * 5.5, 0.17, 'triangle');
+        tone('music', chord[1], at, stepSeconds * 3.5, 0.055, 'triangle');
+        tone('music', chord[3], at, stepSeconds * 3.5, 0.04, 'sine');
+      }
+      const lead = MOON_MELODY[position];
+      if (lead !== null) tone('music', lead, at, stepSeconds * 2.5, 0.095, 'triangle');
+      if (position % 16 === 12) tone('music', chord[2] + 24, at, stepSeconds * 2.8, 0.04, 'sine');
+    } else if (musicTrack === 'pixel-party') {
+      const chord = PARTY_CHORDS[chordIndex];
+      if (position % 2 === 0) {
+        const bass = chord[0] + (position % 8 === 6 ? 12 : position % 8 === 2 ? 7 : 0);
+        tone('music', bass, at, stepSeconds * 0.72, 0.16, 'triangle');
+      } else {
+        tone('music', chord[1 + Math.floor(position / 2) % 3] + 12, at, stepSeconds * 0.42, 0.04);
+      }
+      const lead = PARTY_MELODY[position];
+      if (lead !== null) tone('music', lead, at, stepSeconds * 0.68, 0.07);
+      if (position % 8 === 0) tone('music', 48, at, 0.12, 0.13, 'sine', 28);
+      if (position % 8 === 4) tone('music', 93, at, 0.055, 0.035, 'triangle', 81);
+    } else {
+      const chord = DAYDREAM_CHORDS[chordIndex];
+      if (position % 8 === 0) tone('music', chord[0], at, stepSeconds * 3.3, 0.2, 'triangle');
+      if (position % 8 === 4) tone('music', chord[0] + 7, at, stepSeconds * 2, 0.11, 'triangle');
+      if (position % 4 === 2) {
+        const harmony = chord[1 + Math.floor(position / 4) % 3];
+        tone('music', harmony, at, stepSeconds * 1.7, 0.065, 'triangle');
+      }
+      const lead = DAYDREAM_MELODY[position];
+      if (lead !== null) tone('music', lead, at, stepSeconds * 1.2, 0.068);
+      // A quiet distant sparkle marks the halfway point without a loud loop seam.
+      if (position === 32) tone('music', 91, at, stepSeconds * 2.4, 0.025, 'sine');
     }
-    const lead = MELODY[position];
-    if (lead !== null) tone('music', lead, at, STEP_SECONDS * 1.2, 0.068);
-    // A quiet distant sparkle marks the halfway point without a loud loop seam.
-    if (position === 32) tone('music', 91, at, STEP_SECONDS * 2.4, 0.025, 'sine');
-    step = (step + 1) % MELODY.length;
+    step = (step + 1) % 64;
   }
 
   function schedule() {
@@ -133,7 +196,7 @@ export function createPetAudio(): PetAudio {
     if (nextStepAt < now - LOOKAHEAD_SECONDS) nextStepAt = now + 0.025;
     while (nextStepAt < now + LOOKAHEAD_SECONDS) {
       scheduleStep(nextStepAt);
-      nextStepAt += STEP_SECONDS;
+      nextStepAt += stepSeconds;
     }
   }
 
@@ -181,7 +244,7 @@ export function createPetAudio(): PetAudio {
           filter.frequency.value = 2400;
           filter.Q.value = 0.35;
           musicBus = context.createGain();
-          musicBus.gain.value = 0.24;
+          musicBus.gain.value = 0.48;
           effectsBus = context.createGain();
           effectsBus.gain.value = 0.34;
           musicBus.connect(filter);
@@ -207,6 +270,19 @@ export function createPetAudio(): PetAudio {
     setMusicEnabled(enabled) {
       if (musicEnabled === enabled || disposed) return;
       musicEnabled = enabled;
+      syncMusic();
+    },
+    setMusicTrack(track) {
+      if (disposed || track === musicTrack) return;
+      const option = PET_MUSIC_TRACKS.find(option => option.id === track);
+      if (!option) return;
+      if (timer !== undefined) clearInterval(timer);
+      timer = undefined;
+      stopVoices('music');
+      musicTrack = track;
+      stepSeconds = 60 / option.bpm / 2;
+      step = 0;
+      nextStepAt = 0;
       syncMusic();
     },
     setEffectsEnabled(enabled) {
