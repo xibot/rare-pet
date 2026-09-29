@@ -1,8 +1,8 @@
-.pet-audio-controls{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:10px 16px;margin:0 0 14px;min-width:0;color:#ccff00;font:500 11px/1.5 var(--rush-font-mono)}
+.pet-audio-controls{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px 16px;margin:0 0 14px;min-width:0;color:#ccff00;font:500 11px/1.5 var(--rush-font-mono)}
 .pet-audio-status{flex-basis:100%;min-width:0;color:#aeb49f;overflow-wrap:anywhere}
 .pet-audio-status-empty{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .pet-audio-buttons,.pet-audio-tracks{display:flex;align-items:center;gap:8px}
-.pet-audio-buttons{flex-wrap:wrap;min-width:0;max-width:100%}
+.pet-audio-buttons{justify-content:flex-end;flex-wrap:wrap;min-width:0;max-width:100%}
 .pet-audio-tracks{flex-shrink:0}
 .pet-audio-controls button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 12px;border:1px solid #68714c;background:#000;color:#b5bcaa;font:600 11px/1 var(--rush-font-mono);white-space:nowrap}
 .pet-audio-buttons svg{width:14px;height:14px;flex-shrink:0}
