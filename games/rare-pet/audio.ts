@@ -6,6 +6,7 @@ export const PET_MUSIC_TRACKS = [
   { id: 'pixel-party', name: 'Pixel Party', mood: 'Playful', bpm: 128 },
 ] as const;
 export type PetMusicTrack = typeof PET_MUSIC_TRACKS[number]['id'];
+export const DEFAULT_MUSIC_TRACK: PetMusicTrack = 'pixel-party';
 
 export interface PetAudio {
   unlock(): Promise<boolean>;
@@ -73,8 +74,8 @@ export function createPetAudio(): PetAudio {
   let musicEnabled = false;
   let effectsEnabled = false;
   let musicPaused = false;
-  let musicTrack: PetMusicTrack = 'daydream';
-  let stepSeconds = 60 / PET_MUSIC_TRACKS[0].bpm / 2;
+  let musicTrack: PetMusicTrack = DEFAULT_MUSIC_TRACK;
+  let stepSeconds = 60 / PET_MUSIC_TRACKS.find(track => track.id === DEFAULT_MUSIC_TRACK)!.bpm / 2;
   let step = 0;
   let nextStepAt = 0;
   let lastEffectAt = -Infinity;

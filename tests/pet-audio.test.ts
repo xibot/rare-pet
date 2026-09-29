@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPetAudio, PET_MUSIC_TRACKS, type PetMusicTrack, type PetSound } from '../games/rare-pet/audio.ts';
+import { createPetAudio, DEFAULT_MUSIC_TRACK, PET_MUSIC_TRACKS, type PetMusicTrack, type PetSound } from '../games/rare-pet/audio.ts';
 
 class Param {
   value = 0;
@@ -219,7 +219,7 @@ test('unsupported or blocked audio fails harmlessly and can be retried after a g
 test('choosing a track before unlock stores the choice without enabling or creating audio', async t => {
   const { timers } = environment(t);
   const audio = createPetAudio();
-  audio.setMusicTrack('pixel-party');
+  audio.setMusicTrack('daydream');
   assert.equal(Context.instances.length, 0);
   assert.equal(timers.size, 0);
   await audio.unlock();
@@ -227,14 +227,15 @@ test('choosing a track before unlock stores the choice without enabling or creat
   assert.equal(context.oscillators.length, 0);
   audio.setMusicEnabled(true);
   assert.equal(timers.size, 1);
-  // Pixel Party begins on G, unlike Daydream's C opening.
-  assert.equal(context.oscillators[0].frequency.events[0].values[0], 440 * 2 ** ((43 - 69) / 12));
+  // An explicit Daydream selection overrides the default Pixel Party opening.
+  assert.equal(context.oscillators[0].frequency.events[0].values[0], 440 * 2 ** ((48 - 69) / 12));
   audio.dispose();
 });
 
 test('switching tracks fades only music and starts a fresh phrase without interrupting effects', async t => {
   const { timers } = environment(t);
   const audio = createPetAudio();
+  audio.setMusicTrack('daydream');
   audio.setMusicEnabled(true);
   audio.setEffectsEnabled(true);
   await audio.unlock();
@@ -265,13 +266,13 @@ test('changing tracks respects muted, game-paused and hidden states', async t =>
   const audio = createPetAudio();
   await audio.unlock();
   const context = Context.instances[0];
-  audio.setMusicTrack('pixel-party');
+  audio.setMusicTrack('daydream');
   assert.equal(context.oscillators.length, 0);
   assert.equal(timers.size, 0);
   audio.setMusicEnabled(true);
   audio.setMusicPaused(true);
   let count = context.oscillators.length;
-  audio.setMusicTrack('daydream');
+  audio.setMusicTrack('pixel-party');
   assert.equal(context.oscillators.length, count);
   assert.equal(timers.size, 0);
   audio.setMusicPaused(false);
@@ -280,7 +281,7 @@ test('changing tracks respects muted, game-paused and hidden states', async t =>
   page.dispatchEvent(new Event('visibilitychange'));
   await Promise.resolve();
   count = context.oscillators.length;
-  audio.setMusicTrack('pixel-party');
+  audio.setMusicTrack('daydream');
   assert.equal(context.oscillators.length, count);
   assert.equal(timers.size, 0);
   page.visibilityState = 'visible';
@@ -289,9 +290,25 @@ test('changing tracks respects muted, game-paused and hidden states', async t =>
   assert.equal(timers.size, 1);
   audio.setMusicEnabled(false);
   count = context.oscillators.length;
-  audio.setMusicTrack('daydream');
+  audio.setMusicTrack('pixel-party');
   assert.equal(context.oscillators.length, count);
   assert.equal(timers.size, 0);
+  audio.dispose();
+});
+
+test('a fresh engine defaults to Pixel Party notes at 128 BPM after music is enabled', async t => {
+  const { tick, timers } = environment(t);
+  assert.equal(DEFAULT_MUSIC_TRACK, 'pixel-party');
+  const audio = createPetAudio();
+  await audio.unlock();
+  const context = Context.instances[0];
+  assert.equal(context.oscillators.length, 0);
+  assert.equal(timers.size, 0);
+  audio.setMusicEnabled(true);
+  assert.equal(context.oscillators[0].frequency.events[0].values[0], 440 * 2 ** ((43 - 69) / 12));
+  for (let index = 0; index < 16; index++) { context.advance(0.025); tick(); }
+  const starts = [...new Set(context.oscillators.map(voice => voice.starts[0]))].sort((a, b) => a - b);
+  assert.ok(Math.abs(starts[1] - starts[0] - 60 / 128 / 2) < 0.00001);
   audio.dispose();
 });
 

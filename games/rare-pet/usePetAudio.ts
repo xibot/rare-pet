@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPetAudio, PET_MUSIC_TRACKS, type PetAudio, type PetMusicTrack, type PetSound } from './audio';
+import { createPetAudio, DEFAULT_MUSIC_TRACK, PET_MUSIC_TRACKS, type PetAudio, type PetMusicTrack, type PetSound } from './audio';
 
 type Preferences = { music: boolean; effects: boolean; track: PetMusicTrack };
 const preferenceKey = 'rarepet:audio:v1';
 function savedPreferences(): Preferences {
   try {
     const value = JSON.parse(localStorage.getItem(preferenceKey) || '{}');
-    const track = PET_MUSIC_TRACKS.find(track => track.id === value?.track)?.id ?? 'daydream';
+    const track = PET_MUSIC_TRACKS.find(track => track.id === value?.track)?.id ?? DEFAULT_MUSIC_TRACK;
     return { music: value?.music === true, effects: value?.effects === true, track };
-  } catch { return { music: false, effects: false, track: 'daydream' }; }
+  } catch { return { music: false, effects: false, track: DEFAULT_MUSIC_TRACK }; }
 }
 
 export function usePetAudio(musicPaused: boolean) {

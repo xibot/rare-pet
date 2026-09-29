@@ -40,7 +40,7 @@ Pet unlocks 24 hours after the last pet, followed by a **24-hour grace window** 
 
 RarePet traits are separate from the NFT's original traits and collection rarity. Stamina currently accumulates; it is not an entry cost for Play. See the [care guide](https://rarepet.app/docs/) for the full routine.
 
-Turn on **MUSIC**, then choose **DAYDREAM** (easygoing, 84 BPM) or **PIXEL PARTY** (playful, 128 BPM) with the track buttons. Track buttons are disabled while music is off. Each is an original 8-bit soundtrack. **FX** adds care chimes, snack pops, playful bubbles and launch celebrations. Both start off; your track and sound choices are remembered on this device. Audio waits for a tap, pauses when the tab is hidden, and the habitat music steps aside during Play. Onchain care and launch celebrations sound only after confirmation.
+Turn on **MUSIC**, then choose **DAYDREAM** (easygoing, 84 BPM) or **PIXEL PARTY** (playful, 128 BPM) with the track buttons. Pixel Party is the default. Track buttons are disabled while music is off. Each is an original 8-bit soundtrack. **FX** adds care chimes, snack pops, playful bubbles and launch celebrations. Both start off; your track and sound choices are remembered on this device. Audio waits for a tap, pauses when the tab is hidden, and the habitat music steps aside during Play. Onchain care and launch celebrations sound only after confirmation.
 
 ## Your Friend. Your world.
 
