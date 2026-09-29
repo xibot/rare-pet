@@ -1,7 +1,8 @@
-export type ShareAction = 'pet' | 'feed' | 'poop';
+export type ShareAction = 'pet' | 'feed' | 'poop' | 'talk';
 
 export const SHARE_SPEECH: Readonly<Record<ShareAction, string>> = {
   pet: '♡ right back at you.', feed: 'rare food. good mood.', poop: 'ahh. much better.',
+  talk: 'gm, let’s talk rare.',
 };
 export const SHARE_SPEECH_MAX_LENGTH = Math.max(...Object.values(SHARE_SPEECH).map(text => Array.from(text).length));
 

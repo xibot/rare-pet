@@ -56,6 +56,7 @@ export function Icon({ name }: { name: string }) {
     play: 'M3 5h14v2h2v9h-4v-3H5v3H1V7h2zM6 7v5M4 9h4M13 8h1M16 10h1',
     launch: 'M10 1l5 5v6h-3v5l-2-2-2 2v-5H5V6zM4 9H2v5h3M16 9h2v5h-3M9 6h2v2H9z',
     poop: 'M10 2v3h3v3h2v3h2v2h2v4H1v-4h2v-2h2V8h3V5zM6 12h1M13 12h1',
+    talk: 'M2 3h16v10h-7l-4 4v-4H2zM5 7h2M9 7h2M13 7h2',
     wallet: 'M3 5V3h12v3M2 6h16v11H2zM18 9h-6v5h6M14 11h1',
     trade: 'M2 6h15M13 2l4 4-4 4M18 14H3M7 10l-4 4 4 4',
     arrow: 'M4 10h12M11 5l5 5-5 5',

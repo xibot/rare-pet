@@ -27,6 +27,7 @@ function Glyph({ x, y, size, color, children }: {
 
 /** A still from the same care reactions; canonical Friend pixels are never edited. */
 function Reaction({ action, variant, size, phase }: { action: ShareAction; variant: number; size: number; phase?: number }) {
+  if (action === 'talk') return null;
   const wave = (offset = 0) => phase === undefined ? 0 : Math.sin(phase * Math.PI * 2 + offset);
   if (action === 'pet') {
     const color = ['#d46d7b', '#ab82c8', '#899f27'][variant];
@@ -53,6 +54,7 @@ function Reaction({ action, variant, size, phase }: { action: ShareAction; varia
 }
 
 function pose(action: ShareAction, variant: number, size: number): string {
+  if (action === 'talk') return '';
   const [dx, dy, angle] = action === 'pet'
     ? [[0, -5, -5], [0, -32, 3], [-9, -5, -4]][variant]
     : action === 'feed' ? [[0, 6, 2], [8, 6, 4], [0, -3, -4]][variant]
@@ -140,8 +142,8 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   let markup: string;
   const wave = phase === undefined ? 0 : Math.sin(phase * Math.PI * 2);
   const bounce = phase === undefined ? 0 : (1 - Math.cos(phase * Math.PI * 4)) / 2;
-  const motion = `translate(0 ${-petSize * bounce * (action === 'pet' ? .025 : action === 'feed' ? .012 : .018)}) rotate(${wave * (action === 'feed' ? 3 : 2)} ${petSize / 2} ${petSize * .92})`;
-  const frame = phase === undefined ? safeVariant * 2 : Math.floor(phase * 16) % 8;
+  const motion = action === 'talk' ? '' : `translate(0 ${-petSize * bounce * (action === 'pet' ? .025 : action === 'feed' ? .012 : .018)}) rotate(${wave * (action === 'feed' ? 3 : 2)} ${petSize / 2} ${petSize * .92})`;
+  const frame = phase === undefined ? (action === 'talk' ? 0 : safeVariant * 2) : Math.floor(phase * 16) % 8;
   try {
     flushSync(() => root.render(<svg xmlns={SVG_NS} width={size} height={size} viewBox="0 0 2000 2000">
       <rect width="2000" height="2000" fill="#000"/>
@@ -181,7 +183,7 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   const rareWidth = context.measureText('RARE').width;
   context.fillStyle = '#ccff00'; context.fillText('PET', 120 + rareWidth, 138);
   context.font = `500 30px ${mono}`; context.textAlign = 'right';
-  context.fillStyle = '#ccff00'; context.fillText(action.toUpperCase(), 1880, 138);
+  if (action !== 'talk') { context.fillStyle = '#ccff00'; context.fillText(action.toUpperCase(), 1880, 138); }
   context.fillStyle = '#fff'; context.textAlign = 'left'; context.font = `500 31px ${mono}`;
   const label = `${friend.label} · ${option.name}`;
   // Token IDs are unbounded metadata; fitting the label must never distort the art.
