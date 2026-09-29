@@ -1,0 +1,4 @@
+interface:
+  display_name: "RarePet"
+  short_description: "Read care, plan actions and guide your Rare Friend"
+  default_prompt: "Use $rarepet to check my Rare Friend’s care status and tell me what is ready."

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "checkedAgainstSource": "2026-09-28",
+  "chainId": 4663,
+  "publicRpc": "https://rpc.mainnet.chain.robinhood.com",
+  "explorer": "https://robinhoodchain.blockscout.com",
+  "care": "0x0082229d9592292E2542cb29a6b94d9a2F22d124",
+  "careRuntimeKeccak256": "0xb011ebf1d1e59052a7d3ef94b91f17e94ce2a2cd0589108f0f61432305e63363",
+  "careRuntimeSha256": "126015b2ba70d92d4fe36e63175327e7f285db1b52b4666c06610dd29ec521b6",
+  "collections": {
+    "genesis": "0x116EaA62241751E0c98dA43d458600c6C17cD361",
+    "generations": "0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D"
+  },
+  "launchRouter": "0xc6a4b2D4D369747B26e4Ff805a79A57da2505dC3",
+  "selectors": {
+    "CHAIN_ID": "0x85e1f4d0",
+    "GENERATIONS": "0xf61a3824",
+    "GENESIS": "0xb7dec1b7",
+    "actionAvailability": "0x23284fce",
+    "actionCount": "0xf867d93b",
+    "actionRecord": "0x1f5e4f10",
+    "currentRuleVersion": "0xc9ad8ee9",
+    "feed": "0x53db7839",
+    "getLifetime": "0x73724e5e",
+    "getPet": "0x7ea449ba",
+    "getPetSchedule": "0xff988049",
+    "pet": "0x89c80059",
+    "poop": "0x7128b9f3",
+    "rules": "0x04d6ded4",
+    "ownerOf": "0x6352211e",
+    "generation": "0x7d71dc35",
+    "tokenBoundAccount": "0x0be76ed6",
+    "getLaunch": "0x1ce195d5"
+  },
+  "launchRuntimeKeccak256": "0xaceed1b3c1e28af617fe78ca850a4b29c391aec09a90fd05258261637c183149",
+  "launchRuntimeSha256": "ea8b11c3082cd8c90490f5d6e0fd12ec8956293d01ca4c2c8b3c4a5a59637bd2",
+  "archivedLaunchRouters": [
+    "0x8c46baA63079B8648b1cd5689058E0AAB33DF063"
+  ],
+  "archivedLaunchRuntimeSha256": {
+    "0x8c46baa63079b8648b1cd5689058e0aab33df063": "ea8b11c3082cd8c90490f5d6e0fd12ec8956293d01ca4c2c8b3c4a5a59637bd2"
+  }
+}

@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, readdir, realpath, rm } from 'node:fs/promi
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildAgentResources } from './agent-resources.mjs';
 
 const project = fileURLToPath(new URL('..', import.meta.url));
 export async function buildPetSite({ outdir = path.join(project, 'dist-pet'), watch = false } = {}) {
@@ -17,6 +18,8 @@ export async function buildPetSite({ outdir = path.join(project, 'dist-pet'), wa
     await mkdir(path.join(outdir, 'docs'), { recursive: true });
     await rm(path.join(outdir, 'launch'), { recursive: true, force: true });
     await writeFile(path.join(outdir, 'docs/index.html'), await readFile(path.join(project, 'games/rare-pet/docs.html')));
+    await buildAgentResources(project, outdir, { careAddress: address, launchAddress: launchpad });
+    await writeFile(path.join(outdir, 'agent/index.html'), await readFile(path.join(project, 'games/rare-pet/agent.html')));
     await writeFile(path.join(outdir, 'favicon.svg'), await readFile(path.join(project, 'games/rare-rush/assets/favicon.svg')));
     const notices = await Promise.all(['THIRD_PARTY_NOTICES.md', 'licenses/friendsdk-APACHE-2.0.txt', 'licenses/doppler-sdk-MIT.txt', 'node_modules/gifenc/LICENSE.md', 'node_modules/@rarefriends/friendsdk/NOTICE.md', 'games/rare-rush/assets/fonts/SILKSCREEN-OFL.txt', 'games/rare-rush/assets/fonts/ARCHIVO-OFL.txt', 'games/rare-rush/assets/fonts/SOMETYPE-MONO-OFL.txt'].map(file => readFile(path.join(project, file), 'utf8')));
     await writeFile(path.join(outdir, 'credits.txt'), notices.join('\n\n'));
@@ -25,7 +28,7 @@ export async function buildPetSite({ outdir = path.join(project, 'dist-pet'), wa
   return { outdir, close: () => build.dispose() };
 }
 export function createPetServer(outdir) {
-  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' };
+  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.json': 'application/json', '.yaml': 'text/plain; charset=utf-8', '.zip': 'application/zip' };
   const apiEndpoints = { '/api/rpc': '../api/rpc.ts', '/api/launch-quotes': '../api/launch-quotes.ts', '/api/launch-image': '../api/launch-image.ts', '/api/market-routing': '../api/market-routing.ts' };
   return createServer(async (req, res) => {
     try {
@@ -37,11 +40,13 @@ export function createPetServer(outdir) {
       }
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
       if (/^\/launch(?:\/|\/index\.html)?$/.test(url.pathname)) { res.writeHead(308, { Location: '/' }).end(); return; }
-      const pathname = url.pathname === '/' ? '/index.html' : /^\/docs\/?$/.test(url.pathname) ? '/docs/index.html' : url.pathname;
-      if (!/^\/(?:index\.(?:html|js|css)|share-gif-worker\.js|docs\/index\.html|favicon.svg|credits.txt|assets\/[\w-]+\.woff2)$/.test(pathname)) { res.writeHead(404).end(); return; }
+      const pathname = url.pathname === '/' ? '/index.html' : /^\/(?:docs|agent)\/?$/.test(url.pathname) ? `${url.pathname.replace(/\/$/, '')}/index.html` : url.pathname;
+      const appFile = /^\/(?:index\.(?:html|js|css)|share-gif-worker\.js|(?:docs|agent)\/index\.html|agent\/manifest\.json|favicon.svg|credits.txt|llms.txt|assets\/[\w-]+\.woff2)$/.test(pathname);
+      const skillFile = /^\/skills\/(?:rarepet\.zip|rarepet\/(?:SKILL\.md|(?:agents|references|scripts)\/[A-Za-z0-9_-]+\.(?:md|mjs|json|yaml)))$/.test(pathname);
+      if (!appFile && !skillFile) { res.writeHead(404).end(); return; }
       const root = await realpath(outdir), file = await realpath(path.join(root, pathname));
       if (!file.startsWith(root + path.sep)) { res.writeHead(404).end(); return; }
-      res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(pathname === '/skills/rarepet.zip' ? { 'Content-Disposition': 'attachment; filename="rarepet.zip"' } : {}) });
       res.end(req.method === 'HEAD' ? undefined : await readFile(file));
     } catch { res.writeHead(404).end(); }
   });

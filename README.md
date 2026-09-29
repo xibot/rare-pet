@@ -2,7 +2,7 @@
 
 **Your Rare Friend, every day.**
 
-[Meet Your Pet](https://rarepet.app) · [Care Guide](https://rarepet.app/docs/) · [Vibeathon Entry](https://github.com/spokesz/rarefriends-vibeathon/pull/76)
+[Meet Your Pet](https://rarepet.app) · [Care Guide](https://rarepet.app/docs/) · [Agent Skill](https://rarepet.app/agent/) · [Vibeathon Entry](https://github.com/spokesz/rarefriends-vibeathon/pull/76)
 
 Every Rare Friend is a Rare Pet. Give your Genesis or Generations Friend a little love, a good meal, a game together, and a floating home of their own.
 
@@ -96,6 +96,14 @@ Buy and sell **inside RarePet**. The main market uses your connected wallet. Ope
 Ecosystem assets use available Uniswap V3/V4 routes; RarePet launches use their existing Doppler pools and actual launch pairs. Review the exact input, estimate, minimum received and slippage, approve the displayed amount when needed, then confirm the swap. Ecosystem pairs default to WETH, with USDG for WETH itself. ETH pays network gas. A catalog listing does not guarantee liquidity or a supported route.
 
 Trading has **no trait effect or care cooldown** and preserves the launch’s existing fee split. RarePet adds no trading fee. Routing credentials stay on the server; swaps use the existing onchain routers without a new RarePet trading contract.
+
+## Your Friend. Your agent.
+
+The **[rarepet skill](https://rarepet.app/agent/)** helps an agent understand RarePet, read live care and prepare unsigned Pet, Feed and Poop transactions. Download the complete [skill ZIP](https://rarepet.app/skills/rarepet.zip), add the `rarepet` folder to your agent's skills directory, then invoke `$rarepet` with your collection and token ID. The bundled Node.js 22 helper has no dependencies and never signs or broadcasts.
+
+The [AGENT page](https://rarepet.app/agent/) includes setup, example prompts and capability boundaries. Agents can start at [SKILL.md](https://rarepet.app/skills/rarepet/SKILL.md), [llms.txt](https://rarepet.app/llms.txt) or the [JSON manifest](https://rarepet.app/agent/manifest.json). The manifest provides contract identities and SHA-256 checksums for the downloadable resources.
+
+Installing the skill grants no wallet access. The current NFT owner authorizes care; launches, trades, transfers and claims use the app's review and wallet flows. Scheduling depends on the user's agent platform and explicit instructions. Onchain Play XP is still coming later.
 
 ## Permanent care. Room to grow.
 

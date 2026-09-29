@@ -4,6 +4,12 @@
 
 Implementation, activation boundaries, and validation notes for RarePet. Run the commands below from the repository root unless a command explicitly changes directories. Repository file paths are relative to the repository root unless identified as SDK internals.
 
+## Agent integration
+
+`/agent/` provides the human setup and machine-readable entrypoints for the `rarepet` skill. Source lives in `skills/rarepet/`; the site builder publishes a deterministic `/skills/rarepet.zip` and individual resources, `/agent/manifest.json` with per-file SHA-256 checksums, and `/llms.txt`. The manifest reads the tracked care and current address-suffixed launch deployment records. `appBuild` separately reports whether those exact contracts are configured in this build. No private RPC, Blob or routing credentials enter these files.
+
+The zero-dependency Node 22 helper reads public chain state and prepares unsigned care transactions; it does not sign, broadcast or create a schedule. App-guided financial operations retain the existing wallet flows. Standalone agents must use the public or their own trusted RPC, never spoof an Origin to use the app relay. Read `skills/rarepet/SKILL.md` for supported commands and authority boundaries. If contracts change, update and validate the skill's pinned protocol metadata along with the deployment records before publishing.
+
 ## Deployment status
 
 - **The care ledger is deployed.** RarePetCare at `0x0082229d9592292E2542cb29a6b94d9a2F22d124` records Pet, Feed and Poop, lifetime earned totals and permanent action receipts. Deployment receipt, exact runtime, treasury admin and initial rules passed verification; see the [care manifest](../contracts/rare-pet/deployments/4663.json). Preview remains a device-local demo and never becomes onchain state.

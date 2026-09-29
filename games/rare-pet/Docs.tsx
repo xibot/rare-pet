@@ -59,7 +59,7 @@ export function Docs({ petGraceHours = 24 }: DocsProps) {
   const petDeadlineHours = 24 + petGraceHours;
   return <div className="rarepet-app docs-app">
     <a className="docs-skip" href="#docs-main">Skip to guide</a>
-    <div className="site-header-shell"><header className="site-header"><a className="site-logo" href="/" aria-label="RarePet home"><PetBrand/></a><nav aria-label="Main navigation"><a className="docs-nav-link" href="/">HOME</a><a className="docs-nav-link" href="/docs/" aria-current="page">DOCS</a><a className="guide-header-cta" href="/">MEET YOUR PET <span aria-hidden="true">↗</span></a></nav></header></div>
+    <div className="site-header-shell"><header className="site-header"><a className="site-logo" href="/" aria-label="RarePet home"><PetBrand/></a><nav aria-label="Main navigation"><a className="docs-nav-link" href="/">HOME</a><a className="docs-nav-link" href="/docs/" aria-current="page">DOCS</a><a className="docs-nav-link" href="/agent/">AGENT</a><a className="guide-header-cta" href="/">MEET YOUR PET <span aria-hidden="true">↗</span></a></nav></header></div>
     <main className="docs-main" id="docs-main">
       <div className="docs-hero">
         <div className="guide-hero-copy"><span className="docs-eyebrow">THE RAREPET FIELD GUIDE / 01</span><h1>A LITTLE CARE.<br/><span>A LOT OF RARE.</span></h1><p>Every Rare Friend is a Rare Pet.<br/>Give yours a home, a daily ritual, and a little love.</p><a className="guide-primary-link" href="#start">LET’S GET YOU STARTED <span aria-hidden="true">↓</span></a><div className="guide-hero-facts"><span><b>5</b> CARE ACTIONS</span><span><b>7</b> GROWING TRAITS</span><span><b>1</b> RARE FRIEND</span></div></div>
@@ -137,6 +137,7 @@ export function Docs({ petGraceHours = 24 }: DocsProps) {
         <section id="onchain">
           <SectionHead number="09" eyebrow="WHERE WE ARE TODAY" title="Ready now. More to come."/>
           <div className="guide-status-grid"><div><span className="guide-chip">READY NOW</span><h3>Make yourself at home.</h3><ul><li>Preview, islands & cosmetic bodies</li><li>PNG & GIF sharing</li><li>Wallet ownership & Rare Wallet</li><li>In-app Buy / Sell</li><li>{careContract ? 'Onchain Pet, Feed & Poop' : 'Onchain care not configured in this build'}</li><li>{launchpadContract ? 'Token launches & creator fee claims' : 'Launch form preview only in this build'}</li></ul></div><div className="soon"><span className="guide-chip">COMING LATER</span><h3>Room to grow.</h3><ul><li>Verified onchain Play XP</li><li>Rarity-farming seasons & prizes</li></ul></div></div>
+          <div className="guide-inline-tip"><Icon name="pet"/><p><b>A little help from your agent.</b> Get the rarepet skill to read your Friend’s care and prepare transactions. <a href="/agent/">MEET THE AGENT SKILL ↗</a></p></div>
           <a className="guide-return" href="/"><span>YOUR FRIEND IS WAITING.</span><b>LET’S MAKE TODAY RARE.</b><span aria-hidden="true">↗</span></a>
         </section>
       </div>

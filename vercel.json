@@ -4,6 +4,22 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist-pet",
+  "headers": [
+    { "source": "/skills/:path*", "headers": [
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+    ] },
+    { "source": "/skills/rarepet.zip", "headers": [
+      { "key": "Content-Type", "value": "application/zip" },
+      { "key": "Content-Disposition", "value": "attachment; filename=\"rarepet.zip\"" }
+    ] },
+    { "source": "/skills/rarepet/SKILL.md", "headers": [
+      { "key": "Content-Type", "value": "text/markdown; charset=utf-8" }
+    ] },
+    { "source": "/agent/manifest.json", "headers": [
+      { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+    ] }
+  ],
   "redirects": [
     { "source": "/launch", "destination": "/", "permanent": true },
     { "source": "/launch/", "destination": "/", "permanent": true },
