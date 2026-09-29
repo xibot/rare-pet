@@ -3,7 +3,8 @@ import { flushSync } from 'react-dom';
 import type { ReactNode } from 'react';
 import type { GenerationSprites } from '@rarefriends/friendsdk/sprites';
 import { PetSprite, GenesisPetSprite } from './art';
-import { Heart, Snack, Spark } from './habitat';
+import { Heart, Snack } from './habitat';
+import { Spark, CelebrationEffects, celebrationPose, celebrationMotion, celebrationSpriteFrame } from './celebration';
 import { getIsland, IslandArt, islandPetRatio, type Island } from './islands';
 import { resolveShareSpeech, type ShareAction } from './share-message';
 
@@ -41,46 +42,7 @@ function Reaction({ action, variant, size, phase }: { action: ShareAction; varia
     </svg>
     {[0, 1, 2, 3].map(i => <rect key={i} x={size * (.71 + (i % 2) * .09 + wave(i) * .02)} y={size * (.76 + i * .055 + wave(i) * .035)} width={size * .025} height={size * .025} opacity={phase === undefined ? 1 : .6 + wave(i) * .4} fill="#ac8153"/>)}
   </g>;
-  if (action === 'play') {
-    const [x, y, tilt] = [[.8, .6, -8], [-.15, .52, 9], [.78, .38, -5]][variant];
-    return <g data-share-reaction="play">
-      <g transform={`translate(${size * (x + wave() * .016)} ${size * (y + wave() * .04)}) rotate(${tilt + wave() * 4} ${size * .17} ${size * .12})`}>
-        <svg width={size * .34} height={size * .255} viewBox="0 0 32 24" shapeRendering="crispEdges">
-          <path d="M6 3H26V5H29V8H31V21H23V18H9V21H1V8H3V5H6Z" fill="#fff"/>
-          <path d="M7 6H25V8H28V18H25V15H7V18H4V9H7Z" fill="#10110e"/>
-          <path d="M8 8H11V11H14V14H11V17H8V14H5V11H8Z" fill="#ccff00"/>
-          <rect x="21" y="8" width="3" height="3" fill="#ccff00" opacity={phase === undefined ? 1 : .65 + wave() * .35}/>
-          <rect x="25" y="12" width="3" height="3" fill="#ccff00" opacity={phase === undefined ? 1 : .65 - wave() * .35}/>
-          <path d="M15 13H18V15H15Z" fill="#fff"/>
-        </svg>
-      </g>
-      {[[-.1, .16, .095], [.86, -.06, .085], [1.05, .3, .065], [.06, .7, .075], [.57, -.16, .065]].map(([x, y, s], index) =>
-        <Glyph key={index} x={size * (x + wave(index + variant) * .025)} y={size * (y + wave(index * .8 + variant) * .045)} size={size * s * (1 + wave(index) * .2)} color={index % 2 === 0 ? '#ccff00' : '#fff'}><Spark/></Glyph>)}
-      {[0, 1, 2].map(index => <rect key={index} x={size * (.25 + index * .26 + wave(index) * .025)} y={size * (.96 - index * .075 + wave(index + 1) * .04)} width={size * .024} height={size * .024} fill="#ccff00" opacity={phase === undefined ? .8 : .55 + wave(index) * .3}/>)}
-    </g>;
-  }
-  if (action === 'launch') {
-    const [x, y, tilt] = [[.94, .38, 12], [-.2, .3, -12], [.88, .15, 8]][variant];
-    const lift = phase === undefined ? .5 : (1 - Math.cos(phase * Math.PI * 2)) / 2;
-    const flame = phase === undefined ? 6 : 5 + Math.round(Math.sin(phase * Math.PI * 8) * 2);
-    return <g data-share-reaction="launch">
-      <g transform={`translate(${size * (x + wave() * .022)} ${size * (y - lift * .13)}) rotate(${tilt + wave() * 3} ${size * .12} ${size * .22})`}>
-        <svg width={size * .24} height={size * .42} viewBox="0 0 24 42" shapeRendering="crispEdges">
-          <path d="M11 1H13V3H15V5H17V9H19V22H22V31H17V28H7V31H2V22H5V9H7V5H9V3H11Z" fill="#fff"/>
-          <path d="M11 5H13V7H15V10H17V22H7V10H9V7H11Z" fill="#10110e"/>
-          <path d="M4 24H6V28H4ZM18 24H20V28H18Z" fill="#10110e"/>
-          <path d="M9 11H15V17H9Z" fill="#fff"/><path d="M11 13H13V15H11Z" fill="#ccff00"/>
-          <path d="M8 24H16V27H8Z" fill="#10110e"/>
-          <path d="M8 29H16V33H8Z" fill="#ccff00"/>
-          <rect x="10" y="33" width="4" height={flame} fill="#ccff00"/>
-          <path d="M10 29H14V33H10Z" fill="#fff"/>
-        </svg>
-        {[0, 1, 2].map(index => <rect key={index} x={size * (.06 + index * .05 + wave(index) * .015)} y={size * (.44 + index * .045 + wave(index + 1) * .02)} width={size * .024} height={size * .024} fill="#ccff00" opacity={phase === undefined ? .75 : .55 + wave(index) * .3}/>)}
-      </g>
-      {[[-.08, .08, .085], [.12, .6, .075], [.76, -.09, .09], [.99, .75, .06]].map(([x, y, s], index) =>
-        <Glyph key={index} x={size * (x + wave(index + variant) * .02)} y={size * (y + wave(index) * .04)} size={size * s * (1 + wave(index) * .18)} color={index % 2 === 0 ? '#ccff00' : '#fff'}><Spark/></Glyph>)}
-    </g>;
-  }
+  if (action === 'play' || action === 'launch') return <CelebrationEffects action={action} variant={variant} size={size} phase={phase}/>;
   const side = variant === 1 ? -.12 : .79;
   return <g>
     <svg x={size * (side - .11 + wave() * .015)} y={size * (.7 - wave() * .06)} width={size * .4} height={size * .3} viewBox="0 0 34 26" shapeRendering="crispEdges" opacity={phase === undefined ? .85 : .6 + wave() * .25}>
@@ -95,11 +57,10 @@ function Reaction({ action, variant, size, phase }: { action: ShareAction; varia
 
 function pose(action: ShareAction, variant: number, size: number): string {
   if (action === 'talk') return '';
+  if (action === 'play' || action === 'launch') return celebrationPose(action, variant, size);
   const [dx, dy, angle] = action === 'pet'
     ? [[0, -5, -5], [0, -32, 3], [-9, -5, -4]][variant]
     : action === 'feed' ? [[0, 6, 2], [8, 6, 4], [0, -3, -4]][variant]
-    : action === 'play' ? [[-8, -12, -6], [8, -18, 6], [0, -28, -2]][variant]
-    : action === 'launch' ? [[-3, -10, -3], [7, -18, 4], [-5, -25, -4]][variant]
     : [[0, 7, -3], [12, 5, 2], [0, -20, 3]][variant];
   return `translate(${dx * size / 235} ${dy * size / 235}) rotate(${angle} ${size / 2} ${size * .92})`;
 }
@@ -189,12 +150,10 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   const hover = phase === undefined ? .5 : (1 - Math.cos(phase * Math.PI * 2)) / 2;
   const motion = action === 'talk'
     ? `translate(${petSize * wave * .015} ${-petSize * (.025 + hover * .065)}) rotate(${wave * 2} ${petSize / 2} ${petSize * .92})`
-    : action === 'play'
-      ? `translate(${petSize * wave * .023} ${-petSize * bounce * .045}) rotate(${wave * 4} ${petSize / 2} ${petSize * .92})`
-    : action === 'launch'
-      ? `translate(${petSize * wave * .012} ${-petSize * (.018 + hover * .075)}) rotate(${wave * 2.5} ${petSize / 2} ${petSize * .92})`
+    : action === 'play' || action === 'launch' ? celebrationMotion(action, petSize, phase)
     : `translate(0 ${-petSize * bounce * (action === 'pet' ? .025 : action === 'feed' ? .012 : .018)}) rotate(${wave * (action === 'feed' ? 3 : 2)} ${petSize / 2} ${petSize * .92})`;
-  const frame = phase === undefined ? (action === 'talk' ? 0 : safeVariant * 2) : Math.floor(phase * 16) % 8;
+  const frame = action === 'play' || action === 'launch' ? celebrationSpriteFrame(safeVariant, phase)
+    : phase === undefined ? (action === 'talk' ? 0 : safeVariant * 2) : Math.floor(phase * 16) % 8;
   try {
     flushSync(() => root.render(<svg xmlns={SVG_NS} width={size} height={size} viewBox="0 0 2000 2000">
       <rect width="2000" height="2000" fill="#000"/>

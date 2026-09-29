@@ -27,7 +27,7 @@ type DraftReview = { name: string; symbol: string; quoteId: LaunchQuoteId; fee: 
 
 type LaunchProps = {
   friend: PreviewFriend | PetIdentity; pet: PetIdentity | null; session: PetWalletSession; revision: number; bodyId: string;
-  close: () => void; chooseFriend: () => void; onLaunch: () => void;
+  close: () => void; chooseFriend: () => void; onLaunch: (result: { mode: 'friend' | 'self'; friend: string | null; hash: Hex }) => void;
 };
 export function LaunchDialog(props: LaunchProps) {
   const [mode, setMode] = useState<'self' | 'friend'>('friend');
@@ -94,7 +94,7 @@ function LaunchForm({ friend, pet, session, revision, bodyId, close, chooseFrien
     const imageUrl = marketMetadataImage(confirmed.draft.tokenURI, keccak256(stringToHex(confirmed.draft.tokenURI)));
     setAsset(asset); setError(''); setStatus(confirmed.mode === 'friend' ? 'Your token is live. +1 Brain.' : 'Your token is live.');
     setSuccess({ launch: { name: confirmed.draft.name, symbol: confirmed.draft.symbol, asset, hash, imageUrl, mode: confirmed.mode }, revision, owner });
-    onLaunch();
+    onLaunch({ mode: confirmed.mode, friend: confirmed.mode === 'friend' ? `${confirmed.pet.collection}:${confirmed.pet.tokenId}` : null, hash });
   }
   async function selectImage(file?: File) {
     if (!file || lock.current) return;

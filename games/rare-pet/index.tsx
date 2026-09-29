@@ -4,7 +4,10 @@ import { createGamePreview, parseChanceGame } from '@rarefriends/friendsdk/game'
 import RareRush, { GenesisRush } from '../rare-rush/index';
 import rushDefinition from '../rare-rush/game.json';
 import { PetBrand, Icon, PetSprite, GenesisPetSprite, previewFriends, GENESIS_BODIES, DEFAULT_BODY_ID, pickGenesisBody, type PreviewFriend } from './art';
-import { IslandPicker, HabitatIsland, FriendMotion } from './habitat';
+import { IslandPicker, HabitatIsland, FriendMotion, type HabitatAction } from './habitat';
+import { CELEBRATION_DURATION_MS } from './celebration';
+import { createActionCompletionQueue, type ActionCompletionTicket } from './action-completion';
+import { SHARE_SPEECH } from './share-message';
 import { getIsland, restoreIsland, type Island } from './islands';
 import { createPetWalletSession, listOwnedPets, verifyPet, PetDiscoveryError, type PetCollection, type PetIdentity } from './wallet';
 import { isWalletMode, readSavedFriend, saveSelectedFriend } from './selection';
@@ -97,19 +100,22 @@ function App() {
   const [error, setError] = useState(''), [notice, setNotice] = useState('A new friendship starts with a pet.');
   const [discoveryError, setDiscoveryError] = useState(''), [refresh, setRefresh] = useState(0), [pending, setPending] = useState('');
   const [confirmation, setConfirmation] = useState<'pet' | 'feed' | 'poop' | null>(null), [tx, setTx] = useState('');
-  const [loadedCare, setLoadedCare] = useState(false), [reaction, setReaction] = useState<CareAction | ''>('');
+  const [loadedCare, setLoadedCare] = useState(false), [reaction, setReaction] = useState<HabitatAction | ''>('');
   const [reactionSequence, setReactionSequence] = useState(0), [reactionVariant, setReactionVariant] = useState(0);
   const [sharing, setSharing] = useState(false), [shareAction, setShareAction] = useState<ShareAction>('pet');
   const [rareWallet, setRareWallet] = useState(false), [launching, setLaunching] = useState(false);
   const [market, setMarket] = useState(false);
   const [walletAccount, setWalletAccount] = useState(false);
   const [launchConfig, setLaunchConfig] = useState<RareLaunchConfig | null>(null), [launchRefresh, setLaunchRefresh] = useState(0);
-  const reactionTimer = useRef<number | undefined>(undefined), reactionCounts = useRef({ pet: 0, feed: 0, poop: 0, play: 0 });
-  const playCelebration = useRef(false);
+  const reactionTimer = useRef<number | undefined>(undefined), reactionCounts = useRef({ pet: 0, feed: 0, poop: 0, play: 0, launch: 0 });
+  const completionQueue = useRef(createActionCompletionQueue());
+  const [completionTicket, setCompletionTicket] = useState<ActionCompletionTicket | null>(null);
+  const friendKey = useRef('');
   const op = useRef(0), selectionOp = useRef(0), lock = useRef(false), careRef = useRef(care);
   careRef.current = care;
   const preview = !isWalletMode(wallet), art = preview ? previewFriends[lastPreview] : null;
   const live = selected.kind === 'owned' && selected.revision === wallet.revision && wallet.status === 'connected' ? selected.pet : null;
+  friendKey.current = (art ?? live) ? `${(art ?? live)!.collection}:${(art ?? live)!.tokenId}` : '';
   const invalid = !preview && !live;
   const isGenesis = (art?.collection ?? live?.collection) === 'genesis';
   const reconnecting = wallet.status === 'connecting' || wallet.status === 'switching-network';
@@ -140,7 +146,7 @@ function App() {
     if (wallet.status === 'disconnected' || wallet.status === 'unavailable' || wallet.status === 'error') setWalletAccount(false);
   }, [wallet.status]);
   useEffect(() => {
-    op.current++; selectionOp.current++; lock.current = false; setPending(''); setSelecting(false); setConfirmation(null); setPlaying(false); setSharing(false); setRareWallet(false); setLaunching(false); playCelebration.current = false; setOwned([]); setDiscoveryError(''); clearReaction();
+    op.current++; selectionOp.current++; lock.current = false; setPending(''); setSelecting(false); setConfirmation(null); setPlaying(false); setSharing(false); setRareWallet(false); setLaunching(false); completionQueue.current.clear(); setOwned([]); setDiscoveryError(''); clearReaction();
     setError(''); setTx(''); setLoadedCare(false);
     if (!isWalletMode(wallet)) {
       const next = readPreview(previewKey(previewFriends[lastPreview]));
@@ -215,6 +221,7 @@ function App() {
     if (lock.current || isWalletMode(session.getSnapshot())) return;
     setLastPreview(index); setPreviewCollection(previewFriends[index].collection); saveChoice('rarepet:friend:v1', `${previewFriends[index].collection}:${previewFriends[index].tokenId}`);
     const next = readPreview(previewKey(previewFriends[index]));
+    completionQueue.current.clear();
     op.current++; selectionOp.current++; setSelecting(false); setConfirmation(null); setSelected({ kind: 'preview', index }); careRef.current = next; setCare(next); setPicker(false); setPlaying(false); setError(''); setTx(''); clearReaction(); setNotice('Preview care is saved on this device.');
   }
   function openPicker(mode: 'preview' | 'wallet') { setPickerMode(isWalletMode(session.getSnapshot()) ? 'wallet' : mode); setPicker(true); }
@@ -230,25 +237,46 @@ function App() {
     choosePreview(lastPreview);
   }
   function clearReaction() { clearTimeout(reactionTimer.current); setReaction(''); }
-  function animate(action: CareAction, rarityAward = false) {
+  function animate(action: HabitatAction, rarityAward = false) {
     clearTimeout(reactionTimer.current);
     petAudio.play(rarityAward ? 'rarity' : action);
     setShareAction(action);
     setReactionVariant(reactionCounts.current[action]++ % 3); setReactionSequence(n => n + 1); setReaction(action);
-    reactionTimer.current = window.setTimeout(() => setReaction(''), 2400);
+    reactionTimer.current = window.setTimeout(() => setReaction(''), CELEBRATION_DURATION_MS);
+  }
+  function completionScope() {
+    const current = session.getSnapshot();
+    return { friend: friendKey.current, context: JSON.stringify([op.current, isWalletMode(current), current.revision, current.status, current.account?.toLowerCase()]) };
   }
   function closePlay() {
     setPlaying(false);
-    if (playCelebration.current) { playCelebration.current = false; animate('play'); }
+    const completed = completionQueue.current.consume(completionTicket, completionScope());
+    if (completed === 'play') animate(completed);
+  }
+  function completePlay() {
+    if (!completionQueue.current.complete(completionTicket, completionScope(), { kind: 'play' })) return;
+    if (preview) reward('play');
+  }
+  function openLaunch() {
+    clearReaction();
+    setCompletionTicket(completionQueue.current.begin('launch', completionScope()));
+    setLaunching(true);
+  }
+  function closeLaunch() {
+    setLaunching(false);
+    const completed = completionQueue.current.consume(completionTicket, completionScope());
+    if (completed === 'launch') animate(completed);
   }
   function resetPreview() {
     if (!art || lock.current) return;
+    completionQueue.current.clear();
     const next = blankCare(); careRef.current = next; setCare(next); savePreview(previewKey(art), next); clearReaction(); setError('');
     setNotice('A fresh preview. Try the daily routine again.');
   }
   function chooseIsland(next: Island) { setIsland(next); saveChoice('rarepet:island:v1', next); petAudio.play('select'); }
   function changeBody() { const next = pickGenesisBody(bodyId); setBodyId(next); saveChoice('rarepet:body:v1', next); petAudio.play('select'); }
   function acceptOwned(pet: PetIdentity, revision: number) {
+    completionQueue.current.clear();
     saveSelectedFriend(pet.owner, pet);
     op.current++; setSelected({ kind: 'owned', pet, revision }); careRef.current = blankCare(); setCare(careRef.current); setLoadedCare(false); setPicker(false); setPlaying(false); setTx(''); clearReaction();
     setNotice(careContract ? 'Your Friend is home. Make today a rare one.' : 'Friend verified. Onchain care is not configured in this build.');
@@ -269,12 +297,12 @@ function App() {
     try {
       const previousRarity = careRef.current.lifetime?.rarity ?? careRef.current.rarity;
       const next = applyCare(careRef.current, action, Math.floor(Date.now() / 1000)); careRef.current = next; setCare(next); savePreview(previewKey(art), next);
-      if (action === 'play') playCelebration.current = true; else animate(action, (next.lifetime?.rarity ?? next.rarity) > previousRarity);
+      if (action !== 'play') animate(action, (next.lifetime?.rarity ?? next.rarity) > previousRarity);
       setNotice({ pet: 'That’s the spot. +1 kinship. Your next pet unlocks in 24 hours.', feed: 'Meal served. +1 strength, +5 stamina.', poop: 'Feeling lighter already. +1 health.', play: 'A rare run, a wiser Friend. +10 preview XP.' }[action]); setError('');
     } catch (cause) { setError((cause as Error).message); }
   }
   function act(action: CareAction) {
-    if (action === 'play') { playCelebration.current = false; clearReaction(); petAudio.play('play'); setPlaying(true); setError(''); return; }
+    if (action === 'play') { setCompletionTicket(completionQueue.current.begin('play', completionScope())); clearReaction(); petAudio.play('play'); setPlaying(true); setError(''); return; }
     if (preview) reward(action); else setConfirmation(action);
   }
   async function confirm() {
@@ -312,11 +340,11 @@ function App() {
             const unavailableCare = !preview && a.id !== 'play' && a.id !== 'launch' && (!careContract || !loadedCare);
             const disabled = !!pending || invalid || (a.id !== 'launch' && !practice && !availability.remaining) || unavailableCare || paused || (practice && !live?.rushEligible);
             const timer = a.id === 'launch' ? preview || !launchpadContract ? 'PREVIEW' : launchConfig ? launchConfig.readyAt > BigInt(now) ? duration(Number(launchConfig.readyAt) - now) : 'READY' : 'OPEN LAUNCH' : invalid ? 'CHOOSE FRIEND' : practice ? 'PRACTICE · XP SOON' : unavailableCare ? careContract ? 'LOADING' : 'NOT CONFIGURED' : paused ? 'PAUSED' : availability.waitSeconds ? duration(availability.waitSeconds) : !availability.remaining ? 'REFRESHING' : a.id === 'play' ? `${availability.remaining}/${activeRules.actions.play.dailyLimit} READY` : 'READY';
-            return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id === 'launch' ? setLaunching(true) : act(a.id)} aria-label={`${a.name}, ${practice ? 'practice only, no onchain XP' : a.gain}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{practice ? 'XP VERIFIER COMING SOON' : a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && !practice && availability.remaining > 0 && availability.remaining < activeRules.actions.play.dailyLimit && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
+            return <button key={a.id} className={`care-action ${a.id === 'pet' ? 'primary-action' : ''} ${reaction === a.id ? 'activated' : ''}`} disabled={disabled} onClick={() => a.id === 'launch' ? openLaunch() : act(a.id)} aria-label={`${a.name}, ${practice ? 'practice only, no onchain XP' : a.gain}`} aria-describedby={`timer-${a.id}`}><span className="action-icon"><Icon name={a.id}/></span><span className="action-text"><strong>{a.name}</strong><small>{a.trait}</small></span><span className="action-timing" id={`timer-${a.id}`}><span>{practice ? 'XP VERIFIER COMING SOON' : a.schedule}</span><b data-countdown={a.id}>{timer}</b>{a.id === 'play' && !practice && availability.remaining > 0 && availability.remaining < activeRules.actions.play.dailyLimit && Number.isFinite(nextPlayAt) && <small className="action-refill">NEXT {duration(nextPlayAt - now)}</small>}</span></button>;
           })}<button className="care-action rare-wallet-action" disabled={!!pending || invalid} onClick={() => setRareWallet(true)} aria-label="Rare Wallet"><span className="action-icon"><Icon name="wallet"/></span><span className="action-text"><strong>Rare Wallet</strong><small>YOUR FRIEND’S ASSETS</small></span><span className="action-timing"><b>OPEN WALLET ↗</b></span></button><button className="care-action rare-wallet-action market-action" disabled={!!pending} onClick={() => setMarket(true)} aria-label="Buy / Sell"><span className="action-icon"><Icon name="trade"/></span><span className="action-text"><strong>Buy / Sell</strong><small>RAREPET TOKENS</small></span><span className="action-timing"><b>OPEN MARKET ↗</b></span></button><div className="reset-note"><span>YOUR FRIEND’S RHYTHM</span><small>Each action has its own timer.</small><a href="/docs/#care">HOW TIMERS WORK ↗</a></div></aside>
           <div className={`habitat ${reaction ? `reaction-${reaction}` : ''}`}>
             <div className="habitat-heading"><div><span className="eyebrow">{preview ? `${art!.collection.toUpperCase()} / PREVIEW` : live?.collection.toUpperCase() ?? 'MY WALLET'}</span><h2>{label}</h2></div><div className="friend-status-actions"><span className="friend-status">{!careKnown ? invalid ? 'CHOOSE FRIEND' : 'LOADING CARE' : due > 0 ? petReady.remaining ? 'READY FOR LOVE' : 'FEELING LOVED' : hasPet ? 'NEEDS A LITTLE LOVE' : 'NICE TO MEET YOU'}</span><button className="habitat-share-button" disabled={invalid || !!pending} onClick={() => setSharing(true)} aria-label="Share your Rare Friend">SHARE <span aria-hidden="true">↗</span></button></div></div>
-            <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={invalid ? reconnecting ? 'welcome back. one moment…' : selecting ? 'on my way home…' : 'choose your rare friend.' : reaction === 'pet' ? '♡ right back at you.' : reaction === 'feed' ? 'rare food. good mood.' : reaction === 'poop' ? 'ahh. much better.' : reaction === 'play' ? 'one run wiser. +10 XP!' : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame} walking={reaction === 'play'}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame} walking={reaction === 'play'}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame} walking={reaction === 'play'}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
+            <div className="friend-stage" ref={stageRef} style={{ minHeight: flightLayout.minHeight }}><SpaceBackdrop mainIsland={island} stageWidth={stageWidth} flights={flightLayout.flights}/><div className="stage-coordinate">RF—{art?.tokenId ?? live?.tokenId ?? '000'}<br/>CARE. REPEAT. RARE.</div><HabitatIsland island={island} stageWidth={stageWidth}><FriendMotion speech={invalid ? reconnecting ? 'welcome back. one moment…' : selecting ? 'on my way home…' : 'choose your rare friend.' : reaction ? SHARE_SPEECH[reaction] : hasPet ? 'same time tomorrow?' : 'gm, new best friend.'} action={reaction} sequence={reactionSequence} variant={reactionVariant}>{isGenesis ? <GenesisPetSprite portraitUrl={(art ?? live)!.image} bodyId={bodyId} frame={frame}/> : art?.collection === 'generations' ? <PetSprite sprites={art.sprites} frame={frame}/> : live?.sprites ? <PetSprite sprites={live.sprites} frame={frame}/> : <span className="missing-friend">?</span>}</FriendMotion></HabitatIsland><span className="stage-mark left">+</span><span className="stage-mark right">+</span></div>
             <div className="habitat-customize"><IslandPicker value={island} onChange={chooseIsland}/>{isGenesis && <button className="change-body" onClick={changeBody} title="Try one of 36 cosmetic bodies">CHANGE BODY <span aria-hidden="true">↻</span><small>36 COSMETIC BODIES</small></button>}</div>
             <div className="bond-status"><span className="bond-heart">♡</span><div><b>{!careKnown ? 'Your care stays with your Friend.' : due > 0 ? 'A happy Friend is a rare Friend.' : 'A little love goes a long way.'}</b><span>{!careKnown ? invalid ? 'Choose your Friend to see its bond and countdowns.' : 'Loading your onchain bond and countdowns…' : due > 0 ? petReady.waitSeconds ? `Next pet in ${duration(petReady.waitSeconds)}. This streak’s grace deadline: ${new Date(graceDeadline * 1000).toLocaleString()}.` : `Pet within ${duration(due)} to keep your streak.` : 'Pet your Friend to start a daily streak.'}</span></div><span className="bond-clock">{!careKnown ? '—' : due > 0 ? duration(due) : 'PET ME'}</span></div>
           </div>
@@ -350,7 +378,11 @@ function App() {
     </div></Dialog>}
     {market && <MarketDialog session={session} close={() => setMarket(false)}/>}
     {sharing && (art ?? live) && <ShareDialog friend={(art ?? live)!} island={island} bodyId={bodyId} initialAction={shareAction} initialVariant={reactionVariant} close={() => setSharing(false)}/>}
-    {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setLaunching(false)} chooseFriend={() => { setLaunching(false); openPicker('wallet'); }} onLaunch={() => { setLaunchRefresh(value => value + 1); setShareAction('launch'); petAudio.play('launch'); }}/>}
+    {launching && (art ?? live) && <LaunchDialog key={`launch:${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={closeLaunch} chooseFriend={() => { completionQueue.current.clear(); setLaunching(false); openPicker('wallet'); }} onLaunch={result => {
+      setLaunchRefresh(value => value + 1);
+      completionQueue.current.complete(completionTicket, completionScope(), { kind: 'launch', ...result });
+      if (result.mode === 'self') petAudio.play('launch');
+    }}/>}
     {rareWallet && (art ?? live) && <RareWalletDialog key={`${(art ?? live)!.collection}:${(art ?? live)!.tokenId}:${wallet.revision}`} friend={(art ?? live)!} pet={live} session={session} revision={wallet.revision} bodyId={bodyId} close={() => setRareWallet(false)} chooseFriend={() => { setRareWallet(false); openPicker('wallet'); }}/>}
     {picker && <Dialog title="Choose your Rare Friend" className="friend-picker-dialog" close={() => setPicker(false)}><div className="picker-content">
       <div className="picker-mode-switch" role="group" aria-label="Choose Friend source"><button aria-pressed={preview && pickerMode === 'preview'} disabled={!preview} title={preview ? undefined : 'Disconnect your wallet to choose a preview Friend'} onClick={() => setPickerMode('preview')}>PREVIEW FRIENDS</button><button aria-pressed={!preview || pickerMode === 'wallet'} onClick={() => setPickerMode('wallet')}>MY WALLET</button></div>
@@ -376,7 +408,7 @@ function App() {
     </div></Dialog>}
     {rules && <Dialog title="A little care. Every day." className="how-to-care-dialog" close={() => setRules(false)}><HowToCare actions={careActions} preview={preview} invalid={invalid} careKnown={careKnown} careConfigured={!!careContract} launchConfigured={!!launchpadContract} launchEligible={!!live?.walletAddress} launchReadyAt={launchConfig ? Number(launchConfig.readyAt) : null} playEligible={preview || !!live?.rushEligible} rules={activeRules} state={state} now={now} rarityRemaining={rarityRemaining} nextRarityPoints={nextRarityPoints}/></Dialog>}
     {confirmation && live && <Dialog title={`Confirm ${confirmation}`} close={() => setConfirmation(null)}><div className="rules-content"><p>{careActions.find(a => a.id === confirmation)!.gain} for <b>{live.label}</b>.</p><p>Rules V{state.policy?.version ?? '—'} apply to the confirmed action. Earned points and its rule version remain in your Friend’s permanent history.</p><p>This sends a transaction on Robinhood Chain. Your wallet shows the network fee before you approve. No token approval or NFT transfer is needed.</p><p className="contract-address">Care contract: {careContract}</p><button className="solid-button" onClick={() => void confirm()}>CONTINUE TO WALLET</button></div></Dialog>}
-    {playing && !invalid && <PlayDialog title={`Rare Rush / ${label}`} close={closePlay} summary={preview ? '+10 preview XP per completed run · 3 runs / 24h' : 'Practice with your Friend · onchain XP coming soon'}>{isGenesis ? <GenesisRush enableRunSaving={false} friendId={BigInt((art ?? live)!.tokenId)} portraitUrl={(art ?? live)!.image} bodyId={bodyId} paused={false} beforeRun={beforeRun} onRunComplete={() => { if (preview) reward('play'); }} onNavigate={closePlay}/> : <RareRush enableRunSaving={false} friendId={BigInt(art?.tokenId ?? live!.tokenId)} client={rushClient} paused={false} beforeRun={beforeRun} previewSprites={art?.collection === 'generations' ? art.sprites : live?.collection === 'generations' ? live.sprites : undefined} onRunComplete={() => { if (preview) reward('play'); }} onNavigate={closePlay}/>}</PlayDialog>}
+    {playing && !invalid && <PlayDialog title={`Rare Rush / ${label}`} close={closePlay} summary={preview ? '+10 preview XP per completed run · 3 runs / 24h' : 'Practice with your Friend · onchain XP coming soon'}>{isGenesis ? <GenesisRush enableRunSaving={false} friendId={BigInt((art ?? live)!.tokenId)} portraitUrl={(art ?? live)!.image} bodyId={bodyId} paused={false} beforeRun={beforeRun} onRunComplete={completePlay} onNavigate={closePlay}/> : <RareRush enableRunSaving={false} friendId={BigInt(art?.tokenId ?? live!.tokenId)} client={rushClient} paused={false} beforeRun={beforeRun} previewSprites={art?.collection === 'generations' ? art.sprites : live?.collection === 'generations' ? live.sprites : undefined} onRunComplete={completePlay} onNavigate={closePlay}/>}</PlayDialog>}
   </div>;
 }
 createRoot(document.getElementById('root')!).render(/^\/docs(?:\/|\/index\.html)?$/.test(location.pathname) ? <Docs petGraceHours={PET_GRACE / 3600}/> : /^\/agent(?:\/|\/index\.html)?$/.test(location.pathname) ? <Agent/> : <App/>);
