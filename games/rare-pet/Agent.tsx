@@ -15,6 +15,18 @@ const prompts = [
 const generation = previewFriends.find(friend => friend.collection === 'generations' && friend.tokenId === '42')!;
 const island = getIsland('circuit');
 
+function AgentFriend() {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const animation = window.setInterval(() => {
+      if (!document.hidden && !motion.matches) setFrame(current => (current + 1) % 8);
+    }, 280);
+    return () => window.clearInterval(animation);
+  }, []);
+  return generation.collection === 'generations' ? <PetSprite sprites={generation.sprites} frame={frame}/> : null;
+}
+
 function SectionHeading({ number, label, title, children }: { number: string; label: string; title: string; children?: ReactNode }) {
   return <div className="agent-section-heading"><span className="agent-section-number">{number}</span><div><span className="agent-eyebrow">{label}</span><h2>{title}</h2>{children && <p>{children}</p>}</div></div>;
 }
@@ -49,7 +61,7 @@ export function Agent() {
     <main className="agent-main" id="agent-main">
       <section className="agent-hero" aria-labelledby="agent-title">
         <div className="agent-hero-copy"><span className="agent-eyebrow"><span className="agent-pixel-dot" aria-hidden="true"/> RAREPET / THE AGENT SKILL</span><h1 id="agent-title">YOUR FRIEND.<br/><span>YOUR AGENT.</span></h1><p>A little help with the daily ritual.<br/>Give your agent the know-how to care for your Rare Friend, with you in control.</p><div className="agent-hero-actions"><a className="agent-primary" href="/skills/rarepet.zip" download="rarepet.zip">GET THE SKILL <span aria-hidden="true">↓</span></a><a className="agent-text-link" href="#start">HOW IT WORKS <span aria-hidden="true">↗</span></a></div><div className="agent-hero-tags"><span>GENESIS + GENERATIONS</span><span>OPEN SKILL</span><span>OWNER SIGNED</span></div></div>
-        <div className="agent-hero-art"><div className="agent-art-bar"><span><span aria-hidden="true">✦</span> A FRIEND FOR EVERY DAY</span><span>RAREPET</span></div><div className="agent-scene" role="img" aria-label="A Generations Rare Friend on its Circuit island, saying care for me, human and agent."><span className="agent-scene-star first" aria-hidden="true">+</span><span className="agent-scene-star second" aria-hidden="true">✦</span><span className="agent-scene-star third" aria-hidden="true">+</span><div className="agent-scene-floor" style={{ aspectRatio: island.aspectRatio }}><IslandArt option={island}/><div className="agent-scene-friend" style={{ left: island.petX, top: island.petY, width: `${island.petRatio * 100}%` }} aria-hidden="true"><span className="agent-speech">a little help, a lot of love.</span>{generation.collection === 'generations' && <PetSprite sprites={generation.sprites} frame={0}/>}</div></div><span className="agent-scene-caption">SAME FRIEND. A LITTLE EXTRA HELP.</span></div><div className="agent-art-flow" aria-label="Agent reads, agent prepares, owner reviews and signs"><span>READ</span><i aria-hidden="true">→</i><span>PREPARE</span><i aria-hidden="true">→</i><b>YOU SIGN</b></div></div>
+        <div className="agent-hero-art"><div className="agent-art-bar"><span><span aria-hidden="true">✦</span> A FRIEND FOR EVERY DAY</span><span>RAREPET</span></div><div className="agent-scene" role="img" aria-label="A Generations Rare Friend on its Circuit island, saying care for me, human and agent."><span className="agent-scene-star first" aria-hidden="true">+</span><span className="agent-scene-star second" aria-hidden="true">✦</span><span className="agent-scene-star third" aria-hidden="true">+</span><div className="agent-scene-floor" style={{ aspectRatio: island.aspectRatio }}><IslandArt option={island}/><div className="agent-scene-friend" style={{ left: island.petX, top: island.petY, width: `${island.petRatio * 100}%` }} aria-hidden="true"><span className="agent-speech">a little help, a lot of love.</span><AgentFriend/></div></div><span className="agent-scene-caption">SAME FRIEND. A LITTLE EXTRA HELP.</span></div><div className="agent-art-flow" aria-label="Agent reads, agent prepares, owner reviews and signs"><span>READ</span><i aria-hidden="true">→</i><span>PREPARE</span><i aria-hidden="true">→</i><b>YOU SIGN</b></div></div>
       </section>
       <nav className="agent-jump-nav" aria-label="Agent guide sections"><a href="#start">GET STARTED</a><a href="#can-do">WHAT IT CAN HELP WITH</a><a href="#prompts">TRY A PROMPT</a><a href="#for-agents">FOR AGENTS</a></nav>
       <section className="agent-section" id="start">
