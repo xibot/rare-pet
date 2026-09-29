@@ -132,7 +132,7 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   const petBottom = floorHeight * parseFloat(option.petY) / 100;
   const petLeft = petCenter - petSize / 2, petTop = petBottom - petSize;
   const bubbleX = Math.max(0, Math.min(floorWidth - bubbleWidth, petCenter - bubbleWidth / 2));
-  const bubbleY = petTop - bubbleHeight - 130;
+  const bubbleY = petTop - bubbleHeight - (action === 'talk' ? 200 : 130);
   const top = Math.min(0, bubbleY - 8, petTop - petSize * .2), bottom = Math.max(floorHeight, petBottom + petSize * .13);
   const scale = Math.min(1, 1370 / (bottom - top));
   const offsetX = (SHARE_IMAGE_SIZE - floorWidth * scale) / 2;
@@ -142,7 +142,12 @@ export async function renderShareCanvas({ friend, island, bodyId, action, varian
   let markup: string;
   const wave = phase === undefined ? 0 : Math.sin(phase * Math.PI * 2);
   const bounce = phase === undefined ? 0 : (1 - Math.cos(phase * Math.PI * 4)) / 2;
-  const motion = action === 'talk' ? '' : `translate(0 ${-petSize * bounce * (action === 'pet' ? .025 : action === 'feed' ? .012 : .018)}) rotate(${wave * (action === 'feed' ? 3 : 2)} ${petSize / 2} ${petSize * .92})`;
+  // One gentle orbit per GIF loop; keep the island and speech still for readability.
+  // The PNG captures the Friend halfway up the same hovering motion.
+  const hover = phase === undefined ? .5 : (1 - Math.cos(phase * Math.PI * 2)) / 2;
+  const motion = action === 'talk'
+    ? `translate(${petSize * wave * .015} ${-petSize * (.025 + hover * .065)}) rotate(${wave * 2} ${petSize / 2} ${petSize * .92})`
+    : `translate(0 ${-petSize * bounce * (action === 'pet' ? .025 : action === 'feed' ? .012 : .018)}) rotate(${wave * (action === 'feed' ? 3 : 2)} ${petSize / 2} ${petSize * .92})`;
   const frame = phase === undefined ? (action === 'talk' ? 0 : safeVariant * 2) : Math.floor(phase * 16) % 8;
   try {
     flushSync(() => root.render(<svg xmlns={SVG_NS} width={size} height={size} viewBox="0 0 2000 2000">
